@@ -2,14 +2,37 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 import 'models.dart';
 import 'tts_provider.dart';
 
 const _token = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
+const _chromiumVersion = '130.0.2849.68';
 const _uuid = Uuid();
+
+// Sec-MS-GEC: SHA256 of rounded Windows-epoch ticks + token, uppercased
+String _generateSecMsGec() {
+  const windowsEpochOffset = 11644473600;
+  final unixSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  final ticks = BigInt.from(unixSec - windowsEpochOffset) * BigInt.from(10000000);
+  final interval = BigInt.from(3000000000);
+  final rounded = ticks - (ticks % interval);
+  final payload = '$rounded$_token';
+  return sha256.convert(utf8.encode(payload)).toString().toUpperCase();
+}
+
+const _headers = {
+  'Origin': 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
+  'Cache-Control': 'no-cache',
+  'Pragma': 'no-cache',
+  'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/$_chromiumVersion Safari/537.36 Edg/$_chromiumVersion',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Accept-Language': 'en-US,en;q=0.9',
+};
 
 class EdgeTtsProvider implements TTSProvider {
   @override
@@ -21,44 +44,46 @@ class EdgeTtsProvider implements TTSProvider {
   }) async {
     final connectionId = _uuid.v4().replaceAll('-', '');
     final requestId = _uuid.v4().replaceAll('-', '');
-    final uri = Uri.parse(
-      'wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1'
-      '?TrustedClientToken=$_token&ConnectionId=$connectionId',
-    );
+    final secMsGec = _generateSecMsGec();
 
-    final channel = WebSocketChannel.connect(
-      uri,
-      protocols: const ['wss'],
-    );
+    final wsUrl =
+        'wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1'
+        '?TrustedClientToken=$_token'
+        '&Sec-MS-GEC=$secMsGec'
+        '&Sec-MS-GEC-Version=1-$_chromiumVersion'
+        '&ConnectionId=$connectionId';
 
-    // Send config
-    channel.sink.add(_configMessage(requestId));
-    // Send SSML
-    channel.sink.add(_ssmlMessage(requestId, text, voice, rate, volume));
+    final ws = await WebSocket.connect(wsUrl, headers: _headers);
 
     final audioChunks = <Uint8List>[];
     final timestamps = <WordTimestamp>[];
     final completer = Completer<void>();
 
-    channel.stream.listen(
+    ws.listen(
       (data) {
         if (data is String) {
           _parseTextMessage(data, timestamps);
-          if (data.contains('turn.end')) completer.complete();
+          if (data.contains('turn.end') && !completer.isCompleted) {
+            completer.complete();
+          }
         } else if (data is List<int>) {
-          final bytes = Uint8List.fromList(data);
-          final chunk = _extractAudioChunk(bytes);
+          final chunk = _extractAudioChunk(Uint8List.fromList(data));
           if (chunk != null) audioChunks.add(chunk);
         }
       },
-      onError: (e) => completer.completeError(e),
+      onError: (e) {
+        if (!completer.isCompleted) completer.completeError(e);
+      },
       onDone: () {
         if (!completer.isCompleted) completer.complete();
       },
     );
 
+    ws.add(_configMessage(requestId));
+    ws.add(_ssmlMessage(requestId, text, voice, rate, volume));
+
     await completer.future.timeout(const Duration(seconds: 30));
-    await channel.sink.close();
+    await ws.close();
 
     final tmpDir = await getTemporaryDirectory();
     final filePath = '${tmpDir.path}/edge_${_uuid.v4()}.mp3';
@@ -69,8 +94,8 @@ class EdgeTtsProvider implements TTSProvider {
   }
 
   String _configMessage(String requestId) {
-    final timestamp = _timestamp();
-    return 'X-Timestamp:$timestamp\r\n'
+    final ts = _timestamp();
+    return 'X-Timestamp:$ts\r\n'
         'Content-Type:application/json; charset=utf-8\r\n'
         'Path:speech.config\r\n\r\n'
         '{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"true"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}';
@@ -78,16 +103,16 @@ class EdgeTtsProvider implements TTSProvider {
 
   String _ssmlMessage(String requestId, String text, String voice, String rate,
       String volume) {
-    final timestamp = _timestamp();
+    final ts = _timestamp();
     final ssml =
-        '<speak version=\'1.0\' xmlns=\'http://www.w3.org/2001/10/synthesis\' xml:lang=\'en-US\'>'
-        '<voice name=\'$voice\'>'
-        '<prosody rate=\'$rate\' volume=\'$volume\'>'
+        "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>"
+        "<voice name='$voice'>"
+        "<prosody rate='$rate' volume='$volume'>"
         '${_escapeXml(text)}'
         '</prosody></voice></speak>';
     return 'X-RequestId:$requestId\r\n'
         'Content-Type:application/ssml+xml\r\n'
-        'X-Timestamp:$timestamp\r\n'
+        'X-Timestamp:$ts\r\n'
         'Path:ssml\r\n\r\n'
         '$ssml';
   }
@@ -116,7 +141,6 @@ class EdgeTtsProvider implements TTSProvider {
   }
 
   Uint8List? _extractAudioChunk(Uint8List bytes) {
-    // Edge TTS binary messages have a header ending with \r\n\r\n (0d 0a 0d 0a)
     for (int i = 0; i < bytes.length - 3; i++) {
       if (bytes[i] == 0x0d &&
           bytes[i + 1] == 0x0a &&
