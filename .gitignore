@@ -45,5 +45,5 @@ Thumbs.db
 *.mp3
 *.wav
 
-# Claude Code
-.claude/
+# Claude Code (settings.local.json tiene rutas específicas de la máquina)
+.claude/settings.local.json

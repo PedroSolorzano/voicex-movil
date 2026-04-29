@@ -99,6 +99,16 @@ flutter analyze
 
 ---
 
+## Tareas pendientes
+
+| # | Tarea | Estado |
+|---|-------|--------|
+| — | — | — |
+
+> Las tareas se agregan aquí a medida que surgen durante el desarrollo.
+
+---
+
 ## Proyecto relacionado
 
-[VoiceX Desktop](https://github.com/Preston-IA/voicex) — versión Python/tkinter para escritorio (Linux/macOS/Windows).
+[VoiceX Desktop](https://github.com/PedroSolorzano/voicex) — versión Python/tkinter para escritorio (Linux/macOS/Windows).
