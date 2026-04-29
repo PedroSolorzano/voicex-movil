@@ -11,16 +11,16 @@
 
 | Fase | Descripción | Estado | Inicio | Fin |
 |------|-------------|--------|--------|-----|
-| 1 | Setup y arquitectura base | Pendiente | — | — |
-| 2 | Capa EPUB | Pendiente | — | — |
-| 3 | Capa de almacenamiento | Pendiente | — | — |
-| 4 | Capa TTS | Pendiente | — | — |
-| 5 | Reproductor de audio | Pendiente | — | — |
-| 6 | Pantalla Biblioteca | Pendiente | — | — |
-| 7 | Pantalla Lectora | Pendiente | — | — |
-| 8 | Pantalla Ajustes | Pendiente | — | — |
-| 9 | Seguridad y rendimiento | Pendiente | — | — |
-| 10 | Build y distribución APK | Pendiente | — | — |
+| 1 | Setup y arquitectura base | Completado | 2026-04-29 | 2026-04-29 |
+| 2 | Capa EPUB | Completado | 2026-04-29 | 2026-04-29 |
+| 3 | Capa de almacenamiento | Completado | 2026-04-29 | 2026-04-29 |
+| 4 | Capa TTS | Completado | 2026-04-29 | 2026-04-29 |
+| 5 | Reproductor de audio | Completado | 2026-04-29 | 2026-04-29 |
+| 6 | Pantalla Biblioteca | Completado | 2026-04-29 | 2026-04-29 |
+| 7 | Pantalla Lectora | Completado | 2026-04-29 | 2026-04-29 |
+| 8 | Pantalla Ajustes | Completado | 2026-04-29 | 2026-04-29 |
+| 9 | Seguridad y rendimiento | Completado | 2026-04-29 | 2026-04-29 |
+| 10 | Build y distribución APK | Completado | 2026-04-29 | 2026-04-29 |
 
 **Leyenda de estado:** `Pendiente` · `En progreso` · `Completado` · `Bloqueado`
 
@@ -175,10 +175,10 @@
 
 **Estimado:** 1 día
 
-- [ ] Configurar `build.gradle`: `applicationId`, `versionCode`, `versionName`
-- [ ] Generar keystore: `keytool -genkey -v -keystore voicex.keystore ...`
-- [ ] Configurar `key.properties` (agregarlo a `.gitignore`)
-- [ ] Build release: `flutter build apk --release`
+- [x] Configurar `build.gradle`: `applicationId`, `versionCode = 1`, `versionName = 1.0.0`
+- [x] Generar keystore: `android/app/voicex.keystore` (10000 días, RSA 2048)
+- [x] Configurar `key.properties` (en `.gitignore`)
+- [x] Build release: `flutter build apk --release` → `app-release.apk` (55 MB)
 - [ ] Instalar APK en dispositivo Android físico y verificar funcionamiento completo
 - [ ] Verificación end-to-end (ver checklist abajo)
 
