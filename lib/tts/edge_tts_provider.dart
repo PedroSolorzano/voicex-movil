@@ -12,11 +12,12 @@ const _token = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
 const _chromiumVersion = '130.0.2849.68';
 const _uuid = Uuid();
 
-// Sec-MS-GEC: SHA256 of rounded Windows-epoch ticks + token, uppercased
+// Sec-MS-GEC: SHA256 of rounded Windows-epoch ticks + token, uppercased.
+// Windows FILETIME = (Unix seconds + 11644473600) * 10^7  (100-ns intervals since 1601-01-01)
 String _generateSecMsGec() {
   const windowsEpochOffset = 11644473600;
   final unixSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-  final ticks = BigInt.from(unixSec - windowsEpochOffset) * BigInt.from(10000000);
+  final ticks = BigInt.from(unixSec + windowsEpochOffset) * BigInt.from(10000000);
   final interval = BigInt.from(3000000000);
   final rounded = ticks - (ticks % interval);
   final payload = '$rounded$_token';
