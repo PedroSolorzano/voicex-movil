@@ -67,12 +67,10 @@ flutter {
 // uniquely named APK: voicex-0.2.<commitCount>-preview.1-release.apk
 fun gitCommitCount(): Int {
     return try {
-        val stdout = java.io.ByteArrayOutputStream()
-        exec {
-            commandLine("git", "rev-list", "--count", "HEAD")
-            standardOutput = stdout
-        }
-        stdout.toString().trim().toInt()
+        ProcessBuilder("git", "rev-list", "--count", "HEAD")
+            .redirectErrorStream(true)
+            .start()
+            .inputStream.bufferedReader().readText().trim().toInt()
     } catch (e: Exception) {
         0
     }
