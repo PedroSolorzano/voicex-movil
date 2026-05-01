@@ -6,60 +6,60 @@ enum AudioState { idle, playing, paused }
 class VoiceXAudioPlayer {
   final ja.AudioPlayer _player = ja.AudioPlayer();
   Timer? _ticker;
+  StreamSubscription? _stateSub;
 
   AudioState state = AudioState.idle;
   void Function(int elapsedMs)? onTick;
   void Function()? onEnd;
 
-  int _startMs = 0;
-  int _pausedMs = 0;
-
-  Future<void> play(String filePath) async {
+  Future<void> play(String filePath, {int startMs = 0}) async {
+    // Cancel previous completion listener before starting a new track.
+    await _stateSub?.cancel();
     await _player.setFilePath(filePath);
-    await _player.play();
-    state = AudioState.playing;
-    _startMs = DateTime.now().millisecondsSinceEpoch;
-    _startTicker();
 
-    _player.playerStateStream.listen((s) {
+    if (startMs > 0) {
+      await _player.seek(Duration(milliseconds: startMs));
+    }
+
+    // Set state and start the ticker BEFORE calling play() because
+    // just_audio 0.9.x play() returns a Future that completes when
+    // playback ends — awaiting it would block the entire method.
+    state = AudioState.playing;
+    _startTicker();
+    _stateSub = _player.playerStateStream.listen((s) {
       if (s.processingState == ja.ProcessingState.completed) {
         _stopTicker();
         state = AudioState.idle;
         onEnd?.call();
       }
     });
+
+    unawaited(_player.play());
   }
 
   Future<void> pause() async {
     if (state != AudioState.playing) return;
     await _player.pause();
-    _pausedMs = DateTime.now().millisecondsSinceEpoch - _startMs;
     _stopTicker();
     state = AudioState.paused;
   }
 
   Future<void> resume() async {
     if (state != AudioState.paused) return;
-    await _player.play();
-    _startMs = DateTime.now().millisecondsSinceEpoch - _pausedMs;
-    _startTicker();
     state = AudioState.playing;
+    _startTicker();
+    unawaited(_player.play());
   }
 
   Future<void> stop() async {
     await _player.stop();
     _stopTicker();
     state = AudioState.idle;
-    _pausedMs = 0;
   }
 
-  int get elapsedMs {
-    if (state == AudioState.paused) return _pausedMs;
-    if (state == AudioState.playing) {
-      return DateTime.now().millisecondsSinceEpoch - _startMs;
-    }
-    return 0;
-  }
+  // Use just_audio's position for accurate elapsed time instead of wall clock.
+  int get elapsedMs =>
+      _player.position.inMilliseconds;
 
   void _startTicker() {
     _ticker?.cancel();
@@ -74,6 +74,7 @@ class VoiceXAudioPlayer {
   }
 
   Future<void> dispose() async {
+    await _stateSub?.cancel();
     _stopTicker();
     await _player.dispose();
   }

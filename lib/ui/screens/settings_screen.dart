@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../../config/settings.dart';
 import '../../storage/repositories.dart';
 import '../../tts/tts_factory.dart';
@@ -17,11 +18,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _cacheRepo = AudioCacheRepo();
   int _cacheSizeKb = 0;
   bool _saving = false;
+  PackageInfo? _packageInfo;
 
   @override
   void initState() {
     super.initState();
     _loadCacheSize();
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) setState(() => _packageInfo = info);
+    });
   }
 
   Future<void> _loadCacheSize() async {
@@ -150,6 +155,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2))
                 : const Text('Guardar'),
           ),
+          const SizedBox(height: 32),
+          // Version footer
+          if (_packageInfo != null)
+            Center(
+              child: Text(
+                'VoiceX v${_packageInfo!.version}  (build ${_packageInfo!.buildNumber})',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.4),
+                    ),
+              ),
+            ),
+          const SizedBox(height: 16),
         ],
       ),
     );

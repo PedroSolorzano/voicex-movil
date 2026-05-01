@@ -91,9 +91,10 @@ VoiceXMovil/
 │   └── app/src/main/AndroidManifest.xml
 ├── test/
 ├── pubspec.yaml
-├── TECHNICAL.md                          # Este archivo
-├── TRACKING.md                           # Control de implementación
-└── CHANGELOG.md                          # Historial de versiones
+└── docs/
+    ├── context/TECHNICAL.md              # Este archivo
+    ├── tasks/TRACKING.md                 # Control de implementación
+    └── RELEASES.md                       # Historial de versiones
 ```
 
 ---

@@ -8,7 +8,8 @@ class Paragraph {
   final String rawText;
   final List<Sentence> sentences;
   final int index;
-  Paragraph({required this.rawText, required this.sentences, required this.index});
+  final bool isHeading;
+  Paragraph({required this.rawText, required this.sentences, required this.index, this.isHeading = false});
 }
 
 class Chapter {

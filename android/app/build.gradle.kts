@@ -23,16 +23,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
-    }
-
     defaultConfig {
         applicationId = "com.pedrosolorzano.voicex_movil"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
     }
 
     signingConfigs {
@@ -57,6 +53,47 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
 flutter {
     source = "../.."
+}
+
+// Auto-increment patch from total git commit count so every commit produces a
+// uniquely named APK: voicex-0.2.<commitCount>-preview.1-release.apk
+fun gitCommitCount(): Int {
+    return try {
+        val stdout = java.io.ByteArrayOutputStream()
+        exec {
+            commandLine("git", "rev-list", "--count", "HEAD")
+            standardOutput = stdout
+        }
+        stdout.toString().trim().toInt()
+    } catch (e: Exception) {
+        0
+    }
+}
+
+val gitCount = gitCommitCount()
+
+android.defaultConfig.versionCode = gitCount
+android.defaultConfig.versionName = "0.2.${gitCount}-preview.1"
+
+tasks.configureEach {
+    if (name == "assembleRelease") {
+        doLast {
+            val versionName = android.defaultConfig.versionName ?: "unknown"
+            val apkDir = file("${layout.buildDirectory.get()}/outputs/flutter-apk")
+            val src = File(apkDir, "app-release.apk")
+            val dst = File(apkDir, "voicex-${versionName}-release.apk")
+            if (src.exists()) {
+                src.copyTo(dst, overwrite = true)
+                println("APK renamed to: ${dst.name}")
+            }
+        }
+    }
 }

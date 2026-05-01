@@ -3,8 +3,10 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../providers/app_info_provider.dart';
 import '../providers/library_provider.dart';
 import '../widgets/book_card.dart';
+import '../widgets/book_info_sheet.dart';
 
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
@@ -12,9 +14,29 @@ class LibraryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final booksAsync = ref.watch(libraryProvider);
+    final version = ref.watch(appInfoProvider).valueOrNull?.version;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('VoiceX')),
+      appBar: AppBar(
+        title: const Text('VoiceX'),
+        bottom: version == null
+            ? null
+            : PreferredSize(
+                preferredSize: const Size.fromHeight(18),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    'v$version',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.5),
+                        ),
+                  ),
+                ),
+              ),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.add),
         label: const Text('Agregar EPUB'),
@@ -34,6 +56,11 @@ class LibraryScreen extends ConsumerWidget {
                     book: book,
                     onRead: () => _openBook(context, ref, book),
                     onDelete: () => _confirmDelete(context, ref, id),
+                    onInfo: () => showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      builder: (_) => BookInfoSheet(book: book),
+                    ),
                     onLanguageToggle: (lang) =>
                         ref.read(libraryProvider.notifier).updateLanguage(id, lang),
                   );

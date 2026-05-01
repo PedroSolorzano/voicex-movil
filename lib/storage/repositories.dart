@@ -12,6 +12,11 @@ class LibraryRepo {
     required String author,
     required String language,
     required String filePath,
+    String? coverPath,
+    String? description,
+    String? publisher,
+    String? publishedDate,
+    String? subject,
   }) async {
     final db = await _db;
     return db.insert('books', {
@@ -19,7 +24,31 @@ class LibraryRepo {
       'author': author,
       'language': language,
       'file_path': filePath,
+      'cover_path': coverPath,
+      'description': description,
+      'publisher': publisher,
+      'published_date': publishedDate,
+      'subject': subject,
     });
+  }
+
+  Future<void> updateMeta(
+    int id, {
+    String? coverPath,
+    String? description,
+    String? publisher,
+    String? publishedDate,
+    String? subject,
+  }) async {
+    final db = await _db;
+    final data = <String, dynamic>{};
+    if (coverPath != null) data['cover_path'] = coverPath;
+    if (description != null) data['description'] = description;
+    if (publisher != null) data['publisher'] = publisher;
+    if (publishedDate != null) data['published_date'] = publishedDate;
+    if (subject != null) data['subject'] = subject;
+    if (data.isEmpty) return;
+    await db.update('books', data, where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<Map<String, dynamic>>> all() async {
@@ -88,12 +117,13 @@ class BookmarkRepo {
   Future<Database> get _db => getDatabase();
 
   Future<int> add(int bookId, int chapterIndex, int paragraphIndex,
-      {String? note}) async {
+      {int sentenceIndex = 0, String? note}) async {
     final db = await _db;
     return db.insert('bookmarks', {
       'book_id': bookId,
       'chapter_index': chapterIndex,
       'paragraph_index': paragraphIndex,
+      'sentence_index': sentenceIndex,
       'note': note,
     });
   }
@@ -148,9 +178,55 @@ class AudioCacheRepo {
         'speed_hash': speedHash,
         'file_path': filePath,
         'file_size_kb': fileSizeKb,
+        'pinned': 0,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  // Saves as pinned (permanent download — not subject to LRU eviction).
+  Future<void> savePin(int bookId, int chapterIdx, int paraIdx, String voiceId,
+      String speedHash, String filePath, int fileSizeKb) async {
+    final db = await _db;
+    await db.insert(
+      'audio_cache',
+      {
+        'book_id': bookId,
+        'chapter_idx': chapterIdx,
+        'para_idx': paraIdx,
+        'voice_id': voiceId,
+        'speed_hash': speedHash,
+        'file_path': filePath,
+        'file_size_kb': fileSizeKb,
+        'pinned': 1,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<bool> isPinnedParagraph(int bookId, int chapterIdx, int paraIdx,
+      String voiceId, String speedHash) async {
+    final db = await _db;
+    final rows = await db.query(
+      'audio_cache',
+      where:
+          'book_id=? AND chapter_idx=? AND para_idx=? AND voice_id=? AND speed_hash=? AND pinned=1',
+      whereArgs: [bookId, chapterIdx, paraIdx, voiceId, speedHash],
+    );
+    if (rows.isEmpty) return false;
+    final filePath = rows.first['file_path'] as String;
+    return File(filePath).existsSync();
+  }
+
+  Future<int> countPinned(
+      int bookId, int chapterIdx, String voiceId, String speedHash) async {
+    final db = await _db;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM audio_cache '
+      'WHERE book_id=? AND chapter_idx=? AND voice_id=? AND speed_hash=? AND pinned=1',
+      [bookId, chapterIdx, voiceId, speedHash],
+    );
+    return result.first['c'] as int;
   }
 
   Future<void> _touch(int id) async {
@@ -212,8 +288,9 @@ class AudioCacheRepo {
     while (true) {
       final current = await totalSizeKb();
       if (current <= targetKb) break;
+      // Never evict pinned (downloaded) entries.
       final rows = await db.query('audio_cache',
-          orderBy: 'last_accessed ASC', limit: 1);
+          where: 'pinned = 0', orderBy: 'last_accessed ASC', limit: 1);
       if (rows.isEmpty) break;
       final row = rows.first;
       final f = File(row['file_path'] as String);

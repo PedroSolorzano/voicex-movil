@@ -3,7 +3,7 @@
 **Proyecto:** Lector EPUB con TTS neuronal para Android  
 **Stack:** Flutter / Dart  
 **Inicio:** 2026-04-29  
-**Referencia técnica:** [TECHNICAL.md](./TECHNICAL.md)
+**Referencia técnica:** [TECHNICAL.md](../context/TECHNICAL.md)
 
 ---
 

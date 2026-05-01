@@ -75,8 +75,12 @@ VoiceXMovil/
 ├── android/
 ├── test/
 ├── pubspec.yaml
-├── TECHNICAL.md         # Especificación técnica completa
-└── TRACKING.md          # Estado de implementación
+└── docs/
+    ├── context/TECHNICAL.md   # Especificación técnica completa
+    ├── tasks/IMPROVEMENTS.md  # Mejoras y nuevos requisitos
+    ├── tasks/TRACKING.md      # Estado de implementación
+    ├── bugs/EDGE_TTS_DEBUG.md # Investigaciones de bugs
+    └── RELEASES.md            # Historial de versiones
 ```
 
 ---
