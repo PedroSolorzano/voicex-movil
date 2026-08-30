@@ -14,7 +14,9 @@ void main() {
     try {
       await initAudioHandler();
     } catch (e, st) {
-      debugPrint('Audio service init failed: $e\n$st');
+      // initAudioHandler still leaves a usable player behind; only the media
+      // notification and lock-screen controls are lost.
+      debugPrint('Audio service init failed, degraded playback: $e\n$st');
     }
 
     unawaited(_pruneCache());

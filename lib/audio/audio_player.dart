@@ -6,19 +6,39 @@ import 'package:just_audio/just_audio.dart' as ja;
 enum AudioState { idle, playing, paused }
 
 /// Global handler, created once by [initAudioHandler] during app startup.
-late VoiceXAudioHandler audioHandler;
+late VoiceXAudioHandler _audioHandler;
 
-Future<void> initAudioHandler() async {
-  audioHandler = await AudioService.init(
-    builder: () => VoiceXAudioHandler(),
-    config: const AudioServiceConfig(
-      androidNotificationChannelId: 'com.pedrosolorzano.voicex_movil.playback',
-      androidNotificationChannelName: 'Reproducción',
-      androidNotificationOngoing: true,
-      androidStopForegroundOnPause: true,
-    ),
-  );
+VoiceXAudioHandler get audioHandler => _audioHandler;
+set audioHandler(VoiceXAudioHandler h) {
+  _audioHandler = h;
+  _handlerInitialised = true;
 }
+
+/// Starts the media service. If that fails — an unsupported platform, a denied
+/// notification channel — the app degrades to a plain player rather than
+/// crashing: [audioHandler] is always assigned, so callers never hit a
+/// LateInitializationError. Playback still works; only the notification and
+/// lock-screen controls are missing.
+Future<void> initAudioHandler() async {
+  try {
+    audioHandler = await AudioService.init(
+      builder: () => VoiceXAudioHandler(),
+      config: const AudioServiceConfig(
+        androidNotificationChannelId: 'com.pedrosolorzano.voicex_movil.playback',
+        androidNotificationChannelName: 'Reproducción',
+        androidNotificationOngoing: true,
+        androidStopForegroundOnPause: true,
+      ),
+    );
+  } catch (e) {
+    audioHandler = VoiceXAudioHandler();
+    rethrow;
+  }
+}
+
+/// True once [initAudioHandler] has produced a handler of any kind.
+bool get isAudioHandlerReady => _handlerInitialised;
+bool _handlerInitialised = false;
 
 /// Wraps just_audio in an audio_service handler so playback survives in a
 /// foreground service and is controllable from the lock screen, the
