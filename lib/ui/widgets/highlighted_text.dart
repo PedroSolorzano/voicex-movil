@@ -14,6 +14,10 @@ class HighlightedText extends StatelessWidget {
   final TextStyle baseStyle;
   final ReaderPalette palette;
 
+  /// Attached to the rendered Text so the reader can map a touch position to a
+  /// character offset via RenderParagraph.
+  final GlobalKey? textKey;
+
   const HighlightedText({
     super.key,
     required this.rawText,
@@ -21,12 +25,13 @@ class HighlightedText extends StatelessWidget {
     required this.palette,
     this.sentenceRange,
     this.wordRange,
+    this.textKey,
   });
 
   @override
   Widget build(BuildContext context) {
     if (sentenceRange == null && wordRange == null) {
-      return Text(rawText, style: baseStyle);
+      return Text(rawText, key: textKey, style: baseStyle);
     }
 
     final cuts = <int>{0, rawText.length};
@@ -68,6 +73,6 @@ class HighlightedText extends StatelessWidget {
       spans.add(TextSpan(text: rawText.substring(start, end), style: style));
     }
 
-    return Text.rich(TextSpan(children: spans));
+    return Text.rich(TextSpan(children: spans), key: textKey);
   }
 }

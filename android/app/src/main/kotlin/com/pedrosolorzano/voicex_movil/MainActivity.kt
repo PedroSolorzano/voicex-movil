@@ -35,6 +35,17 @@ class MainActivity : FlutterActivity() {
                     pendingPath = null
                     result.success(path)
                 }
+                // Hands a word to any app that can process text — a translator,
+                // typically. The offline answer when the dictionary is
+                // unreachable, and the only one for Spanish.
+                "processText" -> {
+                    val word = call.arguments as? String
+                    if (word.isNullOrBlank()) {
+                        result.error("EMPTY", "Palabra vacía", null)
+                    } else {
+                        result.success(processText(word))
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
@@ -47,6 +58,23 @@ class MainActivity : FlutterActivity() {
         // Channel is null if the engine has not attached yet; hold until asked.
         if (channel == null) pendingPath = path
         else channel?.invokeMethod("onFile", path)
+    }
+
+    private fun processText(word: String): Boolean {
+        val intent = Intent(Intent.ACTION_PROCESS_TEXT).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_PROCESS_TEXT, word)
+            putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true)
+        }
+        // A chooser rather than the default handler: the useful target is
+        // usually a translator, which is rarely anyone's default for text.
+        val chooser = Intent.createChooser(intent, "Buscar \"$word\" en")
+        return try {
+            startActivity(chooser)
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 
     private fun extractEpub(intent: Intent?): String? {

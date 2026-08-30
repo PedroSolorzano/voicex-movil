@@ -91,6 +91,47 @@ void main() {
     });
   });
 
+  group('wordBoundaryAt', () {
+    const text = "Don't stop; twenty-one años.";
+
+    String wordAt(int offset) {
+      final r = wordBoundaryAt(text, offset);
+      return r == null ? '' : text.substring(r.$1, r.$2);
+    }
+
+    test('expands a tap to the whole word', () {
+      expect(wordAt(text.indexOf('stop') + 1), 'stop');
+    });
+
+    test('keeps an apostrophe inside the word', () {
+      expect(wordAt(1), "Don't");
+    });
+
+    test('keeps a hyphenated word together', () {
+      expect(wordAt(text.indexOf('twenty') + 3), 'twenty-one');
+    });
+
+    test('handles accented characters', () {
+      expect(wordAt(text.indexOf('años') + 1), 'años');
+    });
+
+    test('returns null on punctuation or whitespace', () {
+      expect(wordBoundaryAt(text, text.indexOf(';')), isNull);
+      expect(wordBoundaryAt(text, text.indexOf(' ')), isNull);
+    });
+
+    test('returns null outside the string', () {
+      expect(wordBoundaryAt(text, -1), isNull);
+      expect(wordBoundaryAt(text, text.length), isNull);
+      expect(wordBoundaryAt('', 0), isNull);
+    });
+
+    test('handles a word at the very start and end', () {
+      expect(wordAt(0), "Don't");
+      expect(wordAt(text.length - 2), 'años');
+    });
+  });
+
   group('sentenceAtOffset', () {
     final para = Paragraph(
       rawText: 'Uno dos. Tres cuatro.',

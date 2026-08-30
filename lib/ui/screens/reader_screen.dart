@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:just_audio/just_audio.dart' as ja;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
@@ -11,6 +13,7 @@ import '../providers/reader_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/highlighted_text.dart';
 import '../widgets/reader_theme.dart';
+import '../widgets/word_sheet.dart';
 
 /// Rough narration rate in characters per second at 1× for a neural voice.
 /// Only used for the "time left" estimate, so approximate is fine.
@@ -40,6 +43,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
   bool _chromeVisible = true;
   Timer? _scrollSettleTimer;
+
+  /// Separate from the book player: hearing one word must not move the
+  /// listening position.
+  final _wordPlayer = ja.AudioPlayer();
   int _lastParagraphIndex = -1;
 
   @override
@@ -53,6 +60,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
   @override
   void dispose() {
+    _wordPlayer.dispose();
     _scrollSettleTimer?.cancel();
     _positionsListener.itemPositions.removeListener(_onScroll);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -193,6 +201,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                           onTap: () => ref
                               .read(readerProvider.notifier)
                               .navigateParagraph(i),
+                          onWordLongPress: (word) =>
+                              _showWordSheet(context, word, book.language),
                         );
                       },
                     ),
@@ -291,6 +301,52 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     await notifier.downloadChapters(from, count);
   }
 
+  /// Long-pressing a word offers to hear it, define it, or send it elsewhere.
+  Future<void> _showWordSheet(
+      BuildContext context, ({String text, int offset}) word, String language) {
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: false,
+      builder: (_) => WordSheet(
+        word: word.text,
+        language: language,
+        onPronounce: () => _pronounceWord(word),
+      ),
+    );
+  }
+
+  /// Prefers the clip already on disk — instant and offline — and only asks the
+  /// engine to synthesize the word when this paragraph has no audio yet.
+  Future<bool> _pronounceWord(({String text, int offset}) word) async {
+    final notifier = ref.read(readerProvider.notifier);
+
+    final clip = notifier.wordClipAt(word.offset);
+    if (clip != null) {
+      try {
+        await _wordPlayer.setAudioSource(ja.ClippingAudioSource(
+          child: ja.AudioSource.file(clip.path),
+          start: Duration(milliseconds: clip.startMs),
+          end: Duration(milliseconds: clip.endMs),
+        ));
+        await _wordPlayer.play();
+        return true;
+      } catch (_) {
+        // Fall through to synthesis rather than leaving the button dead.
+      }
+    }
+
+    final path = await notifier.synthesizeWord(word.text);
+    if (path == null) return false;
+    try {
+      await _wordPlayer.setFilePath(path);
+      await _wordPlayer.play();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _addBookmark(BuildContext context) async {
     await ref.read(readerProvider.notifier).addBookmark();
     if (!context.mounted) return;
@@ -358,7 +414,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   return null;
 }
 
-class _ParagraphTile extends StatelessWidget {
+class _ParagraphTile extends StatefulWidget {
   final Paragraph para;
   final bool isActive;
   final (int, int)? sentenceRange;
@@ -366,6 +422,7 @@ class _ParagraphTile extends StatelessWidget {
   final AppSettings settings;
   final ReaderPalette palette;
   final VoidCallback onTap;
+  final ValueChanged<({String text, int offset})> onWordLongPress;
 
   const _ParagraphTile({
     required this.para,
@@ -375,10 +432,41 @@ class _ParagraphTile extends StatelessWidget {
     required this.settings,
     required this.palette,
     required this.onTap,
+    required this.onWordLongPress,
   });
 
   @override
+  State<_ParagraphTile> createState() => _ParagraphTileState();
+}
+
+class _ParagraphTileState extends State<_ParagraphTile> {
+  final _textKey = GlobalKey();
+
+  /// Maps a touch to the word under it, using the laid-out paragraph rather
+  /// than a tappable span per word — which would make a whole chapter far more
+  /// expensive to render.
+  void _handleLongPress(LongPressStartDetails details) {
+    final render = _textKey.currentContext?.findRenderObject();
+    if (render is! RenderParagraph) return;
+
+    final local = render.globalToLocal(details.globalPosition);
+    final position = render.getPositionForOffset(local);
+    final bounds = wordBoundaryAt(widget.para.rawText, position.offset);
+    if (bounds == null) return;
+
+    widget.onWordLongPress((
+      text: widget.para.rawText.substring(bounds.$1, bounds.$2),
+      offset: bounds.$1,
+    ));
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final para = widget.para;
+    final settings = widget.settings;
+    final palette = widget.palette;
+    final isActive = widget.isActive;
+
     final bodyStyle = readerBodyStyle(settings, palette);
     final headingStyle = readerHeadingStyle(settings, palette);
 
@@ -386,25 +474,27 @@ class _ParagraphTile extends StatelessWidget {
     if (para.isHeading) {
       content = Padding(
         padding: const EdgeInsets.only(top: 20, bottom: 6),
-        child: Text(para.rawText, style: headingStyle),
+        child: Text(para.rawText, key: _textKey, style: headingStyle),
       );
     } else if (isActive) {
       content = HighlightedText(
         rawText: para.rawText,
-        sentenceRange: sentenceRange,
-        wordRange: wordRange,
+        sentenceRange: widget.sentenceRange,
+        wordRange: widget.wordRange,
         baseStyle: bodyStyle,
         palette: palette,
+        textKey: _textKey,
       );
     } else {
-      content = Text(para.rawText, style: bodyStyle);
+      content = Text(para.rawText, key: _textKey, style: bodyStyle);
     }
 
     return Semantics(
       button: true,
       label: para.isHeading ? 'Título: ${para.rawText}' : null,
       child: GestureDetector(
-        onTap: onTap,
+        onTap: widget.onTap,
+        onLongPressStart: _handleLongPress,
         behavior: HitTestBehavior.opaque,
         child: Container(
           width: double.infinity,
@@ -614,6 +704,32 @@ class _BottomBar extends StatelessWidget {
                 ],
               ),
             ),
+            // Shadowing controls: only meaningful once there is a sentence to
+            // repeat, so they stay out of the way until then.
+            if (reader.highlightedSentence >= 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton.icon(
+                      icon: const Icon(Icons.replay, size: 18),
+                      label: const Text('Repetir'),
+                      style: TextButton.styleFrom(foregroundColor: palette.text),
+                      onPressed: notifier.repeatSentence,
+                    ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      avatar: Icon(Icons.loop,
+                          size: 18,
+                          color: reader.sentenceLoop ? null : palette.muted),
+                      label: const Text('Bucle'),
+                      selected: reader.sentenceLoop,
+                      onSelected: (_) => notifier.toggleSentenceLoop(),
+                    ),
+                  ],
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Row(

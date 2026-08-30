@@ -46,6 +46,13 @@ class ReaderState {
   final int sessionDataKb;
   /// Engine actually used for the last synthesis, so a fallback is visible.
   final String engineLabel;
+
+  /// On-disk audio backing the current paragraph. Lets a single word be replayed
+  /// from the clip already downloaded, with no network round trip.
+  final String? currentAudioPath;
+
+  /// Repeats the active sentence instead of moving on — the shadowing loop.
+  final bool sentenceLoop;
   final bool isDownloading;
   final int downloadDone;
   final int downloadTotal;
@@ -63,6 +70,8 @@ class ReaderState {
     this.activeWord,
     this.sessionDataKb = 0,
     this.engineLabel = '',
+    this.currentAudioPath,
+    this.sentenceLoop = false,
     this.isDownloading = false,
     this.downloadDone = 0,
     this.downloadTotal = 0,
@@ -82,6 +91,8 @@ class ReaderState {
     bool clearActiveWord = false,
     int? sessionDataKb,
     String? engineLabel,
+    String? currentAudioPath,
+    bool? sentenceLoop,
     bool? isDownloading,
     int? downloadDone,
     int? downloadTotal,
@@ -99,6 +110,8 @@ class ReaderState {
         activeWord: clearActiveWord ? null : (activeWord ?? this.activeWord),
         sessionDataKb: sessionDataKb ?? this.sessionDataKb,
         engineLabel: engineLabel ?? this.engineLabel,
+        currentAudioPath: currentAudioPath ?? this.currentAudioPath,
+        sentenceLoop: sentenceLoop ?? this.sentenceLoop,
         isDownloading: isDownloading ?? this.isDownloading,
         downloadDone: downloadDone ?? this.downloadDone,
         downloadTotal: downloadTotal ?? this.downloadTotal,
@@ -280,6 +293,16 @@ class ReaderNotifier extends Notifier<ReaderState> {
       }
       if (sentIdx != state.highlightedSentence) {
         state = state.copyWith(highlightedSentence: sentIdx);
+      }
+    }
+
+    // Shadowing loop: jump back as soon as the sentence finishes, so the same
+    // line can be heard over and over without touching the controls.
+    if (state.sentenceLoop) {
+      final range = _activeSentenceMs();
+      if (range != null && elapsedMs >= range.end) {
+        unawaited(audioHandler.seek(Duration(milliseconds: range.start)));
+        return;
       }
     }
 
@@ -508,6 +531,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
         sentenceRanges: sentenceRanges,
         clearActiveWord: true,
         highlightedSentence: seekSentenceIdx > 0 ? seekSentenceIdx : -1,
+        currentAudioPath: audio.path,
       );
 
       _publishNowPlaying(book, para);
@@ -603,6 +627,79 @@ class ReaderNotifier extends Notifier<ReaderState> {
       sentenceRanges: [],
       clearActiveWord: true,
     );
+  }
+
+  /// Millisecond span of the sentence being spoken, derived from the word marks
+  /// that fall inside its character range.
+  ({int start, int end})? _activeSentenceMs() {
+    final sentenceIdx = state.highlightedSentence;
+    if (sentenceIdx < 0 || state.wordMarks.isEmpty) return null;
+
+    final range = state.sentenceRanges
+        .where((r) => r.index == sentenceIdx)
+        .firstOrNull;
+    if (range == null) return null;
+
+    final inside = state.wordMarks
+        .where((m) => m.start >= range.start && m.start < range.end)
+        .toList();
+    if (inside.isEmpty) return null;
+
+    return (start: inside.first.startMs, end: inside.last.endMs);
+  }
+
+  /// Restarts the current sentence. The core of practising pronunciation:
+  /// listen, repeat aloud, compare.
+  Future<void> repeatSentence() async {
+    final range = _activeSentenceMs();
+    if (range == null) return;
+    await audioHandler.seek(Duration(milliseconds: range.start));
+    if (state.status == ReaderStatus.paused) await resume();
+  }
+
+  void toggleSentenceLoop() =>
+      state = state.copyWith(sentenceLoop: !state.sentenceLoop);
+
+  /// Audio clip for the word at [charOffset] in the active paragraph.
+  ///
+  /// Returns null when that paragraph has no timings yet, or the offset falls
+  /// outside every word — the caller then falls back to synthesizing the word.
+  ({String path, int startMs, int endMs})? wordClipAt(int charOffset) {
+    final path = state.currentAudioPath;
+    if (path == null || state.wordMarks.isEmpty) return null;
+
+    for (final mark in state.wordMarks) {
+      if (charOffset >= mark.start && charOffset < mark.end) {
+        // A little padding on each side: word boundaries land mid-transition,
+        // and a bare cut swallows the first consonant.
+        return (
+          path: path,
+          startMs: (mark.startMs - 60).clamp(0, 1 << 30),
+          endMs: mark.endMs + 120,
+        );
+      }
+    }
+    return null;
+  }
+
+  /// Synthesizes a single word, for taps on paragraphs with no audio yet.
+  Future<String?> synthesizeWord(String word) async {
+    final book = state.book;
+    if (book == null || word.trim().isEmpty) return null;
+    try {
+      final settings = _settings;
+      final provider = await _provider(settings, book.language);
+      final result = await provider.synthesize(
+        text: word.trim(),
+        voice: settings.voiceFor(book.language),
+        rate: settings.edgeRate,
+        volume: settings.edgeVolume,
+      );
+      return result.filePath;
+    } catch (e) {
+      dev.log('[Reader] Word synthesis failed: $e');
+      return null;
+    }
   }
 
   /// Applies a new playback speed immediately, without re-synthesizing.
