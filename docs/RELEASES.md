@@ -9,6 +9,83 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## 0.3.0-preview.1 — 2026-08-30
+
+Tres frentes: naturalidad de la voz, la app como lector y no solo como
+reproductor, y ~20 bugs.
+
+### Voz y audio
+- Audio de Edge TTS a 96 kbit/s (antes 48). Verificado contra el servidor que
+  160 y 192 kbit/s devuelven cero bytes: 96 es el techo del endpoint gratuito.
+- **Prefetch del párrafo siguiente**: desaparece el silencio de 1-2 s que había
+  entre párrafos, que era lo que más rompía la ilusión de un narrador.
+- El SSML ya no fija `xml:lang='en-US'` al hablar español.
+- Catálogo completo de voces (300+) con caché de 7 días, buscador y prueba que
+  ahora sí suena. Antes `listVoices()` devolvía lista vacía y el preview
+  sintetizaba el audio para tirarlo.
+- La velocidad se aplica al reproducir y sale de la clave de caché: cambiarla ya
+  no re-sintetiza el libro ni gasta datos.
+- Los párrafos largos se trocean por oración antes de sintetizar.
+
+### Segundo plano y pantalla de bloqueo
+- Servicio en primer plano con `audio_service`: la reproducción queda protegida
+  de que el sistema la mate, y aparecen controles de play/pausa/anterior/
+  siguiente en la pantalla de bloqueo, notificaciones, auriculares y Bluetooth.
+- Sesión de audio 'speech': pausa en llamadas y baja volumen en notificaciones.
+
+### Lector
+- Modo inmersivo: el texto ocupa la pantalla completa y las barras se ocultan al
+  tocar el centro. Antes el texto vivía aplastado entre cinco barras fijas.
+- **Una sola posición compartida** entre leer y escuchar (modelo Kindle+Audible).
+  El scroll ahora guarda posición, así que leer en silencio ya no se pierde.
+- Reanuda a mitad de párrafo (oración + milisegundo) en vez de reiniciarlo.
+- Tamaño de letra, interlineado, márgenes y tipografía configurables. La serif
+  por fin se aplica: se pedía 'Georgia', que no existe en Android.
+- Fondos sepia/claro/oscuro reales; antes el sepia estaba incrustado e ignoraba
+  el tema oscuro.
+- Progreso como "68% · faltan ~4 h" en vez de "Cap. 12 / 40".
+- Resaltado por palabra además del de oración.
+
+### Biblioteca
+- Progreso por libro, búsqueda por título/autor y orden configurable.
+- Los EPUB se copian a almacenamiento de la app: se acabaron las rutas rotas por
+  scoped storage.
+- "Abrir con VoiceX" desde el gestor de archivos y compartir hacia la app.
+
+### Bugs resueltos
+- El filtro de 20 caracteres descartaba diálogos cortos. En el EPUB de prueba se
+  recuperan **633 párrafos** que no se leían ni se mostraban.
+- El resaltado se desincronizaba sin recuperarse: se repartían los timestamps
+  por conteo de palabras. Ahora cada palabra se ancla a su posición de carácter,
+  así un token que no casa se descarta y el siguiente vuelve a anclar.
+- El corte de oraciones rompía en abreviaturas ("Sr.") e iniciales ("J. R. R.").
+- La pantalla de Ajustes existía pero no era alcanzable desde ninguna parte.
+- El slider de velocidad de Android no hacía nada, y encima invalidaba la caché.
+- El TTS de Android esperaba a que el archivo existiera, no a que la síntesis
+  terminara: podía reproducir un WAV truncado.
+- `PRAGMA foreign_keys` nunca se activaba, así que `ON DELETE CASCADE` no
+  disparaba y borrar un libro dejaba progreso, marcadores y caché huérfanos.
+- Fugas de archivos: temporales de síntesis y sidecars `.ts.json` se acumulaban
+  para siempre.
+- El EPUB se parseaba en el hilo de UI, y dos veces al importar.
+- Deep link a `/reader/:id` reventaba por un cast sin validar.
+- Faltaba el bloque `<queries>` con `TTS_SERVICE`, sin el cual flutter_tts no
+  descubre motores en Android 11+.
+- `existsSync()` dentro de `build()` en la lista de libros.
+- Doble `Expanded` en la hoja de marcadores vacía.
+
+### Base de datos
+- v5: `sentence_index` y `offset_ms` en `reading_progress`; limpieza de filas
+  huérfanas heredadas.
+- v6: `books.total_paragraphs` y `reading_progress.global_index`, para el
+  progreso de la biblioteca sin reparsear cada EPUB.
+
+### Tests
+- De un placeholder a 32 tests sobre corte de oraciones, filtro de bloques
+  cortos, troceado para síntesis y anclaje de timestamps.
+
+---
+
 ## 0.2.0-preview.1+3 — 2026-04-30
 
 Feature: portadas y metadatos de EPUB en la biblioteca.

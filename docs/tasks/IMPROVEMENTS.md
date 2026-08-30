@@ -32,6 +32,23 @@ Formato: `- [ ] [prioridad] YYYY-MM-DD — descripción`
 
 - [x] `medio` 2026-04-30 — Portada y metadatos del EPUB (editorial, fecha, materia, descripción) visibles desde la biblioteca. Implementado en v0.2.0.
 
+## Pendiente de decisión
+
+- [ ] `alto` 2026-08-30 — **Elegir motor de voz definitivo.** Hay 9 muestras del
+  mismo párrafo en `muestras_voz/` (6 de Edge, 3 de Kokoro) con un LEEME que
+  explica cómo compararlas. Edge se queda como motor principal pase lo que pase;
+  Kokoro entraría como proveedor adicional para funcionar sin internet, que hoy
+  solo cubre el TTS nativo de Android. Medido: Kokoro da timestamps por palabra
+  (cabecera `x-word-timestamps`), va a ~5x tiempo real en CPU, y solo tiene 3
+  voces en español frente a las 11 de Edge.
+- [ ] `medio` 2026-08-30 — **Probar en teléfono físico** lo que el emulador no
+  reproduce: controles en pantalla de bloqueo, botones de auriculares y
+  Bluetooth, pausa y reanudación ante llamada entrante, y supervivencia de la
+  reproducción con la pantalla apagada.
+- [ ] `bajo` 2026-08-30 — Decidir si el botón "siguiente" de la pantalla de
+  bloqueo debe saltar de párrafo (actual) o de capítulo. Por párrafo puede
+  resultar demasiado granular para un botón físico del coche.
+
 ## Ideas / Futuro
 
 - [x] `medio` 2026-04-30 — Descarga de capítulos para escucha offline. La infraestructura de caché ya existe (AudioCacheRepo + SQLite). Falta: (1) guardar en `getApplicationDocumentsDirectory()` en vez de `getTemporaryDirectory()` para que el OS no lo borre, (2) botón "Descargar capítulo" que pre-sintetice todos los párrafos en background con progreso visible, (3) columna `pinned` en `audio_cache` para que el LRU eviction no toque los descargados, (4) detección de red offline para ir directo al caché. Peso estimado: ~3-5 MB por capítulo.
