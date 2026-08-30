@@ -274,6 +274,33 @@ class AudioCacheRepo {
     } catch (_) {}
   }
 
+  /// Rewrites cache keys to the filesystem-safe form.
+  ///
+  /// Earlier builds embedded the raw key in the filename, and those keys
+  /// carried ':' and '@'. Renaming the rows keeps everything already
+  /// downloaded reachable instead of forcing hours of re-synthesis; rows whose
+  /// file never made it to disk clean themselves up on the next lookup, since
+  /// [get] drops a row when its file is missing.
+  ///
+  /// Idempotent, so it can run on every start.
+  Future<void> migrateCacheKeys() async {
+    final db = await _db;
+    await db.execute(
+        "UPDATE audio_cache SET voice_id = 'kokoro-' || substr(voice_id, 8) "
+        "WHERE voice_id LIKE 'kokoro:%'");
+    await db.execute(
+        "UPDATE audio_cache SET voice_id = 'piper-' || "
+        "replace(substr(voice_id, 7), '.', '_') WHERE voice_id LIKE 'piper@%'");
+    await db.execute(
+        "UPDATE audio_cache SET voice_id = 'android-' || substr(voice_id, 9) "
+        "WHERE voice_id LIKE 'android:%'");
+    // Anything with no engine prefix predates the split and came from Edge.
+    await db.execute(
+        "UPDATE audio_cache SET voice_id = 'edge-' || voice_id "
+        "WHERE voice_id NOT LIKE 'edge-%' AND voice_id NOT LIKE 'kokoro-%' "
+        "AND voice_id NOT LIKE 'piper-%' AND voice_id NOT LIKE 'android-%'");
+  }
+
   /// Diagnostic: what is actually stored for a book, grouped by cache key.
   Future<List<Map<String, Object?>>> debugKeys(int bookId) async {
     final db = await _db;

@@ -28,6 +28,12 @@ void main() {
 
 Future<void> _pruneCache() async {
   try {
-    await AudioCacheRepo().pruneExpired();
-  } catch (_) {}
+    final repo = AudioCacheRepo();
+    // Before pruning: keys written by earlier builds must be renamed, or every
+    // download made with them would look missing and be synthesized again.
+    await repo.migrateCacheKeys();
+    await repo.pruneExpired();
+  } catch (e, st) {
+    debugPrint('Cache maintenance failed: $e\n$st');
+  }
 }

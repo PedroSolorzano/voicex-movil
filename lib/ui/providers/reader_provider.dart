@@ -54,9 +54,21 @@ class ReaderState {
 
   /// Repeats the active sentence instead of moving on — the shadowing loop.
   final bool sentenceLoop;
+
+  /// Chapters fully downloaded **for the engine currently selected**. Caches
+  /// are deliberately separate per engine, so a count that ignored the engine
+  /// would promise audio that will not be used.
+  final int downloadedChapters;
   final bool isDownloading;
   final int downloadDone;
   final int downloadTotal;
+
+  /// Paragraphs that failed during the current download. A silent failure used
+  /// to let the bar reach 100 % having written nothing.
+  final int downloadFailed;
+
+  /// Seconds per paragraph observed so far, for the time estimate.
+  final double downloadSecondsPerParagraph;
 
   const ReaderState({
     this.book,
@@ -73,9 +85,12 @@ class ReaderState {
     this.engineLabel = '',
     this.currentAudioPath,
     this.sentenceLoop = false,
+    this.downloadedChapters = 0,
     this.isDownloading = false,
     this.downloadDone = 0,
     this.downloadTotal = 0,
+    this.downloadFailed = 0,
+    this.downloadSecondsPerParagraph = 0,
   });
 
   ReaderState copyWith({
@@ -94,9 +109,12 @@ class ReaderState {
     String? engineLabel,
     String? currentAudioPath,
     bool? sentenceLoop,
+    int? downloadedChapters,
     bool? isDownloading,
     int? downloadDone,
     int? downloadTotal,
+    int? downloadFailed,
+    double? downloadSecondsPerParagraph,
   }) =>
       ReaderState(
         book: book ?? this.book,
@@ -113,10 +131,21 @@ class ReaderState {
         engineLabel: engineLabel ?? this.engineLabel,
         currentAudioPath: currentAudioPath ?? this.currentAudioPath,
         sentenceLoop: sentenceLoop ?? this.sentenceLoop,
+        downloadedChapters: downloadedChapters ?? this.downloadedChapters,
         isDownloading: isDownloading ?? this.isDownloading,
         downloadDone: downloadDone ?? this.downloadDone,
         downloadTotal: downloadTotal ?? this.downloadTotal,
+        downloadFailed: downloadFailed ?? this.downloadFailed,
+        downloadSecondsPerParagraph:
+            downloadSecondsPerParagraph ?? this.downloadSecondsPerParagraph,
       );
+
+  /// Estimated seconds left in the current download.
+  int get downloadSecondsLeft {
+    if (!isDownloading || downloadSecondsPerParagraph <= 0) return 0;
+    final left = downloadTotal - downloadDone;
+    return (left * downloadSecondsPerParagraph).round();
+  }
 
   Chapter? get currentChapter => book?.chapters.elementAtOrNull(chapterIndex);
   Paragraph? get currentParagraph =>
@@ -211,6 +240,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
       // without opening the EPUB again.
       unawaited(LibraryRepo()
           .updateTotalParagraphs(bookId, _totalParagraphs(bookWithId)));
+
+      unawaited(refreshDownloadedCount());
 
       // Fire-and-forget: fills the offline cache while at home, and quietly
       // does nothing when the conditions are not met.
@@ -376,16 +407,16 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// Piper additionally folds in the pace, because `length_scale` is baked into
   /// the samples — changing it must invalidate what was downloaded.
   String _cacheKeyFor(String engine, AppSettings settings, Book book) {
-    switch (engine) {
-      case 'piper':
-        return 'piper@${settings.piperLengthScale.toStringAsFixed(2)}';
-      case 'kokoro':
-        return 'kokoro:${settings.voiceFor(book.language)}';
-      case 'android':
-        return 'android:${book.language}';
-      default:
-        return settings.voiceFor(book.language);
-    }
+    final raw = switch (engine) {
+      'piper' => 'piper-${settings.piperLengthScale.toStringAsFixed(2)}',
+      'kokoro' => 'kokoro-${settings.voiceFor(book.language)}',
+      'android' => 'android-${book.language}',
+      _ => 'edge-${settings.voiceFor(book.language)}',
+    };
+    // The key is also embedded in the cache filename, so it must survive as a
+    // path segment. An earlier version used ':' and '@' here, which made every
+    // file write fail while the progress bar still marched to 100 %.
+    return raw.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
   }
 
   /// Key for the engine the user has selected.
@@ -909,7 +940,12 @@ class ReaderNotifier extends Notifier<ReaderState> {
       isDownloading: true,
       downloadDone: 0,
       downloadTotal: totalParagraphs,
+      downloadFailed: 0,
+      downloadSecondsPerParagraph: estimatedSecondsPerParagraph(settings),
     );
+
+    final startedAt = DateTime.now();
+    var synthesized = 0;
 
     for (var chapterIdx = from; chapterIdx < last; chapterIdx++) {
       for (final para in chapters[chapterIdx].paragraphs) {
@@ -943,8 +979,14 @@ class ReaderNotifier extends Notifier<ReaderState> {
           final sizeKb = (await File(dest).length() / 1024).ceil();
           await _cacheRepo.savePin(book.id!, chapterIdx, para.index, voice,
               _cacheFormatTag, dest, sizeKb);
+          synthesized++;
+          // Refine the estimate from real timings instead of the static guess.
+          final elapsed = DateTime.now().difference(startedAt).inMilliseconds;
+          state = state.copyWith(
+              downloadSecondsPerParagraph: elapsed / 1000 / synthesized);
         } catch (e) {
           dev.log('[Reader] Download ch$chapterIdx para ${para.index}: $e');
+          state = state.copyWith(downloadFailed: state.downloadFailed + 1);
           // A background prefetch that hits a dead server should give up
           // rather than grind through every remaining paragraph.
           if (silent) {
@@ -957,8 +999,29 @@ class ReaderNotifier extends Notifier<ReaderState> {
       if (_downloadCancelled) break;
     }
 
-    state = state.copyWith(isDownloading: false);
+    final failed = state.downloadFailed;
+    state = state.copyWith(
+      isDownloading: false,
+      statusMessage: failed > 0
+          ? 'Descarga incompleta: $failed párrafos fallaron'
+          : state.statusMessage,
+    );
+    if (failed > 0) {
+      dev.log('[Reader] Download finished with $failed failures');
+    }
+    await refreshDownloadedCount();
   }
+
+  /// Rough synthesis cost per paragraph, measured on this project's servers.
+  /// Only seeds the estimate; it is refined from real timings as the download
+  /// progresses.
+  static double estimatedSecondsPerParagraph(AppSettings settings) =>
+      switch (settings.ttsProvider) {
+        'piper' => 2.0,
+        'kokoro' => 5.0,
+        'android' => 1.5,
+        _ => 3.0, // Edge, dominated by the network
+      };
 
   /// Fills the cache ahead while on WiFi with the server in reach.
   ///
@@ -991,6 +1054,12 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
     await downloadChapters(
         state.chapterIndex, settings.prefetchChapters, silent: true);
+  }
+
+  /// Recomputes [ReaderState.downloadedChapters] for the selected engine.
+  Future<void> refreshDownloadedCount() async {
+    final count = await downloadedChapterCount();
+    state = state.copyWith(downloadedChapters: count);
   }
 
   /// How many chapters of this book are fully pinned, for the download screen.

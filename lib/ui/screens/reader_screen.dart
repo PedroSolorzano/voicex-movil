@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../config/settings.dart';
+import '../../tts/tts_factory.dart';
 import '../../epub/models.dart';
 import '../../epub/text_align.dart';
 import '../providers/reader_provider.dart';
@@ -14,6 +15,14 @@ import '../providers/settings_provider.dart';
 import '../widgets/highlighted_text.dart';
 import '../widgets/reader_theme.dart';
 import '../widgets/word_sheet.dart';
+
+/// "41 min", "1 h 12 min". Used by both the download bar and its confirmation.
+String _shortDuration(int seconds) {
+  if (seconds < 60) return '$seconds s';
+  final minutes = seconds ~/ 60;
+  if (minutes < 60) return '$minutes min';
+  return '${minutes ~/ 60} h ${minutes % 60} min';
+}
 
 /// Rough narration rate in characters per second at 1× for a neural voice.
 /// Only used for the "time left" estimate, so approximate is fine.
@@ -286,17 +295,30 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       _DownloadScope.book => (chapters - from, 'el resto del libro'),
     };
 
-    // A whole book is hundreds of megabytes and many minutes of synthesis;
-    // worth confirming rather than surprising the user.
-    if (scope == _DownloadScope.book) {
+    // Estimate before starting: chapters in this book run to ~450 paragraphs,
+    // so even "the next three" is over an hour with Kokoro. Confirm whenever
+    // that is more than a couple of minutes, not just for a whole book.
+    final book = reader.book;
+    var paragraphs = 0;
+    if (book != null) {
+      for (var c = from; c < (from + count).clamp(0, chapters); c++) {
+        paragraphs += book.chapters[c].paragraphs.length;
+      }
+    }
+    final estimate =
+        (paragraphs * ReaderNotifier.estimatedSecondsPerParagraph(settings))
+            .round();
+
+    if (estimate > 120) {
       final ok = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
-          title: const Text('Descargar libro completo'),
+          title: Text('Descargar $label'),
           content: Text(
-              'Se sintetizarán ${chapters - from} capítulos. Puede ocupar varios '
-              'cientos de MB y tardar un buen rato. Conviene hacerlo en WiFi y '
-              'con la pantalla encendida.'),
+              'Son $paragraphs párrafos: alrededor de ${_shortDuration(estimate)} '
+              'de síntesis con ${providerLabel(settings.ttsProvider)}, y unos '
+              '${(paragraphs * 0.25).round()} MB.\n\n'
+              'Conviene dejar la app abierta mientras tanto.'),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(context, false),
@@ -678,7 +700,7 @@ class _BottomBar extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Descargando ${reader.downloadDone} / ${reader.downloadTotal} párrafos',
+                      _downloadLabel(reader),
                       style: TextStyle(fontSize: 11, color: palette.muted),
                     ),
                   ],
@@ -751,8 +773,15 @@ class _BottomBar extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '${(progress * 100).toStringAsFixed(0)}%'
-                    '${remaining.isEmpty ? '' : ' · $remaining'}',
+                    [
+                      '${(progress * 100).toStringAsFixed(0)}%',
+                      if (remaining.isNotEmpty) remaining,
+                      // Named by engine: what was downloaded with another one
+                      // will not be used.
+                      if (reader.downloadedChapters > 0)
+                        '${reader.downloadedChapters} cap. en '
+                            '${providerLabel(settings.ttsProvider)}',
+                    ].join('  ·  '),
                     style: TextStyle(fontSize: 11, color: palette.muted),
                   ),
                   Text(
@@ -771,6 +800,23 @@ class _BottomBar extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// "Descargando 120 / 1350 · faltan ~41 min · 3 fallidos".
+  ///
+  /// The bare paragraph count said nothing useful: a chapter of this book is
+  /// ~450 paragraphs, so three of them are well over an hour with Kokoro.
+  static String _downloadLabel(ReaderState reader) {
+    final parts = <String>[
+      'Descargando ${reader.downloadDone} / ${reader.downloadTotal}',
+    ];
+
+    final seconds = reader.downloadSecondsLeft;
+    if (seconds > 0) parts.add('faltan ~${_shortDuration(seconds)}');
+    if (reader.downloadFailed > 0) {
+      parts.add('${reader.downloadFailed} fallidos');
+    }
+    return parts.join('  ·  ');
   }
 
   /// Estimated listening time left, derived from remaining characters.
