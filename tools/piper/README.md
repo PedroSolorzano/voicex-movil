@@ -14,11 +14,23 @@ La primera construcción descarga el modelo (~110 MB para daniela-high).
 Luego, en la app: **Ajustes → Motor de voz → Piper**, y la dirección
 `http://<IP-de-la-computadora>:5000`.
 
-## Voces
+## Voces: una por idioma
 
-La imagen trae `es_AR-daniela-high` por defecto, la que mejor resultado dio en
-las pruebas de español. Para cambiarla, edita `VOICE` y `VOICE_PATH` en el
-compose y reconstruye. El catálogo completo está en
+**Las voces de Piper están entrenadas cada una en un idioma.** No son
+multilingües como las de Kokoro: darle texto en inglés a un modelo español
+produce fonética española sobre palabras inglesas, algo directamente
+incomprensible. Y el servidor **no avisa**: si le pides un modelo que no tiene,
+responde 200 usando el que sea su modelo por defecto.
+
+Por eso la imagen trae dos y la app manda cuál usar en cada petición:
+
+| Idioma | Modelo |
+|---|---|
+| Español | `es_AR-daniela-high` |
+| Inglés | `en_US-lessac-high` |
+
+Para cambiarlos, edita `VOICE_ES` / `VOICE_EN` y sus rutas en el compose y
+reconstruye. El catálogo está en
 [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices).
 
 Probadas en español:
@@ -28,14 +40,17 @@ Probadas en español:
 | `es_AR-daniela-high` | Argentina. La preferida; lee rápido a ritmo 1.0 |
 | `es_MX-claude-high` | México. Comete errores de lectura |
 | `es_MX-ald-medium` | México. Mismo problema |
-| `es_ES-*` | Varias de España, sin probar |
 
 ## Ritmo
 
 El deslizador **Ritmo** de Ajustes manda `length_scale` en cada petición: alarga
 cada fonema al sintetizar, que suena más natural que frenar la reproducción.
 
-- `1.00` — ritmo propio de daniela, rápido
+**Cuidado con la dirección:** es *longitud de fonema*, así que números más altos
+hablan más **pausado**. Bajarlo acelera.
+
+- `0.90` — más rápido todavía
+- `1.00` — ritmo propio de daniela, ya de por sí rápido
 - `1.25` — cómodo para seguir con atención
 - `1.60` — al nivel de una lectura pausada normal
 

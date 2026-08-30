@@ -59,6 +59,12 @@ class AppSettings {
   // ── Piper (servidor propio, voces nativas por idioma) ────────────────────
   String piperBaseUrl;
 
+  /// Piper model per language. Its voices are trained one language each, so the
+  /// server must be told which model to use: feeding English text to a Spanish
+  /// model produces Spanish phonetics over English words — unintelligible.
+  String piperVoiceEs;
+  String piperVoiceEn;
+
   /// Phoneme length. Above 1.0 slows the voice; es_AR-daniela reads fast at 1.0.
   double piperLengthScale;
   String theme;
@@ -88,6 +94,8 @@ class AppSettings {
     this.prefetchOnWifi = true,
     this.prefetchChapters = 3,
     this.piperBaseUrl = '',
+    this.piperVoiceEs = 'es_AR-daniela-high',
+    this.piperVoiceEn = 'en_US-lessac-high',
     this.piperLengthScale = 1.0,
     this.theme = 'dark',
     this.cacheMaxMb = 150,
@@ -113,8 +121,7 @@ class AppSettings {
         final v = lang == 'es' ? kokoroVoiceEs : kokoroVoiceEn;
         return v.isNotEmpty ? v : 'af_bella';
       case 'piper':
-        // Empty means "the model the server was started with".
-        return '';
+        return lang == 'es' ? piperVoiceEs : piperVoiceEn;
       case 'edge':
         final explicit = lang == 'es' ? edgeVoiceEs : edgeVoiceEn;
         if (explicit.isNotEmpty) return explicit;
@@ -158,6 +165,8 @@ class AppSettings {
       prefetchOnWifi: prefs.getBool('prefetchOnWifi') ?? true,
       prefetchChapters: prefs.getInt('prefetchChapters') ?? 3,
       piperBaseUrl: prefs.getString('piperBaseUrl') ?? '',
+      piperVoiceEs: prefs.getString('piperVoiceEs') ?? 'es_AR-daniela-high',
+      piperVoiceEn: prefs.getString('piperVoiceEn') ?? 'en_US-lessac-high',
       piperLengthScale: prefs.getDouble('piperLengthScale') ?? 1.0,
       theme: prefs.getString('theme') ?? 'dark',
       cacheMaxMb: prefs.getInt('cacheMaxMb') ?? 150,
@@ -187,6 +196,8 @@ class AppSettings {
     await prefs.setBool('prefetchOnWifi', prefetchOnWifi);
     await prefs.setInt('prefetchChapters', prefetchChapters);
     await prefs.setString('piperBaseUrl', piperBaseUrl);
+    await prefs.setString('piperVoiceEs', piperVoiceEs);
+    await prefs.setString('piperVoiceEn', piperVoiceEn);
     await prefs.setDouble('piperLengthScale', piperLengthScale);
     await prefs.setString('theme', theme);
     await prefs.setInt('cacheMaxMb', cacheMaxMb);
@@ -214,6 +225,8 @@ class AppSettings {
     bool? prefetchOnWifi,
     int? prefetchChapters,
     String? piperBaseUrl,
+    String? piperVoiceEs,
+    String? piperVoiceEn,
     double? piperLengthScale,
     String? theme,
     int? cacheMaxMb,
@@ -240,6 +253,8 @@ class AppSettings {
         prefetchOnWifi: prefetchOnWifi ?? this.prefetchOnWifi,
         prefetchChapters: prefetchChapters ?? this.prefetchChapters,
         piperBaseUrl: piperBaseUrl ?? this.piperBaseUrl,
+        piperVoiceEs: piperVoiceEs ?? this.piperVoiceEs,
+        piperVoiceEn: piperVoiceEn ?? this.piperVoiceEn,
         piperLengthScale: piperLengthScale ?? this.piperLengthScale,
         theme: theme ?? this.theme,
         cacheMaxMb: cacheMaxMb ?? this.cacheMaxMb,

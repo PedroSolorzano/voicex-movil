@@ -409,7 +409,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// the samples — changing it must invalidate what was downloaded.
   String _cacheKeyFor(String engine, AppSettings settings, Book book) {
     final raw = switch (engine) {
-      'piper' => 'piper-${settings.piperLengthScale.toStringAsFixed(2)}',
+      'piper' => 'piper-${settings.voiceForEngine('piper', book.language)}'
+          '-${settings.piperLengthScale.toStringAsFixed(2)}',
       'kokoro' => 'kokoro-${settings.voiceForEngine('kokoro', book.language)}',
       'android' => 'android-${book.language}',
       _ => 'edge-${settings.voiceForEngine('edge', book.language)}',

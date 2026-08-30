@@ -7,11 +7,14 @@ services:
   piper:
     build:
       context: .
-      # Para otra voz, cambia estos dos y reconstruye. El catálogo está en
+      # Un modelo por idioma: las voces de Piper no son multilingües. Para
+      # cambiarlas, edita estos valores y reconstruye. El catálogo está en
       # https://huggingface.co/rhasspy/piper-voices
       args:
-        VOICE: es_AR-daniela-high
-        VOICE_PATH: es/es_AR/daniela/high
+        VOICE_ES: es_AR-daniela-high
+        VOICE_ES_PATH: es/es_AR/daniela/high
+        VOICE_EN: en_US-lessac-high
+        VOICE_EN_PATH: en/en_US/lessac/high
     container_name: voicex-piper
     restart: unless-stopped
     ports:
