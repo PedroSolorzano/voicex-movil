@@ -50,3 +50,4 @@ epub/
 
 # Claude Code (settings.local.json tiene rutas específicas de la máquina)
 .claude/settings.local.json
+muestras_voz/

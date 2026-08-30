@@ -1,31 +1,61 @@
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 import '../../epub/parser.dart';
 import '../../storage/repositories.dart';
 
 final _libraryRepo = LibraryRepo();
+const _uuid = Uuid();
+
+/// Copies the picked EPUB into app storage.
+///
+/// Android's scoped storage hands out paths that go stale — the picker returns
+/// a cache entry the OS may clear, and a file the user later moves breaks the
+/// stored path. Owning a copy means the library keeps working without the
+/// "Archivo no encontrado / Localizar" dance.
+Future<String> _importToAppStorage(String sourcePath) async {
+  final docs = await getApplicationDocumentsDirectory();
+  final booksDir = Directory('${docs.path}/voicex_books');
+  if (!await booksDir.exists()) await booksDir.create(recursive: true);
+
+  final dest = '${booksDir.path}/${_uuid.v4()}.epub';
+  await File(sourcePath).copy(dest);
+  return dest;
+}
 
 class LibraryNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
   @override
   Future<List<Map<String, dynamic>>> build() => _libraryRepo.all();
 
   Future<void> addBook(String filePath) async {
-    // Off the UI isolate: unzipping and walking a novel janks the list otherwise.
+    // Parse first: a malformed EPUB should fail before anything is copied.
+    // Off the UI isolate, since unzipping a novel janks the list otherwise.
     final book = await parseEpubInBackground(filePath);
-    final id = await _libraryRepo.add(
-      title: book.title,
-      author: book.author,
-      language: book.language,
-      filePath: filePath,
-    );
+    final storedPath = await _importToAppStorage(filePath);
+
+    final int id;
+    try {
+      id = await _libraryRepo.add(
+        title: book.title,
+        author: book.author,
+        language: book.language,
+        filePath: storedPath,
+      );
+    } catch (e) {
+      // Duplicate file_path or any insert failure: do not leave the copy behind.
+      try {
+        await File(storedPath).delete();
+      } catch (_) {}
+      rethrow;
+    }
 
     await _libraryRepo.updateTotalParagraphs(
         id, book.chapters.fold<int>(0, (sum, c) => sum + c.paragraphs.length));
 
     // Extract cover image and extra metadata asynchronously after insert.
     try {
-      final extras = await extractEpubExtras(filePath);
+      final extras = await extractEpubExtras(storedPath);
       String? savedCoverPath;
       if (extras.coverBytes != null) {
         final appDocDir = await getApplicationDocumentsDirectory();
@@ -55,7 +85,23 @@ class LibraryNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
   }
 
   Future<void> deleteBook(int id) async {
+    // Remove our own copy of the EPUB; files picked before this behaviour
+    // existed live outside app storage and are left untouched.
+    final row = await _libraryRepo.get(id);
+    final path = row?['file_path'] as String?;
+    final cover = row?['cover_path'] as String?;
+
     await _libraryRepo.delete(id);
+
+    for (final p in [path, cover]) {
+      if (p == null) continue;
+      if (p.contains('/voicex_books/') || p.contains('/voicex_covers/')) {
+        try {
+          final f = File(p);
+          if (await f.exists()) await f.delete();
+        } catch (_) {}
+      }
+    }
     ref.invalidateSelf();
   }
 

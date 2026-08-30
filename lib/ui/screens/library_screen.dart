@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/app_info_provider.dart';
 import '../providers/library_provider.dart';
+import '../providers/share_import_provider.dart';
 import '../widgets/book_card.dart';
 import '../widgets/book_info_sheet.dart';
 
@@ -20,6 +21,15 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   final _searchController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    // Picks up an EPUB opened from a file manager or shared into the app.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(shareImportProvider.notifier).start();
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
@@ -33,6 +43,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<String?>(shareImportProvider, (_, message) {
+      if (message == null) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+      ref.read(shareImportProvider.notifier).clearMessage();
+    });
+
     final entriesAsync = ref.watch(libraryEntriesProvider);
     final version = ref.watch(appInfoProvider).valueOrNull?.version;
     final sort = ref.watch(librarySortProvider);
