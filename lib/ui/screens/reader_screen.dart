@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../config/settings.dart';
 import '../../epub/models.dart';
+import '../../epub/text_align.dart';
 import '../providers/reader_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/highlighted_text.dart';
@@ -178,8 +179,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                         return _ParagraphTile(
                           para: para,
                           isActive: isActive,
-                          highlightedSentence:
-                              isActive ? reader.highlightedSentence : -1,
+                          sentenceRange: isActive
+                              ? _rangeForSentence(
+                                  reader.sentenceRanges,
+                                  reader.highlightedSentence)
+                              : null,
+                          wordRange: isActive ? reader.activeWord : null,
                           settings: settings,
                           palette: palette,
                           onTap: () => ref
@@ -294,10 +299,20 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
 // ─── Paragraph ───────────────────────────────────────────────────────────────
 
+/// Character range of [sentenceIndex] within the paragraph, if known.
+(int, int)? _rangeForSentence(List<SentenceRange> ranges, int sentenceIndex) {
+  if (sentenceIndex < 0) return null;
+  for (final r in ranges) {
+    if (r.index == sentenceIndex) return (r.start, r.end);
+  }
+  return null;
+}
+
 class _ParagraphTile extends StatelessWidget {
   final Paragraph para;
   final bool isActive;
-  final int highlightedSentence;
+  final (int, int)? sentenceRange;
+  final (int, int)? wordRange;
   final AppSettings settings;
   final ReaderPalette palette;
   final VoidCallback onTap;
@@ -305,7 +320,8 @@ class _ParagraphTile extends StatelessWidget {
   const _ParagraphTile({
     required this.para,
     required this.isActive,
-    required this.highlightedSentence,
+    required this.sentenceRange,
+    required this.wordRange,
     required this.settings,
     required this.palette,
     required this.onTap,
@@ -324,8 +340,9 @@ class _ParagraphTile extends StatelessWidget {
       );
     } else if (isActive) {
       content = HighlightedText(
-        paragraph: para,
-        highlightedIndex: highlightedSentence,
+        rawText: para.rawText,
+        sentenceRange: sentenceRange,
+        wordRange: wordRange,
         baseStyle: bodyStyle,
         palette: palette,
       );

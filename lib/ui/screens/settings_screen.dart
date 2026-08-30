@@ -174,6 +174,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
+              title: const Text('Resaltar palabra actual'),
+              subtitle: const Text(
+                  'Subraya la palabra que se está pronunciando. Solo con Edge, '
+                  'que es el que reporta los tiempos por palabra.'),
+              value: s.highlightWords,
+              onChanged: s.highlightSentences
+                  ? (v) => _update(s.copyWith(highlightWords: v))
+                  : null,
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
               title: const Text('Seguir el audio al desplazar'),
               subtitle: const Text(
                   'Centra automáticamente el párrafo que se está leyendo'),

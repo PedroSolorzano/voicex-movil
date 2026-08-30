@@ -8,6 +8,7 @@ import '../../audio/audio_player.dart';
 import '../../config/settings.dart';
 import '../../epub/models.dart';
 import '../../epub/parser.dart';
+import '../../epub/text_align.dart';
 import '../../storage/repositories.dart';
 import '../../tts/models.dart';
 import '../../tts/tts_factory.dart';
@@ -36,6 +37,10 @@ class ReaderState {
   final ReaderStatus status;
   final String statusMessage;
   final List<SentenceMark> sentenceMarks;
+  final List<WordMark> wordMarks;
+  final List<SentenceRange> sentenceRanges;
+  /// Character range of the word being spoken, or null.
+  final (int, int)? activeWord;
   final int sessionDataKb;
   final bool isDownloading;
   final int downloadDone;
@@ -49,6 +54,9 @@ class ReaderState {
     this.status = ReaderStatus.idle,
     this.statusMessage = '',
     this.sentenceMarks = const [],
+    this.wordMarks = const [],
+    this.sentenceRanges = const [],
+    this.activeWord,
     this.sessionDataKb = 0,
     this.isDownloading = false,
     this.downloadDone = 0,
@@ -63,6 +71,10 @@ class ReaderState {
     ReaderStatus? status,
     String? statusMessage,
     List<SentenceMark>? sentenceMarks,
+    List<WordMark>? wordMarks,
+    List<SentenceRange>? sentenceRanges,
+    (int, int)? activeWord,
+    bool clearActiveWord = false,
     int? sessionDataKb,
     bool? isDownloading,
     int? downloadDone,
@@ -76,6 +88,9 @@ class ReaderState {
         status: status ?? this.status,
         statusMessage: statusMessage ?? this.statusMessage,
         sentenceMarks: sentenceMarks ?? this.sentenceMarks,
+        wordMarks: wordMarks ?? this.wordMarks,
+        sentenceRanges: sentenceRanges ?? this.sentenceRanges,
+        activeWord: clearActiveWord ? null : (activeWord ?? this.activeWord),
         sessionDataKb: sessionDataKb ?? this.sessionDataKb,
         isDownloading: isDownloading ?? this.isDownloading,
         downloadDone: downloadDone ?? this.downloadDone,
@@ -170,12 +185,31 @@ class ReaderNotifier extends Notifier<ReaderState> {
         status: ReaderStatus.idle,
       );
       _attachHandler();
+
+      // Backfill the book length so the library can draw a progress bar
+      // without opening the EPUB again.
+      unawaited(LibraryRepo()
+          .updateTotalParagraphs(bookId, _totalParagraphs(bookWithId)));
     } catch (e) {
       state = state.copyWith(
         status: ReaderStatus.error,
         statusMessage: 'Error al cargar el libro: $e',
       );
     }
+  }
+
+  static int _totalParagraphs(Book book) =>
+      book.chapters.fold<int>(0, (sum, c) => sum + c.paragraphs.length);
+
+  /// Absolute paragraph index across the whole book.
+  int _globalIndex() {
+    final book = state.book;
+    if (book == null) return 0;
+    var total = 0;
+    for (var c = 0; c < state.chapterIndex && c < book.chapters.length; c++) {
+      total += book.chapters[c].paragraphs.length;
+    }
+    return total + state.paragraphIndex;
   }
 
   Future<String?> _resolveFilePath(int bookId) async {
@@ -198,9 +232,34 @@ class ReaderNotifier extends Notifier<ReaderState> {
       ref.read(settingsProvider).valueOrNull ?? AppSettings();
 
   void _onTick(int elapsedMs) {
-    final marks = state.sentenceMarks;
-    if (marks.isNotEmpty && _settings.highlightSentences) {
-      // Find the last sentence whose start time is <= elapsedMs.
+    final settings = _settings;
+
+    if (state.wordMarks.isNotEmpty) {
+      // Word boundaries anchored to character offsets: the sentence follows
+      // from where the current word sits, so a dropped token cannot shift
+      // every later sentence.
+      final wordIdx = activeWordIndex(state.wordMarks, elapsedMs);
+      if (wordIdx >= 0) {
+        final mark = state.wordMarks[wordIdx];
+        final sentIdx = settings.highlightSentences
+            ? sentenceAtOffset(state.sentenceRanges, mark.start)
+            : state.highlightedSentence;
+        final word = settings.highlightWords ? (mark.start, mark.end) : null;
+
+        final wordChanged = word?.$1 != state.activeWord?.$1 ||
+            word?.$2 != state.activeWord?.$2;
+        if (sentIdx != state.highlightedSentence || wordChanged) {
+          state = state.copyWith(
+            highlightedSentence: sentIdx,
+            activeWord: word,
+            clearActiveWord: word == null,
+          );
+        }
+      }
+    } else if (state.sentenceMarks.isNotEmpty && settings.highlightSentences) {
+      // No word boundaries (offline engine): fall back to estimated sentence
+      // start times.
+      final marks = state.sentenceMarks;
       int sentIdx = marks.last.sentenceIdx;
       for (int i = 0; i < marks.length - 1; i++) {
         if (elapsedMs < marks[i + 1].startMs) {
@@ -226,6 +285,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
       status: ReaderStatus.idle,
       highlightedSentence: -1,
       sentenceMarks: [],
+      wordMarks: [],
+      sentenceRanges: [],
+      clearActiveWord: true,
     );
     _advanceParagraph();
   }
@@ -369,6 +431,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
     try {
       final audio = await _ensureAudio(book, state.chapterIndex, para, settings);
 
+      final wordMarks = buildWordMarks(audio.timestamps, para.rawText);
+      final sentenceRanges = buildSentenceRanges(para);
       var marks = _buildSentenceMarks(audio.timestamps, para.sentences);
 
       // Resume / bookmark seek.
@@ -396,6 +460,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
         status: ReaderStatus.playing,
         statusMessage: 'Reproduciendo…',
         sentenceMarks: marks,
+        wordMarks: wordMarks,
+        sentenceRanges: sentenceRanges,
+        clearActiveWord: true,
         highlightedSentence: seekSentenceIdx > 0 ? seekSentenceIdx : -1,
       );
 
@@ -488,6 +555,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
       status: ReaderStatus.idle,
       highlightedSentence: -1,
       sentenceMarks: [],
+      wordMarks: [],
+      sentenceRanges: [],
+      clearActiveWord: true,
     );
   }
 
@@ -583,6 +653,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
       sentenceIndex:
           state.highlightedSentence < 0 ? 0 : state.highlightedSentence,
       offsetMs: offsetMs,
+      globalIndex: _globalIndex(),
     );
   }
 

@@ -67,6 +67,13 @@ class LibraryRepo {
     await db.delete('books', where: 'id = ?', whereArgs: [id]);
   }
 
+  /// Total paragraph count, used for the library progress bar.
+  Future<void> updateTotalParagraphs(int id, int total) async {
+    final db = await _db;
+    await db.update('books', {'total_paragraphs': total},
+        where: 'id = ?', whereArgs: [id]);
+  }
+
   Future<void> updateLanguage(int id, String language) async {
     final db = await _db;
     await db.update('books', {'language': language},
@@ -89,7 +96,7 @@ class ProgressRepo {
   /// [sentenceIndex] and [offsetMs] let a resume land mid-paragraph instead of
   /// restarting it.
   Future<void> save(int bookId, int chapterIndex, int paragraphIndex,
-      {int sentenceIndex = 0, int offsetMs = 0}) async {
+      {int sentenceIndex = 0, int offsetMs = 0, int globalIndex = 0}) async {
     final db = await _db;
     await db.insert(
       'reading_progress',
@@ -99,6 +106,7 @@ class ProgressRepo {
         'paragraph_index': paragraphIndex,
         'sentence_index': sentenceIndex,
         'offset_ms': offsetMs,
+        'global_index': globalIndex,
         'updated_at': DateTime.now().toIso8601String(),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
@@ -122,17 +130,14 @@ class ProgressRepo {
     );
   }
 
-  /// Reading position of every book, keyed by book id — used by the library to
-  /// show per-book progress without a query per row.
-  Future<Map<int, ({int chapter, int paragraph})>> allPositions() async {
+  /// Absolute position of every book, keyed by book id — lets the library show
+  /// per-book progress with one query instead of parsing each EPUB.
+  Future<Map<int, int>> allGlobalIndices() async {
     final db = await _db;
     final rows = await db.query('reading_progress');
     return {
       for (final r in rows)
-        r['book_id'] as int: (
-          chapter: r['chapter_index'] as int,
-          paragraph: r['paragraph_index'] as int,
-        )
+        r['book_id'] as int: (r['global_index'] as int?) ?? 0
     };
   }
 }

@@ -44,6 +44,7 @@ class AppSettings {
   String edgeVolume;
 
   bool highlightSentences;
+  bool highlightWords;
   String theme;
   int cacheMaxMb;
 
@@ -64,6 +65,7 @@ class AppSettings {
     this.edgeRate = '+0%',
     this.edgeVolume = '+0%',
     this.highlightSentences = true,
+    this.highlightWords = true,
     this.theme = 'dark',
     this.cacheMaxMb = 150,
     this.fontSize = 18,
@@ -96,6 +98,7 @@ class AppSettings {
       edgeRate: prefs.getString('edgeRate') ?? '+0%',
       edgeVolume: prefs.getString('edgeVolume') ?? '+0%',
       highlightSentences: prefs.getBool('highlightSentences') ?? true,
+      highlightWords: prefs.getBool('highlightWords') ?? true,
       theme: prefs.getString('theme') ?? 'dark',
       cacheMaxMb: prefs.getInt('cacheMaxMb') ?? 150,
       fontSize: prefs.getDouble('fontSize') ?? 18,
@@ -117,6 +120,7 @@ class AppSettings {
     await prefs.setString('edgeRate', edgeRate);
     await prefs.setString('edgeVolume', edgeVolume);
     await prefs.setBool('highlightSentences', highlightSentences);
+    await prefs.setBool('highlightWords', highlightWords);
     await prefs.setString('theme', theme);
     await prefs.setInt('cacheMaxMb', cacheMaxMb);
     await prefs.setDouble('fontSize', fontSize);
@@ -136,6 +140,7 @@ class AppSettings {
     String? edgeRate,
     String? edgeVolume,
     bool? highlightSentences,
+    bool? highlightWords,
     String? theme,
     int? cacheMaxMb,
     double? fontSize,
@@ -154,6 +159,7 @@ class AppSettings {
         edgeRate: edgeRate ?? this.edgeRate,
         edgeVolume: edgeVolume ?? this.edgeVolume,
         highlightSentences: highlightSentences ?? this.highlightSentences,
+        highlightWords: highlightWords ?? this.highlightWords,
         theme: theme ?? this.theme,
         cacheMaxMb: cacheMaxMb ?? this.cacheMaxMb,
         fontSize: fontSize ?? this.fontSize,

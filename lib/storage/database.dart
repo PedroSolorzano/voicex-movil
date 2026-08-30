@@ -8,7 +8,7 @@ Future<Database> getDatabase() async {
   final dbPath = await getDatabasesPath();
   _db = await openDatabase(
     join(dbPath, 'voicex.db'),
-    version: 5,
+    version: 6,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onConfigure: _onConfigure,
@@ -36,7 +36,8 @@ Future<void> _onCreate(Database db, int version) async {
       description    TEXT,
       publisher      TEXT,
       published_date TEXT,
-      subject        TEXT
+      subject        TEXT,
+      total_paragraphs INTEGER NOT NULL DEFAULT 0
     )
   ''');
 
@@ -48,6 +49,7 @@ Future<void> _onCreate(Database db, int version) async {
       paragraph_index INTEGER NOT NULL DEFAULT 0,
       sentence_index  INTEGER NOT NULL DEFAULT 0,
       offset_ms       INTEGER NOT NULL DEFAULT 0,
+      global_index    INTEGER NOT NULL DEFAULT 0,
       updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(book_id)
     )
@@ -112,5 +114,14 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
         'DELETE FROM bookmarks WHERE book_id NOT IN (SELECT id FROM books)');
     await db.execute(
         'DELETE FROM audio_cache WHERE book_id NOT IN (SELECT id FROM books)');
+  }
+  if (oldVersion < 6) {
+    // Absolute paragraph position + book length, so the library can show a
+    // progress bar without re-parsing every EPUB. Backfilled the first time
+    // each book is opened.
+    await db.execute(
+        'ALTER TABLE books ADD COLUMN total_paragraphs INTEGER NOT NULL DEFAULT 0');
+    await db.execute(
+        'ALTER TABLE reading_progress ADD COLUMN global_index INTEGER NOT NULL DEFAULT 0');
   }
 }
