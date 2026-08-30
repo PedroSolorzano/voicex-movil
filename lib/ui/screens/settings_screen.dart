@@ -7,6 +7,7 @@ import '../../config/settings.dart';
 import '../../storage/repositories.dart';
 import '../../tts/tts_factory.dart';
 import '../../tts/kokoro_tts_provider.dart';
+import '../../tts/piper_tts_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/voices_provider.dart';
 
@@ -36,8 +37,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _kokoroUrlController = TextEditingController(
-        text: ref.read(settingsProvider).valueOrNull?.kokoroBaseUrl ?? '');
+    final loaded = ref.read(settingsProvider).valueOrNull;
+    _kokoroUrlController =
+        TextEditingController(text: loaded?.selfHostedUrl ?? '');
     _loadCacheSize();
     PackageInfo.fromPlatform().then((info) {
       if (mounted) setState(() => _packageInfo = info);
@@ -68,8 +70,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _serverStatus = null;
     });
 
-    KokoroTtsProvider.resetHealthCache();
-    final ok = await KokoroTtsProvider.isReachable(url);
+    final isPiper = _settings.ttsProvider == 'piper';
+    if (isPiper) {
+      PiperTtsProvider.resetHealthCache();
+    } else {
+      KokoroTtsProvider.resetHealthCache();
+    }
+    final ok = isPiper
+        ? await PiperTtsProvider.isReachable(url)
+        : await KokoroTtsProvider.isReachable(url);
     if (!mounted) return;
 
     setState(() {
@@ -108,24 +117,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           _Section(title: 'Motor de voz', children: [
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(
-                    value: 'edge',
-                    label: Text('Edge'),
-                    icon: Icon(Icons.cloud_outlined)),
-                ButtonSegment(
-                    value: 'kokoro',
-                    label: Text('Kokoro'),
-                    icon: Icon(Icons.home_outlined)),
-                ButtonSegment(
-                    value: 'android',
-                    label: Text('Android'),
-                    icon: Icon(Icons.phone_android)),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final engine in const [
+                  ('edge', 'Edge', Icons.cloud_outlined),
+                  ('kokoro', 'Kokoro', Icons.home_outlined),
+                  ('piper', 'Piper', Icons.record_voice_over_outlined),
+                  ('android', 'Android', Icons.phone_android),
+                ])
+                  ChoiceChip(
+                    avatar: Icon(engine.$3, size: 18),
+                    label: Text(engine.$2),
+                    selected: s.ttsProvider == engine.$1,
+                    onSelected: (_) =>
+                        _update(s.copyWith(ttsProvider: engine.$1)),
+                  ),
               ],
-              selected: {s.ttsProvider},
-              onSelectionChanged: (v) =>
-                  _update(s.copyWith(ttsProvider: v.first)),
             ),
             const SizedBox(height: 8),
             Text(
@@ -134,6 +143,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   'Servidor propio en tu red. Mejor calidad de voz, pero solo '
                       'responde con la computadora encendida: fuera de casa la app '
                       'usa Edge automáticamente, o el audio ya descargado.',
+                'piper' =>
+                  'Servidor propio con voces entrenadas en cada idioma. Muy '
+                      'rápido, pero no marca las palabras: el resaltado se calcula '
+                      'por oración de forma aproximada.',
                 'android' =>
                   'Motor de voz del propio teléfono. Funciona sin internet, pero '
                       'no marca las palabras, así que el resaltado se calcula de '
@@ -146,8 +159,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ]),
 
-          if (s.ttsProvider == 'kokoro')
-            _Section(title: 'Servidor Kokoro', children: [
+          if (s.usesSelfHostedServer)
+            _Section(
+                title: 'Servidor ${providerLabel(s.ttsProvider)}',
+                children: [
               TextField(
                 controller: _kokoroUrlController,
                 decoration: InputDecoration(
@@ -168,7 +183,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 keyboardType: TextInputType.url,
                 autocorrect: false,
-                onChanged: (v) => _update(s.copyWith(kokoroBaseUrl: v.trim())),
+                onChanged: (v) => _update(s.ttsProvider == 'piper'
+                    ? s.copyWith(piperBaseUrl: v.trim())
+                    : s.copyWith(kokoroBaseUrl: v.trim())),
               ),
               if (_serverStatus != null)
                 Padding(
@@ -182,6 +199,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ),
                   ),
                 ),
+              if (s.ttsProvider == 'piper') ...[
+                const SizedBox(height: 12),
+                _LabelledSlider(
+                  label: 'Ritmo',
+                  value: s.piperLengthScale,
+                  min: 0.8,
+                  max: 1.6,
+                  divisions: 16,
+                  display: '${s.piperLengthScale.toStringAsFixed(2)}×',
+                  onChanged: (v) => _update(s.copyWith(piperLengthScale: v)),
+                ),
+                Text(
+                  'Alarga cada fonema al sintetizar, que suena más natural que '
+                  'frenar la reproducción. Ojo: cambiarlo invalida el audio ya '
+                  'descargado, porque va grabado dentro.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
               const SizedBox(height: 12),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,

@@ -1,0 +1,24 @@
+# Servidor de voz Piper.
+#
+#   docker compose -f tools/piper/docker-compose.yml up -d --build
+#
+# El teléfono se conecta a http://<IP-de-esta-máquina>:5000
+services:
+  piper:
+    build:
+      context: .
+      # Para otra voz, cambia estos dos y reconstruye. El catálogo está en
+      # https://huggingface.co/rhasspy/piper-voices
+      args:
+        VOICE: es_AR-daniela-high
+        VOICE_PATH: es/es_AR/daniela/high
+    container_name: voicex-piper
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:5000:5000"
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:5000/info"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

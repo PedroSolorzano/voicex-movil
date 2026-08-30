@@ -55,6 +55,12 @@ class AppSettings {
   /// Download the next chapters ahead while on WiFi with the server reachable.
   bool prefetchOnWifi;
   int prefetchChapters;
+
+  // ── Piper (servidor propio, voces nativas por idioma) ────────────────────
+  String piperBaseUrl;
+
+  /// Phoneme length. Above 1.0 slows the voice; es_AR-daniela reads fast at 1.0.
+  double piperLengthScale;
   String theme;
   int cacheMaxMb;
 
@@ -81,6 +87,8 @@ class AppSettings {
     this.kokoroVoiceEn = 'af_bella',
     this.prefetchOnWifi = true,
     this.prefetchChapters = 3,
+    this.piperBaseUrl = '',
+    this.piperLengthScale = 1.0,
     this.theme = 'dark',
     this.cacheMaxMb = 150,
     this.fontSize = 18,
@@ -97,6 +105,9 @@ class AppSettings {
       case 'kokoro':
         final v = lang == 'es' ? kokoroVoiceEs : kokoroVoiceEn;
         return v.isNotEmpty ? v : 'af_bella';
+      case 'piper':
+        // Empty means "the model the server was started with".
+        return '';
       case 'edge':
         final explicit = lang == 'es' ? edgeVoiceEs : edgeVoiceEn;
         if (explicit.isNotEmpty) return explicit;
@@ -106,6 +117,19 @@ class AppSettings {
 
   /// True when a Kokoro server has been configured at all.
   bool get hasKokoroServer => kokoroBaseUrl.trim().isNotEmpty;
+
+  bool get hasPiperServer => piperBaseUrl.trim().isNotEmpty;
+
+  /// Base URL of the self-hosted engine currently selected, if any.
+  String get selfHostedUrl => switch (ttsProvider) {
+        'kokoro' => kokoroBaseUrl,
+        'piper' => piperBaseUrl,
+        _ => '',
+      };
+
+  /// Whether the selected engine depends on a machine on the local network.
+  bool get usesSelfHostedServer =>
+      ttsProvider == 'kokoro' || ttsProvider == 'piper';
 
   static Future<AppSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -126,6 +150,8 @@ class AppSettings {
       kokoroVoiceEn: prefs.getString('kokoroVoiceEn') ?? 'af_bella',
       prefetchOnWifi: prefs.getBool('prefetchOnWifi') ?? true,
       prefetchChapters: prefs.getInt('prefetchChapters') ?? 3,
+      piperBaseUrl: prefs.getString('piperBaseUrl') ?? '',
+      piperLengthScale: prefs.getDouble('piperLengthScale') ?? 1.0,
       theme: prefs.getString('theme') ?? 'dark',
       cacheMaxMb: prefs.getInt('cacheMaxMb') ?? 150,
       fontSize: prefs.getDouble('fontSize') ?? 18,
@@ -153,6 +179,8 @@ class AppSettings {
     await prefs.setString('kokoroVoiceEn', kokoroVoiceEn);
     await prefs.setBool('prefetchOnWifi', prefetchOnWifi);
     await prefs.setInt('prefetchChapters', prefetchChapters);
+    await prefs.setString('piperBaseUrl', piperBaseUrl);
+    await prefs.setDouble('piperLengthScale', piperLengthScale);
     await prefs.setString('theme', theme);
     await prefs.setInt('cacheMaxMb', cacheMaxMb);
     await prefs.setDouble('fontSize', fontSize);
@@ -178,6 +206,8 @@ class AppSettings {
     String? kokoroVoiceEn,
     bool? prefetchOnWifi,
     int? prefetchChapters,
+    String? piperBaseUrl,
+    double? piperLengthScale,
     String? theme,
     int? cacheMaxMb,
     double? fontSize,
@@ -202,6 +232,8 @@ class AppSettings {
         kokoroVoiceEn: kokoroVoiceEn ?? this.kokoroVoiceEn,
         prefetchOnWifi: prefetchOnWifi ?? this.prefetchOnWifi,
         prefetchChapters: prefetchChapters ?? this.prefetchChapters,
+        piperBaseUrl: piperBaseUrl ?? this.piperBaseUrl,
+        piperLengthScale: piperLengthScale ?? this.piperLengthScale,
         theme: theme ?? this.theme,
         cacheMaxMb: cacheMaxMb ?? this.cacheMaxMb,
         fontSize: fontSize ?? this.fontSize,

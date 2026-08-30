@@ -15,6 +15,7 @@ import '../../tts/models.dart';
 import '../../tts/tts_factory.dart';
 import '../../tts/tts_provider.dart';
 import '../../tts/kokoro_tts_provider.dart';
+import '../../tts/piper_tts_provider.dart';
 import 'settings_provider.dart';
 
 enum ReaderStatus { idle, synthesizing, playing, paused, error }
@@ -378,12 +379,15 @@ class ReaderNotifier extends Notifier<ReaderState> {
   Future<TTSProvider> _provider(AppSettings settings, String lang) async {
     var kind = settings.ttsProvider;
 
-    if (kind == 'kokoro') {
-      final reachable = settings.hasKokoroServer &&
-          await KokoroTtsProvider.isReachable(settings.kokoroBaseUrl);
+    if (settings.usesSelfHostedServer) {
+      final url = settings.selfHostedUrl;
+      final reachable = url.trim().isNotEmpty &&
+          (kind == 'kokoro'
+              ? await KokoroTtsProvider.isReachable(url)
+              : await PiperTtsProvider.isReachable(url));
       if (!reachable) {
+        dev.log('[Reader] $kind unreachable → falling back to Edge');
         kind = 'edge';
-        dev.log('[Reader] Kokoro unreachable → falling back to Edge');
       }
     }
 
@@ -919,16 +923,22 @@ class ReaderNotifier extends Notifier<ReaderState> {
     final book = state.book;
     if (book == null || !settings.prefetchOnWifi || state.isDownloading) return;
 
-    // Only worth doing for the home server; Edge already streams on demand and
+    // Only worth doing for a home server; Edge already streams on demand and
     // its audio is cached paragraph by paragraph as it plays.
-    if (settings.ttsProvider != 'kokoro' || !settings.hasKokoroServer) return;
+    if (!settings.usesSelfHostedServer ||
+        settings.selfHostedUrl.trim().isEmpty) {
+      return;
+    }
 
     final connection = await Connectivity().checkConnectivity();
     if (!connection.contains(ConnectivityResult.wifi)) {
       dev.log('[Reader] Prefetch skipped: not on WiFi');
       return;
     }
-    if (!await KokoroTtsProvider.isReachable(settings.kokoroBaseUrl)) {
+    final reachable = settings.ttsProvider == 'kokoro'
+        ? await KokoroTtsProvider.isReachable(settings.selfHostedUrl)
+        : await PiperTtsProvider.isReachable(settings.selfHostedUrl);
+    if (!reachable) {
       dev.log('[Reader] Prefetch skipped: server unreachable');
       return;
     }
