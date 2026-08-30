@@ -19,6 +19,13 @@ class LibraryScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('VoiceX'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Ajustes',
+            onPressed: () => context.push('/settings'),
+          ),
+        ],
         bottom: version == null
             ? null
             : PreferredSize(

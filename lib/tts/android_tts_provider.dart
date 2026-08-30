@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:developer' as dev;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
@@ -8,13 +9,19 @@ import 'tts_provider.dart';
 
 const _uuid = Uuid();
 
+/// Offline fallback built on the device's own TTS engine.
+///
+/// Synthesis is always done at neutral rate/volume: playback speed is applied
+/// downstream by the audio player, so one cached file serves every speed.
 class AndroidTtsProvider implements TTSProvider {
   final FlutterTts _tts = FlutterTts();
   bool _initialized = false;
 
   Future<void> _init() async {
     if (_initialized) return;
-    await _tts.setSharedInstance(true);
+    // Makes synthesizeToFile() resolve when synthesis actually finishes instead
+    // of returning immediately — otherwise a half-written file reaches the player.
+    await _tts.awaitSynthCompletion(true);
     _initialized = true;
   }
 
@@ -33,19 +40,20 @@ class AndroidTtsProvider implements TTSProvider {
     await _tts.setLanguage(voice);
     await _tts.setSpeechRate(1.0);
     await _tts.setVolume(1.0);
+    await _tts.setPitch(1.0);
 
-    final completer = Completer<void>();
     await _tts.synthesizeToFile(text, filePath);
 
-    // synthesizeToFile is synchronous in flutter_tts — wait for file
-    int retries = 0;
-    while (!File(filePath).existsSync() && retries < 50) {
-      await Future.delayed(const Duration(milliseconds: 100));
-      retries++;
+    final file = File(filePath);
+    if (!await file.exists() || await file.length() == 0) {
+      throw Exception(
+          'El motor TTS de Android no generó audio. Revisa que haya un motor '
+          'de voz instalado y con el idioma $voice descargado.');
     }
 
-    if (!completer.isCompleted) completer.complete();
-
+    dev.log('[AndroidTTS] ${await file.length()}B → $filePath');
+    // The platform engine exposes no word boundaries, so sentence highlighting
+    // is unavailable offline. ReaderNotifier falls back to a duration estimate.
     return TTSResult(filePath: filePath, timestamps: []);
   }
 
@@ -62,6 +70,7 @@ class AndroidTtsProvider implements TTSProvider {
               locale: v['locale']?.toString() ?? '',
               gender: 'unknown',
             ))
+        .where((v) => v.id.isNotEmpty)
         .toList();
   }
 

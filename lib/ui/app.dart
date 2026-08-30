@@ -17,7 +17,9 @@ final _router = GoRouter(
       path: '/reader/:bookId',
       builder: (_, state) {
         final bookId = int.parse(state.pathParameters['bookId']!);
-        final filePath = state.extra as String;
+        // `extra` is absent on a cold deep link; ReaderScreen then resolves the
+        // path from the library instead of crashing on a failed cast.
+        final filePath = state.extra as String?;
         return ReaderScreen(bookId: bookId, filePath: filePath);
       },
     ),

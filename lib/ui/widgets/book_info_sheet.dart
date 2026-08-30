@@ -13,9 +13,10 @@ class BookInfoSheet extends StatelessWidget {
     final author = book['author'] as String? ?? '';
     final language = book['language'] as String? ?? '';
     final rawDesc = book['description'] as String?;
-    final description = rawDesc != null
-        ? rawDesc.replaceAll(RegExp(r'<[^>]*>'), '').replaceAll(RegExp(r'\s+'), ' ').trim()
-        : null;
+    final description = rawDesc
+        ?.replaceAll(RegExp(r'<[^>]*>'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
     final publisher = book['publisher'] as String?;
     final publishedDate = book['published_date'] as String?;
     final subject = book['subject'] as String?;
@@ -154,7 +155,7 @@ class _LargeCover extends StatelessWidget {
     const width = 120.0;
     const height = 180.0;
 
-    if (coverPath != null && File(coverPath!).existsSync()) {
+    if (coverPath != null) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(6),
         child: Image.file(

@@ -1,8 +1,14 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:epubx/epubx.dart';
+import 'package:flutter/foundation.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'models.dart';
+
+/// Parses off the UI isolate. A full novel takes hundreds of milliseconds to
+/// unzip and walk, which visibly janks the reader on open when done inline.
+Future<Book> parseEpubInBackground(String path) => compute(_parseEpubIsolate, path);
+
+Future<Book> _parseEpubIsolate(String path) => parseEpub(path);
 
 Future<Book> parseEpub(String path) async {
   final bytes = await File(path).readAsBytes();
@@ -155,10 +161,16 @@ List<Paragraph> _extractParagraphs(String htmlContent, int chapterIdx) {
     final tag = element.localName ?? '';
     final isHeading = _headingRe.hasMatch(tag);
 
-    // Headings need only 2+ chars; body text needs 20+ to skip noise.
-    if (raw.length < (isHeading ? 2 : 20)) continue;
+    // Headings need only 2+ chars. Body text needs 20+ to skip layout noise,
+    // EXCEPT short lines that are clearly real prose — dialogue like "—¿Qué?"
+    // used to be dropped entirely, silently losing content from novels.
+    if (isHeading) {
+      if (raw.length < 2) continue;
+    } else if (raw.length < 20 && !isMeaningfulShortBlock(raw)) {
+      continue;
+    }
 
-    final sentences = _splitSentences(raw, paraIdx);
+    final sentences = splitSentences(raw);
     if (sentences.isEmpty) continue;
 
     paragraphs.add(Paragraph(
@@ -173,9 +185,63 @@ List<Paragraph> _extractParagraphs(String htmlContent, int chapterIdx) {
   return paragraphs;
 }
 
-List<Sentence> _splitSentences(String text, int paraIdx) {
-  final parts = text.split(RegExp(r'(?<=[.!?…])\s+'));
-  return parts
+// Visible for testing. Short blocks worth keeping: they open like dialogue or close like a sentence,
+// and contain at least one letter. Rejects page numbers and ornaments.
+final _dialogueStart = RegExp('^[—–«“‘"¿¡-]');
+final _sentenceEnd = RegExp('[.!?…»”’"]\$');
+final _hasLetter = RegExp(r'\p{L}', unicode: true);
+
+bool isMeaningfulShortBlock(String raw) {
+  if (raw.length < 3) return false;
+  if (!_hasLetter.hasMatch(raw)) return false;
+  return _dialogueStart.hasMatch(raw) || _sentenceEnd.hasMatch(raw);
+}
+
+// Words that end in a period without ending a sentence. Splitting on them
+// desynchronises the sentence highlight for the rest of the paragraph.
+const _abbreviations = {
+  'sr', 'sra', 'srta', 'dr', 'dra', 'prof', 'lic', 'ing', 'etc', 'ud', 'uds',
+  'vd', 'vds', 'num', 'pag', 'ej', 'aprox', 'av', 'avda', 'depto', 'apdo',
+  'ee', 'uu', 'pp', 'cap', 'vol', 'fig', 'p', 'pd',
+  'mr', 'mrs', 'ms', 'jr', 'st', 'vs', 'inc', 'ltd', 'dept',
+};
+
+final _endsSentence = RegExp('[.!?…]+[)\\]"»”’\']*\$');
+final _nonAlphanumeric = RegExp(r'[^\p{L}\p{N}]', unicode: true);
+final _startsLowercase = RegExp(r'^\p{Ll}', unicode: true);
+
+/// Visible for testing. Splits on sentence-final punctuation, skipping abbreviations, initials and
+/// any boundary followed by a lowercase word (which signals a false positive).
+List<Sentence> splitSentences(String text) {
+  final words =
+      text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+  if (words.isEmpty) return [];
+
+  final sentences = <String>[];
+  final buffer = <String>[];
+
+  for (var i = 0; i < words.length; i++) {
+    final word = words[i];
+    buffer.add(word);
+    if (!_endsSentence.hasMatch(word)) continue;
+
+    final core = word
+        .replaceAll(_endsSentence, '')
+        .replaceAll(_nonAlphanumeric, '')
+        .toLowerCase();
+
+    if (_abbreviations.contains(core)) continue;
+    // Single letter + period is an initial ("J. R. R. Tolkien").
+    if (core.length <= 1 && word.endsWith('.')) continue;
+    // A lowercase next word means the period was not a sentence end.
+    if (i + 1 < words.length && _startsLowercase.hasMatch(words[i + 1])) continue;
+
+    sentences.add(buffer.join(' '));
+    buffer.clear();
+  }
+  if (buffer.isNotEmpty) sentences.add(buffer.join(' '));
+
+  return sentences
       .asMap()
       .entries
       .where((e) => e.value.trim().isNotEmpty)

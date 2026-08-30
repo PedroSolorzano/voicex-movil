@@ -101,7 +101,7 @@ class _CoverThumbnail extends StatelessWidget {
     const width = 70.0;
     const height = 100.0;
 
-    if (coverPath != null && File(coverPath!).existsSync()) {
+    if (coverPath != null) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(4),
         child: Image.file(

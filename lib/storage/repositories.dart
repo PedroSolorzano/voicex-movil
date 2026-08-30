@@ -85,7 +85,11 @@ class LibraryRepo {
 class ProgressRepo {
   Future<Database> get _db => getDatabase();
 
-  Future<void> save(int bookId, int chapterIndex, int paragraphIndex) async {
+  /// One shared position for reading and listening (Kindle+Audible model).
+  /// [sentenceIndex] and [offsetMs] let a resume land mid-paragraph instead of
+  /// restarting it.
+  Future<void> save(int bookId, int chapterIndex, int paragraphIndex,
+      {int sentenceIndex = 0, int offsetMs = 0}) async {
     final db = await _db;
     await db.insert(
       'reading_progress',
@@ -93,21 +97,43 @@ class ProgressRepo {
         'book_id': bookId,
         'chapter_index': chapterIndex,
         'paragraph_index': paragraphIndex,
+        'sentence_index': sentenceIndex,
+        'offset_ms': offsetMs,
         'updated_at': DateTime.now().toIso8601String(),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
-  Future<({int chapter, int paragraph})> get(int bookId) async {
+  Future<({int chapter, int paragraph, int sentence, int offsetMs})> get(
+      int bookId) async {
     final db = await _db;
     final rows = await db.query('reading_progress',
         where: 'book_id = ?', whereArgs: [bookId]);
-    if (rows.isEmpty) return (chapter: 0, paragraph: 0);
+    if (rows.isEmpty) {
+      return (chapter: 0, paragraph: 0, sentence: 0, offsetMs: 0);
+    }
+    final r = rows.first;
     return (
-      chapter: rows.first['chapter_index'] as int,
-      paragraph: rows.first['paragraph_index'] as int,
+      chapter: r['chapter_index'] as int,
+      paragraph: r['paragraph_index'] as int,
+      sentence: (r['sentence_index'] as int?) ?? 0,
+      offsetMs: (r['offset_ms'] as int?) ?? 0,
     );
+  }
+
+  /// Reading position of every book, keyed by book id — used by the library to
+  /// show per-book progress without a query per row.
+  Future<Map<int, ({int chapter, int paragraph})>> allPositions() async {
+    final db = await _db;
+    final rows = await db.query('reading_progress');
+    return {
+      for (final r in rows)
+        r['book_id'] as int: (
+          chapter: r['chapter_index'] as int,
+          paragraph: r['paragraph_index'] as int,
+        )
+    };
   }
 }
 
@@ -229,6 +255,20 @@ class AudioCacheRepo {
     return result.first['c'] as int;
   }
 
+  /// Deletes a cached audio file together with its `.ts.json` word-timestamp
+  /// sidecar. The sidecar is not tracked in the table, so without this it would
+  /// linger on disk forever after eviction.
+  Future<void> _deleteCachedFile(String path) async {
+    try {
+      final f = File(path);
+      if (f.existsSync()) await f.delete();
+    } catch (_) {}
+    try {
+      final sidecar = File('$path.ts.json');
+      if (sidecar.existsSync()) await sidecar.delete();
+    } catch (_) {}
+  }
+
   Future<void> _touch(int id) async {
     final db = await _db;
     await db.update(
@@ -267,8 +307,7 @@ class AudioCacheRepo {
     final rows = await db.query('audio_cache',
         where: 'last_accessed < ?', whereArgs: [cutoff]);
     for (final row in rows) {
-      final f = File(row['file_path'] as String);
-      if (f.existsSync()) await f.delete();
+      await _deleteCachedFile(row['file_path'] as String);
     }
     await db.delete('audio_cache', where: 'last_accessed < ?', whereArgs: [cutoff]);
   }
@@ -277,8 +316,7 @@ class AudioCacheRepo {
     final db = await _db;
     final rows = await db.query('audio_cache');
     for (final row in rows) {
-      final f = File(row['file_path'] as String);
-      if (f.existsSync()) await f.delete();
+      await _deleteCachedFile(row['file_path'] as String);
     }
     await db.delete('audio_cache');
   }
@@ -293,8 +331,7 @@ class AudioCacheRepo {
           where: 'pinned = 0', orderBy: 'last_accessed ASC', limit: 1);
       if (rows.isEmpty) break;
       final row = rows.first;
-      final f = File(row['file_path'] as String);
-      if (f.existsSync()) await f.delete();
+      await _deleteCachedFile(row['file_path'] as String);
       await db.delete('audio_cache',
           where: 'id = ?', whereArgs: [row['id']]);
     }

@@ -41,6 +41,8 @@ dependencies:
   uuid: ^4.4.0
   crypto: ^3.0.7
   package_info_plus: ^9.0.1
+  audio_session: ^0.1.25
+  audio_service: ^0.18.19
 
 dev_dependencies:
   flutter_test:

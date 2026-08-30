@@ -7,9 +7,11 @@ import '../../epub/models.dart';
 
 class ReaderScreen extends ConsumerStatefulWidget {
   final int bookId;
-  final String filePath;
 
-  const ReaderScreen({super.key, required this.bookId, required this.filePath});
+  /// Null when reached by deep link; resolved from the library on load.
+  final String? filePath;
+
+  const ReaderScreen({super.key, required this.bookId, this.filePath});
 
   @override
   ConsumerState<ReaderScreen> createState() => _ReaderScreenState();

@@ -8,11 +8,19 @@ Future<Database> getDatabase() async {
   final dbPath = await getDatabasesPath();
   _db = await openDatabase(
     join(dbPath, 'voicex.db'),
-    version: 4,
+    version: 5,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
+    onConfigure: _onConfigure,
   );
   return _db!;
+}
+
+// sqflite opens every connection with foreign keys OFF. Without this the
+// ON DELETE CASCADE clauses below never fire and deleting a book leaves
+// orphaned progress, bookmark and cache rows behind.
+Future<void> _onConfigure(Database db) async {
+  await db.execute('PRAGMA foreign_keys = ON');
 }
 
 Future<void> _onCreate(Database db, int version) async {
@@ -38,6 +46,8 @@ Future<void> _onCreate(Database db, int version) async {
       book_id         INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
       chapter_index   INTEGER NOT NULL DEFAULT 0,
       paragraph_index INTEGER NOT NULL DEFAULT 0,
+      sentence_index  INTEGER NOT NULL DEFAULT 0,
+      offset_ms       INTEGER NOT NULL DEFAULT 0,
       updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(book_id)
     )
@@ -87,5 +97,20 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     await db.execute('ALTER TABLE books ADD COLUMN publisher TEXT');
     await db.execute('ALTER TABLE books ADD COLUMN published_date TEXT');
     await db.execute('ALTER TABLE books ADD COLUMN subject TEXT');
+  }
+  if (oldVersion < 5) {
+    // Sentence + millisecond resume, so reopening a book no longer restarts
+    // the current paragraph from zero.
+    await db.execute(
+        'ALTER TABLE reading_progress ADD COLUMN sentence_index INTEGER NOT NULL DEFAULT 0');
+    await db.execute(
+        'ALTER TABLE reading_progress ADD COLUMN offset_ms INTEGER NOT NULL DEFAULT 0');
+    // Clean up rows orphaned before foreign keys were enforced.
+    await db.execute(
+        'DELETE FROM reading_progress WHERE book_id NOT IN (SELECT id FROM books)');
+    await db.execute(
+        'DELETE FROM bookmarks WHERE book_id NOT IN (SELECT id FROM books)');
+    await db.execute(
+        'DELETE FROM audio_cache WHERE book_id NOT IN (SELECT id FROM books)');
   }
 }
