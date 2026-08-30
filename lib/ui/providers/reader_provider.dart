@@ -443,10 +443,14 @@ class ReaderNotifier extends Notifier<ReaderState> {
     // Look up before touching the network: the configured engine first, then
     // Edge, which is what a fallback would have produced. Both are plain
     // database reads, so offline playback never waits on a health probe.
-    for (final key in {
+    final lookupKeys = {
       _cacheKeyVoice(settings, book),
       _cacheKeyFor('edge', settings, book),
-    }) {
+    };
+    dev.log('[CacheDBG] buscando ch=$chapterIdx para=${para.index} '
+        'claves=$lookupKeys tag=$_cacheFormatTag');
+
+    for (final key in lookupKeys) {
       final cached = await _cacheRepo.get(
           book.id!, chapterIdx, para.index, key, _cacheFormatTag);
       if (cached != null) {
@@ -456,6 +460,13 @@ class ReaderNotifier extends Notifier<ReaderState> {
           freshKb: 0
         );
       }
+    }
+
+    // Diagnostic: nothing matched, so show what the table actually holds.
+    for (final row in await _cacheRepo.debugKeys(book.id!)) {
+      dev.log('[CacheDBG] guardado: voice=${row['voice_id']} '
+          'tag=${row['speed_hash']} pinned=${row['pinned']} n=${row['n']} '
+          'ch=${row['ch_min']}..${row['ch_max']} ej=${row['sample']}');
     }
 
     await _cacheRepo.evictLruUntilFit(300, settings.cacheMaxMb);

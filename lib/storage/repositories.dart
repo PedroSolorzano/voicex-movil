@@ -274,6 +274,19 @@ class AudioCacheRepo {
     } catch (_) {}
   }
 
+  /// Diagnostic: what is actually stored for a book, grouped by cache key.
+  Future<List<Map<String, Object?>>> debugKeys(int bookId) async {
+    final db = await _db;
+    return db.rawQuery(
+      'SELECT voice_id, speed_hash, pinned, COUNT(*) AS n, '
+      'MIN(chapter_idx) AS ch_min, MAX(chapter_idx) AS ch_max, '
+      'MIN(file_path) AS sample '
+      'FROM audio_cache WHERE book_id=? '
+      'GROUP BY voice_id, speed_hash, pinned',
+      [bookId],
+    );
+  }
+
   Future<void> _touch(int id) async {
     final db = await _db;
     await db.update(

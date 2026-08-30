@@ -32,6 +32,25 @@ Formato: `- [ ] [prioridad] YYYY-MM-DD — descripción`
 
 - [x] `medio` 2026-04-30 — Portada y metadatos del EPUB (editorial, fecha, materia, descripción) visibles desde la biblioteca. Implementado en v0.2.0.
 
+## Encontrado probando en teléfono (2026-08-30)
+
+- [x] `urgente` — **No aparecían los controles en la pantalla de bloqueo ni al
+  bajar la barra de estado.** Causa: `MainActivity` extendía `FlutterActivity`
+  en vez de `AudioServiceActivity`. audio_service ejecuta el handler en un
+  FlutterEngine propio, y la Activity debe engancharse a ese mismo motor; con
+  FlutterActivity la app creaba un segundo motor aislado, el servicio se
+  quedaba sin handler, y la notificación no llegaba a existir aunque el audio
+  sonara con normalidad. Se rompió al reescribir la Activity para el intent de
+  compartir. **Corregido, falta confirmarlo en el teléfono.**
+- [ ] `urgente` — **El audio descargado no se reproduce: al dar play sintetiza
+  con Edge.** La interfaz dice que hay descargas de Kokoro y Piper, pero la
+  búsqueda en caché no las encuentra, así que vuelve a sintetizar y —sin
+  servidor alcanzable— cae a Edge. Sospechas: (a) se descargaron con el formato
+  de clave anterior al cambio de esta sesión, (b) se guardaron bajo la clave de
+  Edge porque el servidor no respondía al iniciar la descarga, o (c) los
+  archivos ya no están donde dice la base de datos. Hay un diagnóstico temporal
+  añadido que vuelca claves buscadas y guardadas; queda ejecutarlo.
+
 ## UX / Interfaz — pendientes
 
 - [ ] `medio` 2026-08-30 — **Estimar el tiempo de descarga.** Hoy la barra dice
