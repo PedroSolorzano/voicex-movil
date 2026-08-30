@@ -32,6 +32,19 @@ Formato: `- [ ] [prioridad] YYYY-MM-DD — descripción`
 
 - [x] `medio` 2026-04-30 — Portada y metadatos del EPUB (editorial, fecha, materia, descripción) visibles desde la biblioteca. Implementado en v0.2.0.
 
+## UX / Interfaz — pendientes
+
+- [ ] `medio` 2026-08-30 — **Estimar el tiempo de descarga.** Hoy la barra dice
+  "Descargando 73 / 1350 párrafos", que no informa de nada útil. Debería mostrar
+  el tiempo restante, como ya hace el lector con "faltan ~3 h 18 min".
+  Contexto: *El Instituto* tiene 6.289 párrafos en 14 capítulos, ~450 por
+  capítulo, así que un capítulo cuesta ~15 min con Piper y ~37 min con Kokoro.
+  Descargar "los próximos 3 capítulos" con Kokoro son casi 2 horas, y ahora
+  mismo nada lo advierte. Medido: ~2 s/párrafo en Piper, ~5 s/párrafo en Kokoro.
+  Conviene además avisar del tamaño estimado antes de empezar.
+
+---
+
 ## Pendiente de decisión
 
 - [ ] `alto` 2026-08-30 — **Elegir motor de voz definitivo.** Hay 9 muestras del
