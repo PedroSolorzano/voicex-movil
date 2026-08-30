@@ -367,8 +367,30 @@ class ReaderNotifier extends Notifier<ReaderState> {
     return marks;
   }
 
+  /// Cache key component identifying *what produced* the audio.
+  ///
+  /// It has to name the engine, not just the voice: when the home server is
+  /// unreachable the app falls back to Edge, and storing that under the
+  /// server's key would later serve Edge audio while claiming to be Kokoro.
+  ///
+  /// Piper additionally folds in the pace, because `length_scale` is baked into
+  /// the samples — changing it must invalidate what was downloaded.
+  String _cacheKeyFor(String engine, AppSettings settings, Book book) {
+    switch (engine) {
+      case 'piper':
+        return 'piper@${settings.piperLengthScale.toStringAsFixed(2)}';
+      case 'kokoro':
+        return 'kokoro:${settings.voiceFor(book.language)}';
+      case 'android':
+        return 'android:${book.language}';
+      default:
+        return settings.voiceFor(book.language);
+    }
+  }
+
+  /// Key for the engine the user has selected.
   String _cacheKeyVoice(AppSettings settings, Book book) =>
-      settings.voiceFor(book.language);
+      _cacheKeyFor(settings.ttsProvider, settings, book);
 
   /// Reuses one provider instance instead of building a new one per paragraph.
   ///
@@ -418,23 +440,33 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// Returns the on-disk audio for [para], synthesizing and caching it on a miss.
   Future<_Audio> _ensureAudio(
       Book book, int chapterIdx, Paragraph para, AppSettings settings) async {
-    final voice = _cacheKeyVoice(settings, book);
-
-    final cached = await _cacheRepo.get(
-        book.id!, chapterIdx, para.index, voice, _cacheFormatTag);
-    if (cached != null) {
-      return (
-        path: cached,
-        timestamps: await _readSidecar(cached),
-        freshKb: 0
-      );
+    // Look up before touching the network: the configured engine first, then
+    // Edge, which is what a fallback would have produced. Both are plain
+    // database reads, so offline playback never waits on a health probe.
+    for (final key in {
+      _cacheKeyVoice(settings, book),
+      _cacheKeyFor('edge', settings, book),
+    }) {
+      final cached = await _cacheRepo.get(
+          book.id!, chapterIdx, para.index, key, _cacheFormatTag);
+      if (cached != null) {
+        return (
+          path: cached,
+          timestamps: await _readSidecar(cached),
+          freshKb: 0
+        );
+      }
     }
 
     await _cacheRepo.evictLruUntilFit(300, settings.cacheMaxMb);
     final provider = await _provider(settings, book.language);
+
+    // Resolved after _provider, so a fallback is stored under the engine that
+    // actually produced the audio.
+    final voice = _cacheKeyFor(_activeEngineKind, settings, book);
     final result = await provider.synthesize(
       text: para.rawText,
-      voice: voice,
+      voice: settings.voiceFor(book.language),
       rate: settings.edgeRate,
       volume: settings.edgeVolume,
     );
@@ -851,7 +883,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
     if (from >= chapters.length || from < 0) return;
 
     final settings = _settings;
-    final voice = _cacheKeyVoice(settings, book);
+    // Resolve the engine up front: a download must be stored under whatever
+    // actually synthesizes it, not under what was selected.
+    await _provider(settings, book.language);
+    final voice = _cacheKeyFor(_activeEngineKind, settings, book);
     final docsDir = await getApplicationDocumentsDirectory();
 
     final totalParagraphs = [
@@ -880,7 +915,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
           final provider = await _provider(settings, book.language);
           final result = await provider.synthesize(
             text: para.rawText,
-            voice: voice,
+            voice: settings.voiceFor(book.language),
             rate: settings.edgeRate,
             volume: settings.edgeVolume,
           );

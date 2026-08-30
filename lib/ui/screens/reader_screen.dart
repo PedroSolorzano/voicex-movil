@@ -87,6 +87,17 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     });
   }
 
+  /// Height reserved under the text for the floating controls.
+  ///
+  /// Computed from what is actually on screen rather than measured, so it
+  /// cannot oscillate between frames.
+  double _bottomChromeHeight(ReaderState reader) {
+    var height = 150.0; // progress bar + transport row + status line
+    if (reader.highlightedSentence >= 0) height += 52; // repeat / loop
+    if (reader.isDownloading) height += 56; // download progress
+    return height;
+  }
+
   void _toggleChrome() {
     setState(() => _chromeVisible = !_chromeVisible);
     SystemChrome.setEnabledSystemUIMode(
@@ -182,7 +193,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                         left: settings.margin,
                         right: settings.margin,
                         top: MediaQuery.paddingOf(context).top + 64,
-                        bottom: MediaQuery.paddingOf(context).bottom + 120,
+                        // Must clear the whole bottom bar, which grows with the
+                        // practice row and the download progress. Too little and
+                        // the last lines of a chapter sit under the controls.
+                        bottom: MediaQuery.paddingOf(context).bottom +
+                            _bottomChromeHeight(reader),
                       ),
                       itemBuilder: (_, i) {
                         final para = paragraphs[i];
@@ -541,7 +556,7 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: palette.background.withValues(alpha: 0.96),
+      color: palette.background,
       elevation: 2,
       child: SafeArea(
         bottom: false,
@@ -639,7 +654,7 @@ class _BottomBar extends StatelessWidget {
     final remaining = _remainingLabel(reader, settings);
 
     return Material(
-      color: palette.background.withValues(alpha: 0.96),
+      color: palette.background,
       elevation: 8,
       child: SafeArea(
         top: false,

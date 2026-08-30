@@ -31,6 +31,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _serverOk = false;
   String? _serverStatus;
   late final TextEditingController _kokoroUrlController;
+
+  /// Engine whose URL the text field currently holds.
+  String? _urlFieldOwner;
   String? _previewing;
   PackageInfo? _packageInfo;
 
@@ -110,6 +113,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
 
     final s = _settings;
+
+    // Each engine keeps its own address. Without this the field would still be
+    // showing the previous engine's URL after switching, while typing wrote to
+    // the new one — so a Kokoro address could silently land in Piper's setting.
+    if (_urlFieldOwner != s.ttsProvider) {
+      _urlFieldOwner = s.ttsProvider;
+      _kokoroUrlController.text = s.selfHostedUrl;
+      _serverStatus = null;
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('Ajustes')),
