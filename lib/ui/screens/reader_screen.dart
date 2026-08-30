@@ -1,9 +1,22 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import '../../config/settings.dart';
+import '../../epub/models.dart';
 import '../providers/reader_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/highlighted_text.dart';
-import '../../epub/models.dart';
+import '../widgets/reader_theme.dart';
+
+/// Rough narration rate in characters per second at 1× for a neural voice.
+/// Only used for the "time left" estimate, so approximate is fine.
+const _charsPerSecond = 14.0;
+
+/// How long after the last scroll event the reading position is persisted.
+const _scrollSettleDelay = Duration(milliseconds: 900);
 
 class ReaderScreen extends ConsumerStatefulWidget {
   final int bookId;
@@ -18,29 +31,17 @@ class ReaderScreen extends ConsumerStatefulWidget {
 }
 
 class _ReaderScreenState extends ConsumerState<ReaderScreen> {
-  final _scrollController = ScrollController();
-  List<GlobalKey> _paraKeys = [];
-  int _lastChapterIndex = -1;
-  int _lastParagraphCount = -1;
+  final _scrollController = ItemScrollController();
+  final _positionsListener = ItemPositionsListener.create();
 
-  static const _bodyStyle = TextStyle(
-    fontSize: 18,
-    height: 1.7,
-    fontFamily: 'Georgia',
-    color: Color(0xFF3E2723),
-  );
-
-  static const _headingStyle = TextStyle(
-    fontSize: 20,
-    height: 2.0,
-    fontFamily: 'Georgia',
-    fontWeight: FontWeight.bold,
-    color: Color(0xFF3E2723),
-  );
+  bool _chromeVisible = true;
+  Timer? _scrollSettleTimer;
+  int _lastParagraphIndex = -1;
 
   @override
   void initState() {
     super.initState();
+    _positionsListener.itemPositions.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(readerProvider.notifier).loadBook(widget.bookId, widget.filePath);
     });
@@ -48,76 +49,94 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    _scrollSettleTimer?.cancel();
+    _positionsListener.itemPositions.removeListener(_onScroll);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
-  void _syncKeys(int count) {
-    if (count != _lastParagraphCount) {
-      _paraKeys = List.generate(count, (_) => GlobalKey());
-      _lastParagraphCount = count;
-    }
+  /// Tracks the topmost visible paragraph so silent reading advances the shared
+  /// position. Without this, reading without audio saved nothing and reopening
+  /// the book jumped back to wherever the audio had stopped.
+  void _onScroll() {
+    final positions = _positionsListener.itemPositions.value;
+    if (positions.isEmpty) return;
+
+    final topmost = positions
+        .where((p) => p.itemTrailingEdge > 0)
+        .fold<ItemPosition?>(null,
+            (best, p) => best == null || p.itemLeadingEdge < best.itemLeadingEdge ? p : best);
+    if (topmost == null) return;
+
+    _scrollSettleTimer?.cancel();
+    _scrollSettleTimer = Timer(_scrollSettleDelay, () {
+      if (!mounted) return;
+      ref.read(readerProvider.notifier).updateReadingPosition(topmost.index);
+    });
   }
 
-  void _scrollToIndex(int index) {
-    if (index < 0 || index >= _paraKeys.length) return;
-    final ctx = _paraKeys[index].currentContext;
-    if (ctx != null) {
-      Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeInOut,
-        alignment: 0.15,
-      );
-    }
+  void _toggleChrome() {
+    setState(() => _chromeVisible = !_chromeVisible);
+    SystemChrome.setEnabledSystemUIMode(
+      _chromeVisible ? SystemUiMode.edgeToEdge : SystemUiMode.immersiveSticky,
+    );
+  }
+
+  void _scrollTo(int index, {double alignment = 0.15}) {
+    if (!_scrollController.isAttached) return;
+    _scrollController.scrollTo(
+      index: index,
+      alignment: alignment,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeInOut,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final reader = ref.watch(readerProvider);
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider).valueOrNull ?? AppSettings();
     final book = reader.book;
 
+    final palette = ReaderPalette.of(
+        settings.readerTheme, MediaQuery.platformBrightnessOf(context));
+
     ref.listen<ReaderState>(readerProvider, (prev, next) {
-      final chapter = next.currentChapter;
-      if (chapter != null) {
-        // Rebuild keys when chapter changes.
-        if (next.chapterIndex != _lastChapterIndex) {
-          _lastChapterIndex = next.chapterIndex;
-          _syncKeys(chapter.paragraphs.length);
-        }
-        // Scroll to active paragraph when it changes (TTS advance or bookmark).
-        if (prev?.paragraphIndex != next.paragraphIndex ||
-            prev?.chapterIndex != next.chapterIndex) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _scrollToIndex(next.paragraphIndex);
-          });
-        }
+      final chapterChanged = prev?.chapterIndex != next.chapterIndex;
+      final paragraphChanged = prev?.paragraphIndex != next.paragraphIndex;
+      if (!chapterChanged && !paragraphChanged) return;
+
+      // Follow along only while audio drives the position; during silent
+      // reading the user owns the scroll.
+      final shouldFollow = chapterChanged ||
+          (settings.followAudioScroll && next.isBusy);
+      if (shouldFollow && next.paragraphIndex != _lastParagraphIndex) {
+        _lastParagraphIndex = next.paragraphIndex;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollTo(next.paragraphIndex);
+        });
       }
     });
 
     if (book == null) {
-      if (reader.status == ReaderStatus.error) {
-        return Scaffold(
-          appBar: AppBar(title: const Text('Error')),
-          body: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                  const SizedBox(height: 16),
-                  Text(reader.statusMessage,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 15)),
-                ],
-              ),
-            ),
-          ),
-        );
-      }
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        appBar: reader.status == ReaderStatus.error ? AppBar() : null,
+        body: Center(
+          child: reader.status == ReaderStatus.error
+              ? Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                      const SizedBox(height: 16),
+                      Text(reader.statusMessage, textAlign: TextAlign.center),
+                    ],
+                  ),
+                )
+              : const CircularProgressIndicator(),
+        ),
+      );
     }
 
     if (book.chapters.isEmpty) {
@@ -128,81 +147,41 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     }
 
     final chapter = reader.currentChapter;
-    final paraCount = chapter?.paragraphs.length ?? 0;
-    _syncKeys(paraCount);
+    final paragraphs = chapter?.paragraphs ?? const <Paragraph>[];
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(chapter?.title ?? '', overflow: TextOverflow.ellipsis),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.toc),
-            tooltip: 'Índice',
-            onPressed: () => _showToc(context),
-          ),
-          if (reader.isDownloading)
-            IconButton(
-              icon: const Icon(Icons.cancel_outlined),
-              tooltip: 'Cancelar descarga',
-              onPressed: () => ref.read(readerProvider.notifier).cancelDownload(),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.download_outlined),
-              tooltip: 'Descargar capitulo',
-              onPressed: () => ref.read(readerProvider.notifier).downloadChapter(),
-            ),
-          IconButton(
-            icon: const Icon(Icons.bookmark_add_outlined),
-            tooltip: 'Agregar marcador',
-            onPressed: () => _addBookmark(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.bookmarks_outlined),
-            tooltip: 'Ver marcadores',
-            onPressed: () => _showBookmarks(context),
-          ),
-        ],
-      ),
-      body: Column(
+      backgroundColor: palette.background,
+      body: Stack(
         children: [
-          // Chapter navigation
-          _ChapterNav(
-            chapterIndex: reader.chapterIndex,
-            totalChapters: book.chapters.length,
-            onPrev: reader.chapterIndex > 0
-                ? () => ref
-                    .read(readerProvider.notifier)
-                    .navigateChapter(reader.chapterIndex - 1)
-                : null,
-            onNext: reader.chapterIndex < book.chapters.length - 1
-                ? () => ref
-                    .read(readerProvider.notifier)
-                    .navigateChapter(reader.chapterIndex + 1)
-                : null,
-          ),
-          // Full-chapter scrollable reading area
-          Expanded(
-            child: Container(
-              color: const Color(0xFFF5E6C8),
-              child: paraCount == 0
-                  ? const Center(child: Text('Sin contenido'))
-                  : ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 16),
-                      itemCount: paraCount,
+          // ── Reading surface ─────────────────────────────────────────────
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _toggleChrome,
+              child: paragraphs.isEmpty
+                  ? Center(
+                      child: Text('Sin contenido',
+                          style: TextStyle(color: palette.muted)))
+                  : ScrollablePositionedList.builder(
+                      itemScrollController: _scrollController,
+                      itemPositionsListener: _positionsListener,
+                      itemCount: paragraphs.length,
+                      padding: EdgeInsets.only(
+                        left: settings.margin,
+                        right: settings.margin,
+                        top: MediaQuery.paddingOf(context).top + 64,
+                        bottom: MediaQuery.paddingOf(context).bottom + 120,
+                      ),
                       itemBuilder: (_, i) {
-                        final para = chapter!.paragraphs[i];
+                        final para = paragraphs[i];
                         final isActive = i == reader.paragraphIndex;
                         return _ParagraphTile(
-                          key: _paraKeys[i],
                           para: para,
                           isActive: isActive,
                           highlightedSentence:
                               isActive ? reader.highlightedSentence : -1,
-                          bodyStyle: _bodyStyle,
-                          headingStyle: _headingStyle,
+                          settings: settings,
+                          palette: palette,
                           onTap: () => ref
                               .read(readerProvider.notifier)
                               .navigateParagraph(i),
@@ -211,36 +190,46 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     ),
             ),
           ),
-          // Controls
-          _Controls(
-              status: reader.status,
-              reader: ref.read(readerProvider.notifier)),
-          // Download progress
-          if (reader.isDownloading)
-            _DownloadProgress(
-              done: reader.downloadDone,
-              total: reader.downloadTotal,
+
+          // ── Chrome ──────────────────────────────────────────────────────
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            top: _chromeVisible ? 0 : -140,
+            left: 0,
+            right: 0,
+            child: _TopBar(
+              title: chapter?.title ?? book.title,
+              palette: palette,
+              onBack: () => context.pop(),
+              onToc: () => _showToc(context),
+              onBookmarks: () => _showBookmarks(context),
+              onAddBookmark: () => _addBookmark(context),
+              onSettings: () => context.push('/settings'),
+              onDownload: reader.isDownloading
+                  ? ref.read(readerProvider.notifier).cancelDownload
+                  : ref.read(readerProvider.notifier).downloadChapter,
+              isDownloading: reader.isDownloading,
             ),
-          // Gender toggle
-          _GenderToggle(
-            gender: settings?.gender ?? 'female',
-            onToggle: (g) {
-              final s = settings?.copyWith(gender: g);
-              if (s != null) ref.read(settingsProvider.notifier).save(s);
-            },
           ),
-          // Speed selector
-          _SpeedSelector(
-            currentRate: settings?.edgeRate ?? '+0%',
-            onChanged: (rate) {
-              final s = settings?.copyWith(edgeRate: rate);
-              if (s != null) ref.read(settingsProvider.notifier).save(s);
-            },
-          ),
-          // Status bar
-          _StatusBar(
-            message: reader.statusMessage,
-            sessionDataKb: reader.sessionDataKb,
+
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            bottom: _chromeVisible ? 0 : -220,
+            left: 0,
+            right: 0,
+            child: _BottomBar(
+              reader: reader,
+              settings: settings,
+              palette: palette,
+              notifier: ref.read(readerProvider.notifier),
+              onSpeedChanged: (speed) async {
+                final updated = settings.copyWith(playbackSpeed: speed);
+                await ref.read(settingsProvider.notifier).save(updated);
+                await ref.read(readerProvider.notifier).setSpeed(speed);
+              },
+            ),
           ),
         ],
       ),
@@ -249,10 +238,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
   Future<void> _addBookmark(BuildContext context) async {
     await ref.read(readerProvider.notifier).addBookmark();
-    if (context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Marcador guardado')));
-    }
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Marcador guardado')));
   }
 
   Future<void> _showBookmarks(BuildContext context) async {
@@ -265,9 +253,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         onJump: (b) {
           Navigator.pop(context);
           ref.read(readerProvider.notifier).jumpToBookmark(
-              b['chapter_index'] as int,
-              b['paragraph_index'] as int,
-              b['sentence_index'] as int? ?? 0);
+                b['chapter_index'] as int,
+                b['paragraph_index'] as int,
+                b['sentence_index'] as int? ?? 0,
+              );
         },
         onDelete: (id) => ref.read(readerProvider.notifier).deleteBookmark(id),
       ),
@@ -275,8 +264,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   void _showToc(BuildContext context) {
-    final book = ref.read(readerProvider).book;
-    final currentChapterIndex = ref.read(readerProvider).chapterIndex;
+    final reader = ref.read(readerProvider);
+    final book = reader.book;
     if (book == null) return;
     showModalBottomSheet(
       context: context,
@@ -291,7 +280,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         expand: false,
         builder: (ctx, scrollCtrl) => _TocSheet(
           chapters: book.chapters,
-          currentIndex: currentChapterIndex,
+          currentIndex: reader.chapterIndex,
           scrollController: scrollCtrl,
           onSelect: (idx) {
             Navigator.pop(context);
@@ -303,32 +292,34 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 }
 
-// ─── Paragraph tile ──────────────────────────────────────────────────────────
+// ─── Paragraph ───────────────────────────────────────────────────────────────
 
 class _ParagraphTile extends StatelessWidget {
   final Paragraph para;
   final bool isActive;
   final int highlightedSentence;
-  final TextStyle bodyStyle;
-  final TextStyle headingStyle;
+  final AppSettings settings;
+  final ReaderPalette palette;
   final VoidCallback onTap;
 
   const _ParagraphTile({
-    super.key,
     required this.para,
     required this.isActive,
     required this.highlightedSentence,
-    required this.bodyStyle,
-    required this.headingStyle,
+    required this.settings,
+    required this.palette,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final bodyStyle = readerBodyStyle(settings, palette);
+    final headingStyle = readerHeadingStyle(settings, palette);
+
     Widget content;
     if (para.isHeading) {
       content = Padding(
-        padding: const EdgeInsets.only(top: 16, bottom: 4),
+        padding: const EdgeInsets.only(top: 20, bottom: 6),
         child: Text(para.rawText, style: headingStyle),
       );
     } else if (isActive) {
@@ -336,34 +327,338 @@ class _ParagraphTile extends StatelessWidget {
         paragraph: para,
         highlightedIndex: highlightedSentence,
         baseStyle: bodyStyle,
+        palette: palette,
       );
     } else {
       content = Text(para.rawText, style: bodyStyle);
     }
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: isActive
-            ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4)
-            : EdgeInsets.zero,
-        decoration: isActive && !para.isHeading
-            ? BoxDecoration(
-                color: Colors.amber.withAlpha(51),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                    color: Colors.amber.withAlpha(128), width: 1),
-              )
-            : null,
-        child: content,
+    return Semantics(
+      button: true,
+      label: para.isHeading ? 'Título: ${para.rawText}' : null,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: isActive
+              ? const EdgeInsets.symmetric(horizontal: 8, vertical: 6)
+              : const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: isActive && !para.isHeading
+              ? BoxDecoration(
+                  color: palette.activeParagraph,
+                  borderRadius: BorderRadius.circular(8),
+                )
+              : null,
+          child: content,
+        ),
       ),
     );
   }
 }
 
-// ─── Table of contents sheet ─────────────────────────────────────────────────
+// ─── Top bar ─────────────────────────────────────────────────────────────────
+
+class _TopBar extends StatelessWidget {
+  final String title;
+  final ReaderPalette palette;
+  final VoidCallback onBack, onToc, onBookmarks, onAddBookmark, onSettings;
+  final VoidCallback onDownload;
+  final bool isDownloading;
+
+  const _TopBar({
+    required this.title,
+    required this.palette,
+    required this.onBack,
+    required this.onToc,
+    required this.onBookmarks,
+    required this.onAddBookmark,
+    required this.onSettings,
+    required this.onDownload,
+    required this.isDownloading,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: palette.background.withValues(alpha: 0.96),
+      elevation: 2,
+      child: SafeArea(
+        bottom: false,
+        child: Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back),
+              tooltip: 'Volver',
+              color: palette.text,
+              onPressed: onBack,
+            ),
+            Expanded(
+              child: Text(
+                title,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: palette.text, fontWeight: FontWeight.w600),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.toc),
+              tooltip: 'Índice',
+              color: palette.text,
+              onPressed: onToc,
+            ),
+            IconButton(
+              icon: Icon(isDownloading
+                  ? Icons.cancel_outlined
+                  : Icons.download_outlined),
+              tooltip: isDownloading
+                  ? 'Cancelar descarga'
+                  : 'Descargar capítulo',
+              color: palette.text,
+              onPressed: onDownload,
+            ),
+            IconButton(
+              icon: const Icon(Icons.bookmark_add_outlined),
+              tooltip: 'Agregar marcador',
+              color: palette.text,
+              onPressed: onAddBookmark,
+            ),
+            IconButton(
+              icon: const Icon(Icons.bookmarks_outlined),
+              tooltip: 'Ver marcadores',
+              color: palette.text,
+              onPressed: onBookmarks,
+            ),
+            IconButton(
+              icon: const Icon(Icons.settings_outlined),
+              tooltip: 'Ajustes',
+              color: palette.text,
+              onPressed: onSettings,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Bottom bar ──────────────────────────────────────────────────────────────
+
+class _BottomBar extends StatelessWidget {
+  final ReaderState reader;
+  final AppSettings settings;
+  final ReaderPalette palette;
+  final ReaderNotifier notifier;
+  final ValueChanged<double> onSpeedChanged;
+
+  const _BottomBar({
+    required this.reader,
+    required this.settings,
+    required this.palette,
+    required this.notifier,
+    required this.onSpeedChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = reader.progressFraction;
+    final remaining = _remainingLabel(reader, settings);
+
+    return Material(
+      color: palette.background.withValues(alpha: 0.96),
+      elevation: 8,
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            LinearProgressIndicator(
+              value: progress,
+              minHeight: 2,
+              backgroundColor: palette.muted.withValues(alpha: 0.2),
+            ),
+            if (reader.isDownloading)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                child: Column(
+                  children: [
+                    LinearProgressIndicator(
+                      value: reader.downloadTotal > 0
+                          ? reader.downloadDone / reader.downloadTotal
+                          : 0,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Descargando ${reader.downloadDone} / ${reader.downloadTotal} párrafos',
+                      style: TextStyle(fontSize: 11, color: palette.muted),
+                    ),
+                  ],
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.skip_previous),
+                    tooltip: 'Párrafo anterior',
+                    color: palette.text,
+                    onPressed: notifier.previousParagraph,
+                  ),
+                  _PlayButton(
+                      reader: reader, notifier: notifier, palette: palette),
+                  IconButton(
+                    icon: const Icon(Icons.stop),
+                    tooltip: 'Detener',
+                    color: palette.text,
+                    onPressed: reader.status == ReaderStatus.idle
+                        ? null
+                        : notifier.stop,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.skip_next),
+                    tooltip: 'Párrafo siguiente',
+                    color: palette.text,
+                    onPressed: notifier.nextParagraph,
+                  ),
+                  _SpeedMenu(
+                    current: settings.playbackSpeed,
+                    palette: palette,
+                    onChanged: onSpeedChanged,
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${(progress * 100).toStringAsFixed(0)}%'
+                    '${remaining.isEmpty ? '' : ' · $remaining'}',
+                    style: TextStyle(fontSize: 11, color: palette.muted),
+                  ),
+                  Text(
+                    [
+                      if (reader.statusMessage.isNotEmpty) reader.statusMessage,
+                      if (reader.sessionDataKb > 0)
+                        '${(reader.sessionDataKb / 1024).toStringAsFixed(1)} MB',
+                    ].join('  ·  '),
+                    style: TextStyle(fontSize: 11, color: palette.muted),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Estimated listening time left, derived from remaining characters.
+  static String _remainingLabel(ReaderState reader, AppSettings settings) {
+    final book = reader.book;
+    if (book == null) return '';
+    var chars = 0;
+    for (var c = reader.chapterIndex; c < book.chapters.length; c++) {
+      final paras = book.chapters[c].paragraphs;
+      final from = c == reader.chapterIndex ? reader.paragraphIndex : 0;
+      for (var p = from; p < paras.length; p++) {
+        chars += paras[p].rawText.length;
+      }
+    }
+    if (chars == 0) return '';
+    final seconds = chars / (_charsPerSecond * settings.playbackSpeed);
+    final hours = seconds ~/ 3600;
+    final minutes = (seconds % 3600) ~/ 60;
+    if (hours > 0) return 'faltan ~$hours h $minutes min';
+    return 'faltan ~$minutes min';
+  }
+}
+
+class _PlayButton extends StatelessWidget {
+  final ReaderState reader;
+  final ReaderNotifier notifier;
+  final ReaderPalette palette;
+
+  const _PlayButton({
+    required this.reader,
+    required this.notifier,
+    required this.palette,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (reader.status == ReaderStatus.synthesizing) {
+      return const SizedBox(
+        width: 48,
+        height: 48,
+        child: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+
+    final isPlaying = reader.status == ReaderStatus.playing;
+    return IconButton.filled(
+      iconSize: 30,
+      icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
+      tooltip: isPlaying ? 'Pausar' : 'Reproducir',
+      onPressed: () {
+        if (isPlaying) {
+          notifier.pause();
+        } else if (reader.status == ReaderStatus.paused) {
+          notifier.resume();
+        } else {
+          notifier.play();
+        }
+      },
+    );
+  }
+}
+
+class _SpeedMenu extends StatelessWidget {
+  final double current;
+  final ReaderPalette palette;
+  final ValueChanged<double> onChanged;
+
+  static const _speeds = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+
+  const _SpeedMenu({
+    required this.current,
+    required this.palette,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<double>(
+      tooltip: 'Velocidad',
+      initialValue: current,
+      onSelected: onChanged,
+      itemBuilder: (_) => [
+        for (final s in _speeds)
+          PopupMenuItem(value: s, child: Text('${s.toStringAsFixed(2)}×')),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        child: Text(
+          '${current.toStringAsFixed(2)}×',
+          style: TextStyle(color: palette.text, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Sheets ──────────────────────────────────────────────────────────────────
 
 class _TocSheet extends StatelessWidget {
   final List<Chapter> chapters;
@@ -387,14 +682,13 @@ class _TocSheet extends StatelessWidget {
           width: 40,
           height: 4,
           decoration: BoxDecoration(
-            color: Colors.grey[400],
+            color: Theme.of(context).colorScheme.outlineVariant,
             borderRadius: BorderRadius.circular(2),
           ),
         ),
         Padding(
           padding: const EdgeInsets.all(16),
-          child: Text('Índice',
-              style: Theme.of(context).textTheme.titleMedium),
+          child: Text('Índice', style: Theme.of(context).textTheme.titleMedium),
         ),
         const Divider(height: 1),
         Expanded(
@@ -409,10 +703,9 @@ class _TocSheet extends StatelessWidget {
                     style: TextStyle(
                       color: isCurrent
                           ? Theme.of(context).colorScheme.primary
-                          : Colors.grey[600],
-                      fontWeight: isCurrent
-                          ? FontWeight.bold
-                          : FontWeight.normal,
+                          : null,
+                      fontWeight:
+                          isCurrent ? FontWeight.bold : FontWeight.normal,
                     )),
                 title: Text(
                   ch.title,
@@ -424,10 +717,8 @@ class _TocSheet extends StatelessWidget {
                         : null,
                   ),
                 ),
-                subtitle: Text(
-                  '${ch.paragraphs.length} párrafos',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+                subtitle: Text('${ch.paragraphs.length} párrafos',
+                    style: Theme.of(context).textTheme.bodySmall),
                 trailing: isCurrent
                     ? Icon(Icons.play_arrow,
                         color: Theme.of(context).colorScheme.primary)
@@ -442,262 +733,56 @@ class _TocSheet extends StatelessWidget {
   }
 }
 
-// ─── Chapter navigation ───────────────────────────────────────────────────────
-
-class _ChapterNav extends StatelessWidget {
-  final int chapterIndex;
-  final int totalChapters;
-  final VoidCallback? onPrev;
-  final VoidCallback? onNext;
-  const _ChapterNav(
-      {required this.chapterIndex,
-      required this.totalChapters,
-      this.onPrev,
-      this.onNext});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        IconButton(
-            icon: const Icon(Icons.arrow_back_ios),
-            onPressed: onPrev,
-            tooltip: 'Cap. anterior'),
-        Text('Cap. ${chapterIndex + 1} / $totalChapters',
-            style: Theme.of(context).textTheme.labelMedium),
-        IconButton(
-            icon: const Icon(Icons.arrow_forward_ios),
-            onPressed: onNext,
-            tooltip: 'Cap. siguiente'),
-      ],
-    );
-  }
-}
-
-// ─── Controls ─────────────────────────────────────────────────────────────────
-
-class _Controls extends StatelessWidget {
-  final ReaderStatus status;
-  final ReaderNotifier reader;
-  const _Controls({required this.status, required this.reader});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (status == ReaderStatus.idle || status == ReaderStatus.error)
-            ElevatedButton.icon(
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Reproducir'),
-              onPressed: reader.play,
-            ),
-          if (status == ReaderStatus.playing)
-            ElevatedButton.icon(
-              icon: const Icon(Icons.pause),
-              label: const Text('Pausar'),
-              onPressed: reader.pause,
-            ),
-          if (status == ReaderStatus.paused) ...[
-            ElevatedButton.icon(
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Continuar'),
-              onPressed: reader.resume,
-            ),
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.stop),
-              label: const Text('Detener'),
-              onPressed: reader.stop,
-            ),
-          ],
-          if (status == ReaderStatus.synthesizing)
-            const SizedBox(
-                height: 36,
-                width: 36,
-                child: CircularProgressIndicator(strokeWidth: 2)),
-          if (status == ReaderStatus.playing) ...[
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.stop),
-              label: const Text('Detener'),
-              onPressed: reader.stop,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Gender toggle ────────────────────────────────────────────────────────────
-
-class _GenderToggle extends StatelessWidget {
-  final String gender;
-  final ValueChanged<String> onToggle;
-  const _GenderToggle({required this.gender, required this.onToggle});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text('Voz: '),
-          ChoiceChip(
-            label: const Text('♀ Femenina'),
-            selected: gender == 'female',
-            onSelected: (_) => onToggle('female'),
-          ),
-          const SizedBox(width: 8),
-          ChoiceChip(
-            label: const Text('♂ Masculina'),
-            selected: gender == 'male',
-            onSelected: (_) => onToggle('male'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Download progress ────────────────────────────────────────────────────────
-
-class _DownloadProgress extends StatelessWidget {
-  final int done;
-  final int total;
-  const _DownloadProgress({required this.done, required this.total});
-
-  @override
-  Widget build(BuildContext context) {
-    final progress = total > 0 ? done / total : 0.0;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Column(
-        children: [
-          LinearProgressIndicator(value: progress),
-          const SizedBox(height: 2),
-          Text('Descargando $done / $total parrafos',
-              style: Theme.of(context).textTheme.labelSmall),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Speed selector ───────────────────────────────────────────────────────────
-
-class _SpeedSelector extends StatelessWidget {
-  final String currentRate;
-  final ValueChanged<String> onChanged;
-
-  const _SpeedSelector({required this.currentRate, required this.onChanged});
-
-  static const _levels = [
-    ('-20%', 'Lento'),
-    ('+0%', 'Normal'),
-    ('+25%', 'Rapido'),
-    ('+50%', 'Veloz'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text('Vel: '),
-          ..._levels.map((level) => Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: ChoiceChip(
-                  label: Text(level.$2),
-                  selected: currentRate == level.$1,
-                  onSelected: (_) => onChanged(level.$1),
-                ),
-              )),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Status bar ───────────────────────────────────────────────────────────────
-
-class _StatusBar extends StatelessWidget {
-  final String message;
-  final int sessionDataKb;
-
-  const _StatusBar({required this.message, this.sessionDataKb = 0});
-
-  @override
-  Widget build(BuildContext context) {
-    final hasMessage = message.isNotEmpty;
-    final hasData = sessionDataKb > 0;
-    if (!hasMessage && !hasData) return const SizedBox(height: 4);
-
-    final dataMb = (sessionDataKb / 1024).toStringAsFixed(1);
-    final parts = [
-      if (hasMessage) message,
-      if (hasData) 'Datos: $dataMb MB',
-    ];
-
-    return Container(
-      width: double.infinity,
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Text(parts.join('  ·  '),
-          style: Theme.of(context).textTheme.labelSmall,
-          textAlign: TextAlign.center),
-    );
-  }
-}
-
-// ─── Bookmarks sheet ──────────────────────────────────────────────────────────
-
 class _BookmarksSheet extends StatelessWidget {
   final List<Map<String, dynamic>> bookmarks;
   final ValueChanged<Map<String, dynamic>> onJump;
   final ValueChanged<int> onDelete;
-  const _BookmarksSheet(
-      {required this.bookmarks, required this.onJump, required this.onDelete});
+
+  const _BookmarksSheet({
+    required this.bookmarks,
+    required this.onJump,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Padding(
           padding: const EdgeInsets.all(16),
-          child: Text('Marcadores',
-              style: Theme.of(context).textTheme.titleMedium),
+          child:
+              Text('Marcadores', style: Theme.of(context).textTheme.titleMedium),
         ),
+        // Previously both the empty message and the list were rendered, giving
+        // two Expanded siblings fighting for the same space.
         if (bookmarks.isEmpty)
-          const Expanded(
-              child: Center(child: Text('No hay marcadores guardados'))),
-        Expanded(
-          child: ListView.builder(
-            itemCount: bookmarks.length,
-            itemBuilder: (ctx, i) {
-              final b = bookmarks[i];
-              return ListTile(
-                leading: const Icon(Icons.bookmark),
-                title: Text(
-                    'Cap. ${(b['chapter_index'] as int) + 1} · Pár. ${(b['paragraph_index'] as int) + 1}'),
-                subtitle:
-                    b['note'] != null ? Text(b['note'] as String) : null,
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => onDelete(b['id'] as int),
-                ),
-                onTap: () => onJump(b),
-              );
-            },
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 0, 24, 40),
+            child: Text('No hay marcadores guardados'),
+          )
+        else
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: bookmarks.length,
+              itemBuilder: (ctx, i) {
+                final b = bookmarks[i];
+                return ListTile(
+                  leading: const Icon(Icons.bookmark),
+                  title: Text('Cap. ${(b['chapter_index'] as int) + 1}'
+                      ' · Pár. ${(b['paragraph_index'] as int) + 1}'),
+                  subtitle: b['note'] != null ? Text(b['note'] as String) : null,
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    tooltip: 'Eliminar marcador',
+                    onPressed: () => onDelete(b['id'] as int),
+                  ),
+                  onTap: () => onJump(b),
+                );
+              },
+            ),
           ),
-        ),
       ],
     );
   }
