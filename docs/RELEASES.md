@@ -9,6 +9,51 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## 0.4.0-preview.1 — 2026-08-30
+
+Motores de voz auto-alojados y funciones para practicar inglés.
+
+### Motores nuevos
+- **Kokoro** en un servidor propio de la red local. Mejor calidad de voz que
+  Edge, con tiempos por palabra intactos.
+- **Piper**, con voces entrenadas en cada idioma. `es_AR-daniela-high` resultó
+  la preferida en español. Es el más rápido: ~1,7 s para generar 26 s de audio.
+- Ambos se repliegan **automáticamente a Edge** cuando el servidor no responde,
+  así que tener la computadora apagada nunca deja la app muda. El motor
+  realmente en uso se ve en la barra de estado del lector.
+- `tools/kokoro/` y `tools/piper/` con compose y documentación.
+
+### El problema del idioma en Kokoro
+Kokoro deduce el idioma de la primera letra de la voz, así que `af_bella` leía
+español con reglas inglesas: el mismo párrafo salía en 17 s en vez de 27,5 s,
+ininteligible. Se corrige mandando `lang_code` explícito en cada petición.
+
+### Descarga previa
+- Al abrir un libro en WiFi, con el servidor accesible, se descargan por delante
+  los siguientes capítulos. Nunca con datos móviles.
+- Menú de descarga: este capítulo, los próximos N, o el libro completo con
+  confirmación por tamaño.
+- Así se escucha con la calidad del servidor de casa estando fuera.
+
+### Practicar pronunciación
+- **Repetir la oración** y modo bucle, para shadowing.
+- **Pulsación larga sobre una palabra**: oírla, ver su definición, o mandarla a
+  otra app. El audio se recorta del clip ya descargado, así que es instantáneo
+  y funciona sin conexión.
+- **Diccionario** de inglés vía dictionaryapi.dev. Es la única función del
+  proyecto que necesita conexión; sin ella quedan pronunciar y "Otra app".
+
+### Notas
+- Piper no devuelve tiempos por palabra: su API contempla alineaciones por
+  fonema pero los modelos españoles las devuelven vacías. El resaltado cae a la
+  estimación por oración. Aceptado a propósito, porque el uso principal es
+  escuchar conduciendo, donde la sincronización no aporta.
+- El ritmo de Piper (`length_scale`) va grabado en el audio, así que cambiarlo
+  invalida lo ya descargado. Para variar la velocidad sobre la marcha está el
+  control de reproducción, que no re-sintetiza.
+
+---
+
 ## 0.3.0-preview.1 — 2026-08-30
 
 Tres frentes: naturalidad de la voz, la app como lector y no solo como
