@@ -1,0 +1,32 @@
+# Servidor de voz Kokoro para VoiceX Móvil.
+#
+#   docker compose -f tools/kokoro/docker-compose.yml up -d
+#
+# El teléfono se conecta a http://<IP-de-esta-máquina>:8880 desde la misma red.
+# Averigua la IP con:  hostname -I | awk '{print $1}'
+services:
+  kokoro:
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.8.1
+    container_name: voicex-kokoro
+    restart: unless-stopped
+    # 0.0.0.0 a propósito: sin esto solo respondería a localhost y el teléfono
+    # no podría alcanzarlo.
+    ports:
+      - "0.0.0.0:8880:8880"
+    environment:
+      # A partir de v0.8 la app manda `lang_code` en cada petición, así que un
+      # único contenedor sirve para español e inglés.
+      #
+      # Si te ves obligado a usar una imagen anterior a v0.8, esa versión ignora
+      # el parámetro y deduce el idioma de la voz: `af_bella` leería español con
+      # pronunciación inglesa. En ese caso descomenta la línea siguiente y
+      # levanta un segundo servicio en el puerto 8881 sin ella para el inglés.
+      # - DEFAULT_VOICE_CODE=e
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request;urllib.request.urlopen('http://localhost:8880/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s

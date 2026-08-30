@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as dev;
 import 'dart:io';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../audio/audio_player.dart';
@@ -13,6 +14,7 @@ import '../../storage/repositories.dart';
 import '../../tts/models.dart';
 import '../../tts/tts_factory.dart';
 import '../../tts/tts_provider.dart';
+import '../../tts/kokoro_tts_provider.dart';
 import 'settings_provider.dart';
 
 enum ReaderStatus { idle, synthesizing, playing, paused, error }
@@ -42,6 +44,8 @@ class ReaderState {
   /// Character range of the word being spoken, or null.
   final (int, int)? activeWord;
   final int sessionDataKb;
+  /// Engine actually used for the last synthesis, so a fallback is visible.
+  final String engineLabel;
   final bool isDownloading;
   final int downloadDone;
   final int downloadTotal;
@@ -58,6 +62,7 @@ class ReaderState {
     this.sentenceRanges = const [],
     this.activeWord,
     this.sessionDataKb = 0,
+    this.engineLabel = '',
     this.isDownloading = false,
     this.downloadDone = 0,
     this.downloadTotal = 0,
@@ -76,6 +81,7 @@ class ReaderState {
     (int, int)? activeWord,
     bool clearActiveWord = false,
     int? sessionDataKb,
+    String? engineLabel,
     bool? isDownloading,
     int? downloadDone,
     int? downloadTotal,
@@ -92,6 +98,7 @@ class ReaderState {
         sentenceRanges: sentenceRanges ?? this.sentenceRanges,
         activeWord: clearActiveWord ? null : (activeWord ?? this.activeWord),
         sessionDataKb: sessionDataKb ?? this.sessionDataKb,
+        engineLabel: engineLabel ?? this.engineLabel,
         isDownloading: isDownloading ?? this.isDownloading,
         downloadDone: downloadDone ?? this.downloadDone,
         downloadTotal: downloadTotal ?? this.downloadTotal,
@@ -190,6 +197,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
       // without opening the EPUB again.
       unawaited(LibraryRepo()
           .updateTotalParagraphs(bookId, _totalParagraphs(bookWithId)));
+
+      // Fire-and-forget: fills the offline cache while at home, and quietly
+      // does nothing when the conditions are not met.
+      unawaited(maybePrefetchAhead());
     } catch (e) {
       state = state.copyWith(
         status: ReaderStatus.error,
@@ -336,14 +347,45 @@ class ReaderNotifier extends Notifier<ReaderState> {
       settings.voiceFor(book.language);
 
   /// Reuses one provider instance instead of building a new one per paragraph.
-  TTSProvider _provider(AppSettings settings) {
-    if (_ttsProvider == null || _ttsProviderKind != settings.ttsProvider) {
+  ///
+  /// Kokoro lives on a machine that is often off or out of reach, so it is
+  /// probed first and quietly replaced by Edge when unavailable — the reader
+  /// must never go silent just because the home server is down. The engine in
+  /// use is surfaced in [ReaderState.engineLabel] so the swap is visible.
+  Future<TTSProvider> _provider(AppSettings settings, String lang) async {
+    var kind = settings.ttsProvider;
+
+    if (kind == 'kokoro') {
+      final reachable = settings.hasKokoroServer &&
+          await KokoroTtsProvider.isReachable(settings.kokoroBaseUrl);
+      if (!reachable) {
+        kind = 'edge';
+        dev.log('[Reader] Kokoro unreachable → falling back to Edge');
+      }
+    }
+
+    final key = '$kind/$lang';
+    if (_ttsProvider == null || _ttsProviderKind != key) {
       final old = _ttsProvider;
-      _ttsProvider = getProvider(settings);
-      _ttsProviderKind = settings.ttsProvider;
+      _ttsProvider =
+          getProvider(settings.copyWith(ttsProvider: kind), lang: lang);
+      _ttsProviderKind = key;
       if (old != null) unawaited(old.dispose());
     }
+
+    _activeEngineKind = kind;
     return _ttsProvider!;
+  }
+
+  String _activeEngineKind = 'edge';
+
+  /// Label for the status bar: names the engine, and says so explicitly when it
+  /// is not the one configured.
+  String _engineLabel(AppSettings settings) {
+    final label = providerLabel(_activeEngineKind);
+    return _activeEngineKind == settings.ttsProvider
+        ? label
+        : '$label (${providerLabel(settings.ttsProvider)} no disponible)';
   }
 
   /// Returns the on-disk audio for [para], synthesizing and caching it on a miss.
@@ -362,7 +404,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
     }
 
     await _cacheRepo.evictLruUntilFit(300, settings.cacheMaxMb);
-    final result = await _provider(settings).synthesize(
+    final provider = await _provider(settings, book.language);
+    final result = await provider.synthesize(
       text: para.rawText,
       voice: voice,
       rate: settings.edgeRate,
@@ -459,6 +502,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
       state = state.copyWith(
         status: ReaderStatus.playing,
         statusMessage: 'Reproduciendo…',
+        engineLabel: _engineLabel(settings),
         sentenceMarks: marks,
         wordMarks: wordMarks,
         sentenceRanges: sentenceRanges,
@@ -686,62 +730,130 @@ class ReaderNotifier extends Notifier<ReaderState> {
     await play();
   }
 
-  // Synthesizes all paragraphs of the current chapter and stores them as
-  // pinned entries in getApplicationDocumentsDirectory() so the OS never clears them.
-  Future<void> downloadChapter() async {
+  /// Downloads just the chapter being read. Kept as the manual button.
+  Future<void> downloadChapter() => downloadChapters(state.chapterIndex, 1);
+
+  /// Synthesizes [count] chapters starting at [from] and pins them in
+  /// getApplicationDocumentsDirectory(), where the OS will not clear them and
+  /// the LRU eviction skips them.
+  ///
+  /// This is what makes Kokoro usable away from home: the audio is produced
+  /// while the phone can still reach the server, then played back offline with
+  /// its word timings intact.
+  Future<void> downloadChapters(int from, int count,
+      {bool silent = false}) async {
     final book = state.book;
-    final chapter = state.currentChapter;
-    if (book == null || chapter == null || state.isDownloading) return;
+    if (book == null || state.isDownloading) return;
+
+    final chapters = book.chapters;
+    final last = (from + count).clamp(0, chapters.length);
+    if (from >= chapters.length || from < 0) return;
 
     final settings = _settings;
     final voice = _cacheKeyVoice(settings, book);
     final docsDir = await getApplicationDocumentsDirectory();
 
+    final totalParagraphs = [
+      for (var c = from; c < last; c++) chapters[c].paragraphs.length
+    ].fold<int>(0, (a, b) => a + b);
+
     _downloadCancelled = false;
     state = state.copyWith(
       isDownloading: true,
       downloadDone: 0,
-      downloadTotal: chapter.paragraphs.length,
+      downloadTotal: totalParagraphs,
     );
 
-    for (final para in chapter.paragraphs) {
-      if (_downloadCancelled) break;
+    for (var chapterIdx = from; chapterIdx < last; chapterIdx++) {
+      for (final para in chapters[chapterIdx].paragraphs) {
+        if (_downloadCancelled) break;
 
-      final alreadyPinned = await _cacheRepo.isPinnedParagraph(
-          book.id!, state.chapterIndex, para.index, voice, _cacheFormatTag);
-      if (alreadyPinned) {
-        state = state.copyWith(downloadDone: state.downloadDone + 1);
-        continue;
-      }
+        final alreadyPinned = await _cacheRepo.isPinnedParagraph(
+            book.id!, chapterIdx, para.index, voice, _cacheFormatTag);
+        if (alreadyPinned) {
+          state = state.copyWith(downloadDone: state.downloadDone + 1);
+          continue;
+        }
 
-      try {
-        final result = await _provider(settings).synthesize(
-          text: para.rawText,
-          voice: voice,
-          rate: settings.edgeRate,
-          volume: settings.edgeVolume,
-        );
-
-        final ext = result.filePath.split('.').last;
-        final dest = '${docsDir.path}/dl_${book.id}_${state.chapterIndex}_'
-            '${para.index}_${voice}_$_cacheFormatTag.$ext';
-        await File(result.filePath).copy(dest);
         try {
-          await File(result.filePath).delete();
-        } catch (_) {}
+          final provider = await _provider(settings, book.language);
+          final result = await provider.synthesize(
+            text: para.rawText,
+            voice: voice,
+            rate: settings.edgeRate,
+            volume: settings.edgeVolume,
+          );
 
-        await _writeSidecar(dest, result.timestamps);
-        final sizeKb = (await File(dest).length() / 1024).ceil();
-        await _cacheRepo.savePin(book.id!, state.chapterIndex, para.index,
-            voice, _cacheFormatTag, dest, sizeKb);
-      } catch (e) {
-        dev.log('[Reader] Download para ${para.index} failed: $e');
+          final ext = result.filePath.split('.').last;
+          final dest = '${docsDir.path}/dl_${book.id}_${chapterIdx}_'
+              '${para.index}_${voice}_$_cacheFormatTag.$ext';
+          await File(result.filePath).copy(dest);
+          try {
+            await File(result.filePath).delete();
+          } catch (_) {}
+
+          await _writeSidecar(dest, result.timestamps);
+          final sizeKb = (await File(dest).length() / 1024).ceil();
+          await _cacheRepo.savePin(book.id!, chapterIdx, para.index, voice,
+              _cacheFormatTag, dest, sizeKb);
+        } catch (e) {
+          dev.log('[Reader] Download ch$chapterIdx para ${para.index}: $e');
+          // A background prefetch that hits a dead server should give up
+          // rather than grind through every remaining paragraph.
+          if (silent) {
+            _downloadCancelled = true;
+          }
+        }
+
+        state = state.copyWith(downloadDone: state.downloadDone + 1);
       }
-
-      state = state.copyWith(downloadDone: state.downloadDone + 1);
+      if (_downloadCancelled) break;
     }
 
     state = state.copyWith(isDownloading: false);
+  }
+
+  /// Fills the cache ahead while on WiFi with the server in reach.
+  ///
+  /// Deliberately silent and cancellable: it must never interrupt reading, and
+  /// it never runs on mobile data — synthesizing a chapter is megabytes.
+  Future<void> maybePrefetchAhead() async {
+    final settings = _settings;
+    final book = state.book;
+    if (book == null || !settings.prefetchOnWifi || state.isDownloading) return;
+
+    // Only worth doing for the home server; Edge already streams on demand and
+    // its audio is cached paragraph by paragraph as it plays.
+    if (settings.ttsProvider != 'kokoro' || !settings.hasKokoroServer) return;
+
+    final connection = await Connectivity().checkConnectivity();
+    if (!connection.contains(ConnectivityResult.wifi)) {
+      dev.log('[Reader] Prefetch skipped: not on WiFi');
+      return;
+    }
+    if (!await KokoroTtsProvider.isReachable(settings.kokoroBaseUrl)) {
+      dev.log('[Reader] Prefetch skipped: server unreachable');
+      return;
+    }
+
+    await downloadChapters(
+        state.chapterIndex, settings.prefetchChapters, silent: true);
+  }
+
+  /// How many chapters of this book are fully pinned, for the download screen.
+  Future<int> downloadedChapterCount() async {
+    final book = state.book;
+    if (book?.id == null) return 0;
+    final voice = _cacheKeyVoice(_settings, book!);
+    var complete = 0;
+    for (var c = 0; c < book.chapters.length; c++) {
+      final total = book.chapters[c].paragraphs.length;
+      if (total == 0) continue;
+      final pinned = await _cacheRepo.countPinned(
+          book.id!, c, voice, _cacheFormatTag);
+      if (pinned >= total) complete++;
+    }
+    return complete;
   }
 
   void cancelDownload() {

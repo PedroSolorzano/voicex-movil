@@ -45,6 +45,16 @@ class AppSettings {
 
   bool highlightSentences;
   bool highlightWords;
+
+  // ── Kokoro (servidor propio en la red local) ─────────────────────────────
+  /// Base URL of the self-hosted Kokoro-FastAPI, e.g. http://192.168.1.50:8880
+  String kokoroBaseUrl;
+  String kokoroVoiceEs;
+  String kokoroVoiceEn;
+
+  /// Download the next chapters ahead while on WiFi with the server reachable.
+  bool prefetchOnWifi;
+  int prefetchChapters;
   String theme;
   int cacheMaxMb;
 
@@ -66,6 +76,11 @@ class AppSettings {
     this.edgeVolume = '+0%',
     this.highlightSentences = true,
     this.highlightWords = true,
+    this.kokoroBaseUrl = '',
+    this.kokoroVoiceEs = 'af_bella',
+    this.kokoroVoiceEn = 'af_bella',
+    this.prefetchOnWifi = true,
+    this.prefetchChapters = 3,
     this.theme = 'dark',
     this.cacheMaxMb = 150,
     this.fontSize = 18,
@@ -78,12 +93,19 @@ class AppSettings {
 
   /// Voice id for [lang], honouring an explicit choice before the gender map.
   String voiceFor(String lang) {
-    if (ttsProvider == 'edge') {
-      final explicit = lang == 'es' ? edgeVoiceEs : edgeVoiceEn;
-      if (explicit.isNotEmpty) return explicit;
+    switch (ttsProvider) {
+      case 'kokoro':
+        final v = lang == 'es' ? kokoroVoiceEs : kokoroVoiceEn;
+        return v.isNotEmpty ? v : 'af_bella';
+      case 'edge':
+        final explicit = lang == 'es' ? edgeVoiceEs : edgeVoiceEn;
+        if (explicit.isNotEmpty) return explicit;
     }
     return resolveVoice(ttsProvider, lang, gender);
   }
+
+  /// True when a Kokoro server has been configured at all.
+  bool get hasKokoroServer => kokoroBaseUrl.trim().isNotEmpty;
 
   static Future<AppSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -99,6 +121,11 @@ class AppSettings {
       edgeVolume: prefs.getString('edgeVolume') ?? '+0%',
       highlightSentences: prefs.getBool('highlightSentences') ?? true,
       highlightWords: prefs.getBool('highlightWords') ?? true,
+      kokoroBaseUrl: prefs.getString('kokoroBaseUrl') ?? '',
+      kokoroVoiceEs: prefs.getString('kokoroVoiceEs') ?? 'af_bella',
+      kokoroVoiceEn: prefs.getString('kokoroVoiceEn') ?? 'af_bella',
+      prefetchOnWifi: prefs.getBool('prefetchOnWifi') ?? true,
+      prefetchChapters: prefs.getInt('prefetchChapters') ?? 3,
       theme: prefs.getString('theme') ?? 'dark',
       cacheMaxMb: prefs.getInt('cacheMaxMb') ?? 150,
       fontSize: prefs.getDouble('fontSize') ?? 18,
@@ -121,6 +148,11 @@ class AppSettings {
     await prefs.setString('edgeVolume', edgeVolume);
     await prefs.setBool('highlightSentences', highlightSentences);
     await prefs.setBool('highlightWords', highlightWords);
+    await prefs.setString('kokoroBaseUrl', kokoroBaseUrl);
+    await prefs.setString('kokoroVoiceEs', kokoroVoiceEs);
+    await prefs.setString('kokoroVoiceEn', kokoroVoiceEn);
+    await prefs.setBool('prefetchOnWifi', prefetchOnWifi);
+    await prefs.setInt('prefetchChapters', prefetchChapters);
     await prefs.setString('theme', theme);
     await prefs.setInt('cacheMaxMb', cacheMaxMb);
     await prefs.setDouble('fontSize', fontSize);
@@ -141,6 +173,11 @@ class AppSettings {
     String? edgeVolume,
     bool? highlightSentences,
     bool? highlightWords,
+    String? kokoroBaseUrl,
+    String? kokoroVoiceEs,
+    String? kokoroVoiceEn,
+    bool? prefetchOnWifi,
+    int? prefetchChapters,
     String? theme,
     int? cacheMaxMb,
     double? fontSize,
@@ -160,6 +197,11 @@ class AppSettings {
         edgeVolume: edgeVolume ?? this.edgeVolume,
         highlightSentences: highlightSentences ?? this.highlightSentences,
         highlightWords: highlightWords ?? this.highlightWords,
+        kokoroBaseUrl: kokoroBaseUrl ?? this.kokoroBaseUrl,
+        kokoroVoiceEs: kokoroVoiceEs ?? this.kokoroVoiceEs,
+        kokoroVoiceEn: kokoroVoiceEn ?? this.kokoroVoiceEn,
+        prefetchOnWifi: prefetchOnWifi ?? this.prefetchOnWifi,
+        prefetchChapters: prefetchChapters ?? this.prefetchChapters,
         theme: theme ?? this.theme,
         cacheMaxMb: cacheMaxMb ?? this.cacheMaxMb,
         fontSize: fontSize ?? this.fontSize,

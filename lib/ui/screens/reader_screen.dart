@@ -19,6 +19,9 @@ const _charsPerSecond = 14.0;
 /// How long after the last scroll event the reading position is persisted.
 const _scrollSettleDelay = Duration(milliseconds: 900);
 
+/// How much to pre-synthesize for offline listening.
+enum _DownloadScope { chapter, ahead, book }
+
 class ReaderScreen extends ConsumerStatefulWidget {
   final int bookId;
 
@@ -211,10 +214,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               onBookmarks: () => _showBookmarks(context),
               onAddBookmark: () => _addBookmark(context),
               onSettings: () => context.push('/settings'),
-              onDownload: reader.isDownloading
-                  ? ref.read(readerProvider.notifier).cancelDownload
-                  : ref.read(readerProvider.notifier).downloadChapter,
               isDownloading: reader.isDownloading,
+              onCancelDownload:
+                  ref.read(readerProvider.notifier).cancelDownload,
+              onDownload: (scope) => _download(context, scope, settings),
             ),
           ),
 
@@ -239,6 +242,53 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         ],
       ),
     );
+  }
+
+  /// Pre-synthesizes audio so it can be heard away from the home server.
+  Future<void> _download(
+      BuildContext context, _DownloadScope scope, AppSettings settings) async {
+    final notifier = ref.read(readerProvider.notifier);
+    final reader = ref.read(readerProvider);
+    final chapters = reader.book?.chapters.length ?? 0;
+    final from = reader.chapterIndex;
+
+    final (count, label) = switch (scope) {
+      _DownloadScope.chapter => (1, 'este capítulo'),
+      _DownloadScope.ahead => (
+          settings.prefetchChapters,
+          'los próximos ${settings.prefetchChapters} capítulos'
+        ),
+      _DownloadScope.book => (chapters - from, 'el resto del libro'),
+    };
+
+    // A whole book is hundreds of megabytes and many minutes of synthesis;
+    // worth confirming rather than surprising the user.
+    if (scope == _DownloadScope.book) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Descargar libro completo'),
+          content: Text(
+              'Se sintetizarán ${chapters - from} capítulos. Puede ocupar varios '
+              'cientos de MB y tardar un buen rato. Conviene hacerlo en WiFi y '
+              'con la pantalla encendida.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancelar')),
+            TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Descargar')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Descargando $label…')));
+    await notifier.downloadChapters(from, count);
   }
 
   Future<void> _addBookmark(BuildContext context) async {
@@ -381,7 +431,8 @@ class _TopBar extends StatelessWidget {
   final String title;
   final ReaderPalette palette;
   final VoidCallback onBack, onToc, onBookmarks, onAddBookmark, onSettings;
-  final VoidCallback onDownload;
+  final ValueChanged<_DownloadScope> onDownload;
+  final VoidCallback onCancelDownload;
   final bool isDownloading;
 
   const _TopBar({
@@ -393,6 +444,7 @@ class _TopBar extends StatelessWidget {
     required this.onAddBookmark,
     required this.onSettings,
     required this.onDownload,
+    required this.onCancelDownload,
     required this.isDownloading,
   });
 
@@ -425,16 +477,30 @@ class _TopBar extends StatelessWidget {
               color: palette.text,
               onPressed: onToc,
             ),
-            IconButton(
-              icon: Icon(isDownloading
-                  ? Icons.cancel_outlined
-                  : Icons.download_outlined),
-              tooltip: isDownloading
-                  ? 'Cancelar descarga'
-                  : 'Descargar capítulo',
-              color: palette.text,
-              onPressed: onDownload,
-            ),
+            if (isDownloading)
+              IconButton(
+                icon: const Icon(Icons.cancel_outlined),
+                tooltip: 'Cancelar descarga',
+                color: palette.text,
+                onPressed: onCancelDownload,
+              )
+            else
+              PopupMenuButton<_DownloadScope>(
+                icon: Icon(Icons.download_outlined, color: palette.text),
+                tooltip: 'Descargar para escuchar sin conexión',
+                onSelected: onDownload,
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                      value: _DownloadScope.chapter,
+                      child: Text('Este capítulo')),
+                  PopupMenuItem(
+                      value: _DownloadScope.ahead,
+                      child: Text('Los próximos capítulos')),
+                  PopupMenuItem(
+                      value: _DownloadScope.book,
+                      child: Text('Libro completo')),
+                ],
+              ),
             IconButton(
               icon: const Icon(Icons.bookmark_add_outlined),
               tooltip: 'Agregar marcador',
@@ -561,6 +627,7 @@ class _BottomBar extends StatelessWidget {
                   Text(
                     [
                       if (reader.statusMessage.isNotEmpty) reader.statusMessage,
+                      if (reader.engineLabel.isNotEmpty) reader.engineLabel,
                       if (reader.sessionDataKb > 0)
                         '${(reader.sessionDataKb / 1024).toStringAsFixed(1)} MB',
                     ].join('  ·  '),

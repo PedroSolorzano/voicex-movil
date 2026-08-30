@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../../config/settings.dart';
 import '../../storage/repositories.dart';
 import '../../tts/tts_factory.dart';
+import '../../tts/kokoro_tts_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/voices_provider.dart';
 
@@ -25,12 +26,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _previewPlayer = ja.AudioPlayer();
   int _cacheSizeKb = 0;
   bool _saving = false;
+  bool _testingServer = false;
+  bool _serverOk = false;
+  String? _serverStatus;
+  late final TextEditingController _kokoroUrlController;
   String? _previewing;
   PackageInfo? _packageInfo;
 
   @override
   void initState() {
     super.initState();
+    _kokoroUrlController = TextEditingController(
+        text: ref.read(settingsProvider).valueOrNull?.kokoroBaseUrl ?? '');
     _loadCacheSize();
     PackageInfo.fromPlatform().then((info) {
       if (mounted) setState(() => _packageInfo = info);
@@ -40,7 +47,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   void dispose() {
     _previewPlayer.dispose();
+    _kokoroUrlController.dispose();
     super.dispose();
+  }
+
+  /// Probes the configured server so a typo in the address is caught here
+  /// rather than as a silent fallback to Edge mid-chapter.
+  Future<void> _testKokoro() async {
+    final url = _kokoroUrlController.text.trim();
+    if (url.isEmpty) {
+      setState(() {
+        _serverOk = false;
+        _serverStatus = 'Escribe la dirección del servidor.';
+      });
+      return;
+    }
+
+    setState(() {
+      _testingServer = true;
+      _serverStatus = null;
+    });
+
+    KokoroTtsProvider.resetHealthCache();
+    final ok = await KokoroTtsProvider.isReachable(url);
+    if (!mounted) return;
+
+    setState(() {
+      _testingServer = false;
+      _serverOk = ok;
+      _serverStatus = ok
+          ? 'Servidor accesible.'
+          : 'No responde. Comprueba que el contenedor esté arriba y que el '
+              'teléfono esté en la misma red.';
+    });
   }
 
   Future<void> _loadCacheSize() async {
@@ -76,6 +115,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     label: Text('Edge'),
                     icon: Icon(Icons.cloud_outlined)),
                 ButtonSegment(
+                    value: 'kokoro',
+                    label: Text('Kokoro'),
+                    icon: Icon(Icons.home_outlined)),
+                ButtonSegment(
                     value: 'android',
                     label: Text('Android'),
                     icon: Icon(Icons.phone_android)),
@@ -86,22 +129,90 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              s.ttsProvider == 'edge'
-                  ? 'Voces neuronales de Microsoft. Requiere internet; el audio '
-                      'se guarda en caché para volver a escucharlo sin conexión.'
-                  : 'Motor de voz del propio teléfono. Funciona sin internet, '
-                      'pero no marca las palabras, así que el resaltado de oración '
-                      'se calcula de forma aproximada.',
+              switch (s.ttsProvider) {
+                'kokoro' =>
+                  'Servidor propio en tu red. Mejor calidad de voz, pero solo '
+                      'responde con la computadora encendida: fuera de casa la app '
+                      'usa Edge automáticamente, o el audio ya descargado.',
+                'android' =>
+                  'Motor de voz del propio teléfono. Funciona sin internet, pero '
+                      'no marca las palabras, así que el resaltado se calcula de '
+                      'forma aproximada.',
+                _ =>
+                  'Voces neuronales de Microsoft. Requiere internet; el audio se '
+                      'guarda en caché para volver a escucharlo sin conexión.',
+              },
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ]),
+
+          if (s.ttsProvider == 'kokoro')
+            _Section(title: 'Servidor Kokoro', children: [
+              TextField(
+                controller: _kokoroUrlController,
+                decoration: InputDecoration(
+                  labelText: 'Dirección del servidor',
+                  hintText: 'http://192.168.1.50:8880',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                  suffixIcon: IconButton(
+                    icon: _testingServer
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.wifi_tethering),
+                    tooltip: 'Probar conexión',
+                    onPressed: _testingServer ? null : _testKokoro,
+                  ),
+                ),
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+                onChanged: (v) => _update(s.copyWith(kokoroBaseUrl: v.trim())),
+              ),
+              if (_serverStatus != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    _serverStatus!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: _serverOk
+                              ? Theme.of(context).colorScheme.primary
+                              : Theme.of(context).colorScheme.error,
+                        ),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Descargar por adelantado en WiFi'),
+                subtitle: const Text(
+                    'Deja capítulos listos para escuchar sin conexión. Nunca usa '
+                    'datos móviles.'),
+                value: s.prefetchOnWifi,
+                onChanged: (v) => _update(s.copyWith(prefetchOnWifi: v)),
+              ),
+              if (s.prefetchOnWifi)
+                _LabelledSlider(
+                  label: 'Capítulos',
+                  value: s.prefetchChapters.toDouble(),
+                  min: 1,
+                  max: 10,
+                  divisions: 9,
+                  display: '${s.prefetchChapters}',
+                  onChanged: (v) =>
+                      _update(s.copyWith(prefetchChapters: v.toInt())),
+                ),
+            ]),
 
           _Section(title: 'Voces', children: [
             _VoiceTile(
               label: 'Español',
               lang: 'es',
               settings: s,
-              onPick: (id) => _update(s.copyWith(edgeVoiceEs: id)),
+              onPick: (id) => _update(s.ttsProvider == 'kokoro'
+                  ? s.copyWith(kokoroVoiceEs: id)
+                  : s.copyWith(edgeVoiceEs: id)),
               onPreview: _preview,
               previewing: _previewing,
             ),
@@ -110,7 +221,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               label: 'Inglés',
               lang: 'en',
               settings: s,
-              onPick: (id) => _update(s.copyWith(edgeVoiceEn: id)),
+              onPick: (id) => _update(s.ttsProvider == 'kokoro'
+                  ? s.copyWith(kokoroVoiceEn: id)
+                  : s.copyWith(edgeVoiceEn: id)),
               onPreview: _preview,
               previewing: _previewing,
             ),
@@ -329,7 +442,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _previewing = voiceId);
 
     final s = _settings;
-    final tts = getProvider(s);
+    // Language matters for Kokoro: without it the preview would mispronounce.
+    final tts = getProvider(s, lang: lang);
     String? path;
     try {
       final result = await tts.synthesize(
@@ -416,7 +530,7 @@ class _VoiceTile extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       builder: (_) => _VoicePickerSheet(
-        providerKind: settings.ttsProvider,
+        settings: settings,
         lang: lang,
         current: current,
         onPreview: (id) => onPreview(id, lang),
@@ -427,13 +541,13 @@ class _VoiceTile extends ConsumerWidget {
 }
 
 class _VoicePickerSheet extends ConsumerStatefulWidget {
-  final String providerKind;
+  final AppSettings settings;
   final String lang;
   final String current;
   final Future<void> Function(String voiceId) onPreview;
 
   const _VoicePickerSheet({
-    required this.providerKind,
+    required this.settings,
     required this.lang,
     required this.current,
     required this.onPreview,
@@ -448,7 +562,7 @@ class _VoicePickerSheetState extends ConsumerState<_VoicePickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final async = ref.watch(voicesProvider(widget.providerKind));
+    final async = ref.watch(voicesProvider(widget.settings));
 
     return DraggableScrollableSheet(
       initialChildSize: 0.75,

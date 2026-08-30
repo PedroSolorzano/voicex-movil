@@ -4,11 +4,15 @@ import '../../tts/tts_factory.dart';
 import '../../config/settings.dart';
 
 /// Live voice catalogue for a given engine. Edge returns 300+ entries (cached
-/// locally for 7 days); Android returns whatever the device engine reports.
-/// An empty list means "fall back to the hardcoded voiceMap".
+/// locally for 7 days); Kokoro returns whatever its server has loaded; Android
+/// returns what the device engine reports. An empty list means "fall back to
+/// the hardcoded voiceMap".
+///
+/// Keyed by the whole settings object rather than the engine name because
+/// Kokoro's catalogue depends on the configured server URL.
 final voicesProvider =
-    FutureProvider.family<List<Voice>, String>((ref, providerKind) async {
-  final tts = getProvider(AppSettings(ttsProvider: providerKind));
+    FutureProvider.family<List<Voice>, AppSettings>((ref, settings) async {
+  final tts = getProvider(settings);
   try {
     final voices = await tts.listVoices();
     voices.sort((a, b) {
