@@ -219,13 +219,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   min: 0.8,
                   max: 1.6,
                   divisions: 16,
-                  display: '${s.piperLengthScale.toStringAsFixed(2)}×',
+                  // Named, not just numbered: this is phoneme *length*, so a
+                  // higher number is slower — the opposite of what a bare "×"
+                  // suggests, and a reader chasing a slower voice will reach
+                  // for the low end and get a faster one.
+                  display: _paceLabel(s.piperLengthScale),
                   onChanged: (v) => _update(s.copyWith(piperLengthScale: v)),
+                  // The pace is part of the cache key because Piper bakes it
+                  // into the samples. Moving the slider by accident silently
+                  // orphans every download made at the previous pace, which is
+                  // exactly how hours of audio went missing during testing.
+                  onChangeEnd: (v) => _warnPaceInvalidates(v),
                 ),
                 Text(
-                  'Alarga cada fonema al sintetizar, que suena más natural que '
-                  'frenar la reproducción. Ojo: cambiarlo invalida el audio ya '
-                  'descargado, porque va grabado dentro.',
+                  'Alarga cada fonema al sintetizar: números más altos hablan '
+                  'más pausado. Suena mejor que frenar la reproducción, pero va '
+                  'grabado en el audio, así que cambiarlo obliga a descargar de '
+                  'nuevo.\n\n'
+                  'Para ir más despacio sin volver a descargar, usa "Velocidad '
+                  'de reproducción" más abajo.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -475,6 +487,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _saving = false);
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Ajustes guardados')));
+  }
+
+  /// "1.25× · pausado". The number alone reads backwards for phoneme length.
+  static String _paceLabel(double value) {
+    final word = switch (value) {
+      < 0.95 => 'rápido',
+      < 1.1 => 'normal',
+      < 1.35 => 'pausado',
+      _ => 'muy pausado',
+    };
+    return '${value.toStringAsFixed(2)}× · $word';
+  }
+
+  /// Warns once when the Piper pace moves away from what was downloaded.
+  Future<void> _warnPaceInvalidates(double value) async {
+    final downloaded = await _cacheRepo.countPinnedForPrefix('piper-');
+    if (!mounted || downloaded == 0) return;
+
+    final tag = 'piper-${value.toStringAsFixed(2)}'.replaceAll('.', '_');
+    final atThisPace = await _cacheRepo.countPinnedForPrefix(tag);
+    if (!mounted || atThisPace > 0) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      duration: const Duration(seconds: 6),
+      content: Text('Con este ritmo no se usarán los $downloaded párrafos ya '
+          'descargados: el ritmo va grabado en el audio.'),
+    ));
   }
 
   Future<void> _clearCache() async {
@@ -732,6 +771,7 @@ class _LabelledSlider extends StatelessWidget {
   final int divisions;
   final String display;
   final ValueChanged<double> onChanged;
+  final ValueChanged<double>? onChangeEnd;
 
   const _LabelledSlider({
     required this.label,
@@ -741,6 +781,7 @@ class _LabelledSlider extends StatelessWidget {
     required this.divisions,
     required this.display,
     required this.onChanged,
+    this.onChangeEnd,
   });
 
   @override
@@ -755,11 +796,16 @@ class _LabelledSlider extends StatelessWidget {
               divisions: divisions,
               label: display,
               onChanged: onChanged,
+              onChangeEnd: onChangeEnd,
             ),
           ),
           SizedBox(
-              width: 56,
-              child: Text(display, textAlign: TextAlign.end)),
+            width: 108,
+            child: Text(display,
+                textAlign: TextAlign.end,
+                maxLines: 2,
+                style: const TextStyle(fontSize: 12)),
+          ),
         ],
       );
 }

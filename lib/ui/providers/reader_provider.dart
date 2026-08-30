@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:developer' as dev;
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../audio/audio_player.dart';
@@ -409,9 +410,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
   String _cacheKeyFor(String engine, AppSettings settings, Book book) {
     final raw = switch (engine) {
       'piper' => 'piper-${settings.piperLengthScale.toStringAsFixed(2)}',
-      'kokoro' => 'kokoro-${settings.voiceFor(book.language)}',
+      'kokoro' => 'kokoro-${settings.voiceForEngine('kokoro', book.language)}',
       'android' => 'android-${book.language}',
-      _ => 'edge-${settings.voiceFor(book.language)}',
+      _ => 'edge-${settings.voiceForEngine('edge', book.language)}',
     };
     // The key is also embedded in the cache filename, so it must survive as a
     // path segment. An earlier version used ':' and '@' here, which made every
@@ -478,7 +479,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
       _cacheKeyVoice(settings, book),
       _cacheKeyFor('edge', settings, book),
     };
-    dev.log('[CacheDBG] buscando ch=$chapterIdx para=${para.index} '
+    debugPrint('[CacheDBG] buscando ch=$chapterIdx para=${para.index} '
         'claves=$lookupKeys tag=$_cacheFormatTag');
 
     for (final key in lookupKeys) {
@@ -495,7 +496,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
     // Diagnostic: nothing matched, so show what the table actually holds.
     for (final row in await _cacheRepo.debugKeys(book.id!)) {
-      dev.log('[CacheDBG] guardado: voice=${row['voice_id']} '
+      debugPrint('[CacheDBG] guardado: voice=${row['voice_id']} '
           'tag=${row['speed_hash']} pinned=${row['pinned']} n=${row['n']} '
           'ch=${row['ch_min']}..${row['ch_max']} ej=${row['sample']}');
     }

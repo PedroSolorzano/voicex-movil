@@ -294,11 +294,35 @@ class AudioCacheRepo {
     await db.execute(
         "UPDATE audio_cache SET voice_id = 'android-' || substr(voice_id, 9) "
         "WHERE voice_id LIKE 'android:%'");
-    // Anything with no engine prefix predates the split and came from Edge.
+    // Kokoro voice ids look like af_bella or ef_dora: a language letter, a
+    // gender letter, an underscore. Without this they fall through to the Edge
+    // rule below and downloads get labelled with an engine that never made
+    // them — which is exactly what happened to a first batch.
+    await db.execute(
+        "UPDATE audio_cache SET voice_id = 'kokoro-' || voice_id "
+        "WHERE voice_id GLOB '[abefhijpz][mf]_*' "
+        "AND voice_id NOT LIKE 'kokoro-%'");
+    // Repair rows already mislabelled by the earlier version of this migration.
+    await db.execute(
+        "UPDATE audio_cache SET voice_id = 'kokoro-' || substr(voice_id, 6) "
+        "WHERE voice_id LIKE 'edge-%' "
+        "AND substr(voice_id, 6) GLOB '[abefhijpz][mf]_*'");
+    // Whatever is left with no engine prefix predates the split and came from Edge.
     await db.execute(
         "UPDATE audio_cache SET voice_id = 'edge-' || voice_id "
         "WHERE voice_id NOT LIKE 'edge-%' AND voice_id NOT LIKE 'kokoro-%' "
         "AND voice_id NOT LIKE 'piper-%' AND voice_id NOT LIKE 'android-%'");
+  }
+
+  /// Pinned paragraphs whose cache key starts with [prefix]. Used to warn
+  /// before a setting change orphans what is already downloaded.
+  Future<int> countPinnedForPrefix(String prefix) async {
+    final db = await _db;
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM audio_cache WHERE pinned=1 AND voice_id LIKE ?',
+      ['$prefix%'],
+    );
+    return (rows.first['c'] as int?) ?? 0;
   }
 
   /// Diagnostic: what is actually stored for a book, grouped by cache key.

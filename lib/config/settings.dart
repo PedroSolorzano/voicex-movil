@@ -99,9 +99,16 @@ class AppSettings {
     this.followAudioScroll = true,
   });
 
-  /// Voice id for [lang], honouring an explicit choice before the gender map.
-  String voiceFor(String lang) {
-    switch (ttsProvider) {
+  /// Voice id for [lang] under the engine currently selected.
+  String voiceFor(String lang) => voiceForEngine(ttsProvider, lang);
+
+  /// Voice id for [lang] under a specific [engine].
+  ///
+  /// Needed because the cache key names the engine that produced the audio,
+  /// which is not always the selected one: a fallback to Edge must be keyed
+  /// with Edge's voice, not with whatever Kokoro or Piper would have used.
+  String voiceForEngine(String engine, String lang) {
+    switch (engine) {
       case 'kokoro':
         final v = lang == 'es' ? kokoroVoiceEs : kokoroVoiceEn;
         return v.isNotEmpty ? v : 'af_bella';
@@ -112,7 +119,7 @@ class AppSettings {
         final explicit = lang == 'es' ? edgeVoiceEs : edgeVoiceEn;
         if (explicit.isNotEmpty) return explicit;
     }
-    return resolveVoice(ttsProvider, lang, gender);
+    return resolveVoice(engine, lang, gender);
   }
 
   /// True when a Kokoro server has been configured at all.
