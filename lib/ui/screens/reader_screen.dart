@@ -101,9 +101,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   /// Computed from what is actually on screen rather than measured, so it
   /// cannot oscillate between frames.
   double _bottomChromeHeight(ReaderState reader) {
-    var height = 150.0; // progress bar + transport row + status line
+    var height = 160.0; // progress bar + transport row + status line
     if (reader.highlightedSentence >= 0) height += 52; // repeat / loop
-    if (reader.isDownloading) height += 56; // download progress
+    if (reader.isDownloading) height += 64; // download progress + its label
     return height;
   }
 
@@ -201,7 +201,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                       padding: EdgeInsets.only(
                         left: settings.margin,
                         right: settings.margin,
-                        top: MediaQuery.paddingOf(context).top + 64,
+                        // The top bar is a row of 48 dp icon buttons plus its
+                        // own padding; 64 left the first line grazing it.
+                        top: MediaQuery.paddingOf(context).top + 80,
                         // Must clear the whole bottom bar, which grows with the
                         // practice row and the download progress. Too little and
                         // the last lines of a chapter sit under the controls.
