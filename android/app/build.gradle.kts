@@ -63,8 +63,12 @@ flutter {
     source = "../.."
 }
 
-// Auto-increment patch from total git commit count so every commit produces a
-// uniquely named APK: voicex-0.2.<commitCount>-preview.1-release.apk
+// versionName comes from pubspec.yaml, which is where the semantic version
+// belongs. It used to be hardcoded here as "0.2.<commitCount>", so the minor
+// never moved and the APK disagreed with docs/RELEASES.md.
+//
+// The commit count still drives versionCode: Android requires a value that only
+// ever grows, and it is the one number that cannot be forgotten on a release.
 fun gitCommitCount(): Int {
     return try {
         ProcessBuilder("git", "rev-list", "--count", "HEAD")
@@ -79,7 +83,6 @@ fun gitCommitCount(): Int {
 val gitCount = gitCommitCount()
 
 android.defaultConfig.versionCode = gitCount
-android.defaultConfig.versionName = "0.2.${gitCount}-preview.1"
 
 tasks.configureEach {
     if (name == "assembleRelease") {

@@ -9,6 +9,85 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## 0.5.0-preview.1 — 2026-08-30
+
+Primera versión probada en un teléfono real. Casi todo lo que sigue son fallos
+que ningún test ni emulador podía revelar, más el trabajo que salió de usarla
+de verdad.
+
+### Motores de voz auto-alojados
+
+- **Piper** como cuarto motor, con voces entrenadas en cada idioma. Un servidor
+  sirve español e inglés y la app manda el modelo según el libro.
+- **Kokoro** con `lang_code` explícito en cada petición. Sin él deducía el
+  idioma de la primera letra de la voz, y `af_bella` leía español con reglas
+  inglesas: el mismo párrafo salía en 17 s en vez de 27,5 s, ininteligible.
+- Ambos se repliegan a Edge cuando el servidor no responde, y el motor
+  realmente en uso se ve en la barra de estado del lector.
+- `tools/kokoro/` y `tools/piper/` con compose, Dockerfile y documentación.
+
+### Reproductor y pantalla de bloqueo
+
+- **Los controles de bloqueo aparecen por fin.** `MainActivity` heredaba de
+  `FlutterActivity` en vez de `AudioServiceActivity`: la app levantaba un motor
+  Flutter aislado del servicio, que se quedaba sin handler y nunca creaba la
+  notificación, aunque el audio sonara con normalidad.
+- Portada del libro, barra de progreso y avance en el subtítulo.
+
+### El texto ya no se descoloca
+
+- **Pausar dejó de perder el sitio.** El auto-scroll centra el párrafo activo
+  al 15 % del borde, así que "el más alto visible" era siempre el de detrás; y
+  sus propios eventos encolaban una actualización que se aplicaba al pausar.
+- Se introduce una **sesión de escucha**: mientras está abierta manda el audio,
+  no el scroll. Se cierra solo al pulsar Detener o salir del libro.
+- Reanudar devuelve la vista al texto resaltado aunque no haya cambiado de
+  párrafo.
+- Salir del libro guarda el progreso en vez de confiar en el guardado periódico.
+
+### Cambiar de motor cambia la voz
+
+- La búsqueda en caché consultaba preventivamente la clave de Edge, así que
+  cualquier párrafo ya escuchado seguía sonando con Edge eligiera lo que
+  eligiera el usuario. Solo se notaba en libros sin descargas propias.
+
+### Descargas
+
+- **Se saneó la clave de caché.** Llevaba `:` y `@`, y se incrustaba en el
+  nombre del archivo: cada escritura fallaba en silencio mientras la barra de
+  progreso llegaba al 100 % sin guardar nada. Hay migración para no perder lo
+  ya descargado.
+- Los fallos de descarga se cuentan y se muestran, en vez de pasar
+  desapercibidos.
+- Estimación de tiempo y tamaño antes de empezar, y tiempo restante durante la
+  descarga, refinado con los tiempos reales.
+
+### Almacenamiento
+
+- **"Limpiar caché" ya no borra las descargas.** Borraba la tabla entera:
+  un botón rotulado "caché" se llevaba por delante horas de síntesis.
+- Desglose por libro y por motor, con borrado selectivo. Y "Borrar todo" para
+  cuando de verdad se quiere empezar de cero.
+
+### Otros
+
+- **Diccionario en español** vía Wiktionary, además del inglés.
+- Los ajustes **se guardan solos**: cambiar de motor ya no obliga a recorrer la
+  pantalla hasta un botón al final.
+- El deslizador de Ritmo de Piper decía "1.00×", que se lee como velocidad,
+  cuando es longitud de fonema y va al revés. Ahora dice "1.00× · normal".
+- El campo de dirección se resincroniza al cambiar de motor; antes una URL de
+  Kokoro podía acabar guardada en Piper.
+- Las barras del lector dejan de rozar el texto.
+
+### Versionado
+
+`versionName` sale ahora de `pubspec.yaml`. Estaba fijado por código a
+`0.2.<commits>`, así que el minor nunca avanzaba y el APK contradecía a este
+mismo archivo. El contador de commits sigue alimentando `versionCode`.
+
+---
+
 ## 0.4.0-preview.1 — 2026-08-30
 
 Motores de voz auto-alojados y funciones para practicar inglés.
