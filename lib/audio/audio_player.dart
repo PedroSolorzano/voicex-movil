@@ -149,11 +149,13 @@ class VoiceXAudioHandler extends BaseAudioHandler with SeekHandler {
     _startTicker();
     _broadcast();
 
-    // Refresh the notification duration now that the file is loaded.
+    // Refresh the duration now that the file is decoded: without it the system
+    // draws no progress bar on the lock screen.
     final item = mediaItem.value;
     if (item != null && _player.duration != null) {
       mediaItem.add(item.copyWith(duration: _player.duration));
     }
+    _broadcast();
 
     unawaited(_player.play());
   }
@@ -210,8 +212,15 @@ class VoiceXAudioHandler extends BaseAudioHandler with SeekHandler {
 
   void _startTicker() {
     _ticker?.cancel();
+    var sinceBroadcast = 0;
     _ticker = Timer.periodic(const Duration(milliseconds: 50), (_) {
       onTick?.call(elapsedMs);
+      // Republish the position about once a second so the lock-screen progress
+      // bar advances; every tick would be needless churn.
+      if (++sinceBroadcast >= 20) {
+        sinceBroadcast = 0;
+        _broadcast();
+      }
     });
   }
 

@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:developer' as dev;
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../audio/audio_player.dart';
@@ -184,6 +183,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
   bool _synthesizing = false;
   bool _downloadCancelled = false;
 
+  /// Cover art path, for the lock-screen player. Lives in the books table, not
+  /// in the parsed Book, so it is fetched separately on load.
+  String? _coverPath;
+
   /// When jumping to a bookmark or resuming, the sentence to seek to.
   int _pendingSentenceIdx = -1;
   int _pendingOffsetMs = 0;
@@ -203,7 +206,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
   Future<void> loadBook(int bookId, String? filePath) async {
     try {
       // A deep link arrives without the path — look it up before parsing.
-      final path = filePath ?? await _resolveFilePath(bookId);
+      final row = await LibraryRepo().get(bookId);
+      _coverPath = row?['cover_path'] as String?;
+      final path = filePath ?? (row?['file_path'] as String?);
       if (path == null) {
         state = state.copyWith(
           status: ReaderStatus.error,
@@ -267,11 +272,6 @@ class ReaderNotifier extends Notifier<ReaderState> {
       total += book.chapters[c].paragraphs.length;
     }
     return total + state.paragraphIndex;
-  }
-
-  Future<String?> _resolveFilePath(int bookId) async {
-    final row = await LibraryRepo().get(bookId);
-    return row?['file_path'] as String?;
   }
 
   /// Wires this reader to the long-lived audio service handler. The handler is
@@ -473,34 +473,23 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// Returns the on-disk audio for [para], synthesizing and caching it on a miss.
   Future<_Audio> _ensureAudio(
       Book book, int chapterIdx, Paragraph para, AppSettings settings) async {
-    // Look up before touching the network: the configured engine first, then
-    // Edge, which is what a fallback would have produced. Both are plain
-    // database reads, so offline playback never waits on a health probe.
-    final lookupKeys = {
-      _cacheKeyVoice(settings, book),
-      _cacheKeyFor('edge', settings, book),
-    };
-    debugPrint('[CacheDBG] buscando ch=$chapterIdx para=${para.index} '
-        'claves=$lookupKeys tag=$_cacheFormatTag');
-
-    for (final key in lookupKeys) {
+    Future<_Audio?> lookup(String key) async {
       final cached = await _cacheRepo.get(
           book.id!, chapterIdx, para.index, key, _cacheFormatTag);
-      if (cached != null) {
-        return (
-          path: cached,
-          timestamps: await _readSidecar(cached),
-          freshKb: 0
-        );
-      }
+      if (cached == null) return null;
+      return (
+        path: cached,
+        timestamps: await _readSidecar(cached),
+        freshKb: 0
+      );
     }
 
-    // Diagnostic: nothing matched, so show what the table actually holds.
-    for (final row in await _cacheRepo.debugKeys(book.id!)) {
-      debugPrint('[CacheDBG] guardado: voice=${row['voice_id']} '
-          'tag=${row['speed_hash']} pinned=${row['pinned']} n=${row['n']} '
-          'ch=${row['ch_min']}..${row['ch_max']} ej=${row['sample']}');
-    }
+    // Only the engine the reader chose. Consulting Edge's key here as well —
+    // which an earlier version did, to reuse whatever a fallback had left
+    // behind — made switching engines do nothing: any paragraph already heard
+    // with Edge kept playing Edge's audio no matter what was selected.
+    final chosen = await lookup(_cacheKeyVoice(settings, book));
+    if (chosen != null) return chosen;
 
     await _cacheRepo.evictLruUntilFit(300, settings.cacheMaxMb);
     final provider = await _provider(settings, book.language);
@@ -508,6 +497,13 @@ class ReaderNotifier extends Notifier<ReaderState> {
     // Resolved after _provider, so a fallback is stored under the engine that
     // actually produced the audio.
     final voice = _cacheKeyFor(_activeEngineKind, settings, book);
+
+    // The fallback to Edge did happen: now it is worth reusing what Edge left
+    // cached rather than going back out to the network.
+    if (_activeEngineKind != settings.ttsProvider) {
+      final fallback = await lookup(voice);
+      if (fallback != null) return fallback;
+    }
     final result = await provider.synthesize(
       text: para.rawText,
       voice: settings.voiceFor(book.language),
@@ -647,12 +643,29 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
   void _publishNowPlaying(Book book, Paragraph para) {
     final chapter = state.currentChapter;
+    final percent = (state.progressFraction * 100).round();
+
     audioHandler.setNowPlaying(
       id: '${book.id}_${state.chapterIndex}_${para.index}',
       title: chapter?.title.isNotEmpty == true ? chapter!.title : book.title,
-      album: book.title,
+      // The lock screen offers no other context, so the subtitle carries the
+      // position in the book rather than repeating the author alone.
+      album: '${book.title} · $percent%',
       artist: book.author,
+      artUri: _coverUri(),
     );
+  }
+
+  /// file:// URI of the cover, when there is one on disk.
+  Uri? _coverUri() {
+    final path = _coverPath;
+    if (path == null || path.isEmpty) return null;
+    try {
+      if (!File(path).existsSync()) return null;
+      return Uri.file(path);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Synthesizes the next paragraph while the current one plays, so playback
@@ -699,12 +712,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
   Future<void> stop() async {
     await _saveProgress(offsetMs: audioHandler.elapsedMs);
     await audioHandler.stop();
+    // The sentence highlight stays: it is the "you were here" marker. Only the
+    // word underline goes, since nothing is being spoken any more.
     state = state.copyWith(
       status: ReaderStatus.idle,
-      highlightedSentence: -1,
-      sentenceMarks: [],
-      wordMarks: [],
-      sentenceRanges: [],
       clearActiveWord: true,
     );
   }
@@ -837,14 +848,30 @@ class ReaderNotifier extends Notifier<ReaderState> {
     _prefetchToken++;
     await stop();
     state = state.copyWith(
-        chapterIndex: index, paragraphIndex: paragraph, highlightedSentence: -1);
+      chapterIndex: index,
+      paragraphIndex: paragraph,
+      highlightedSentence: -1,
+      // Marks belong to the paragraph that produced them; carrying them over
+      // would highlight the wrong text once the new one starts.
+      sentenceMarks: const [],
+      wordMarks: const [],
+      sentenceRanges: const [],
+      clearActiveWord: true,
+    );
     await _saveProgress();
   }
 
   Future<void> navigateParagraph(int index) async {
     _prefetchToken++;
     await stop();
-    state = state.copyWith(paragraphIndex: index, highlightedSentence: -1);
+    state = state.copyWith(
+      paragraphIndex: index,
+      highlightedSentence: -1,
+      sentenceMarks: const [],
+      wordMarks: const [],
+      sentenceRanges: const [],
+      clearActiveWord: true,
+    );
     await _saveProgress();
   }
 

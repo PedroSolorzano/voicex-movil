@@ -14,8 +14,7 @@ const _textChannel = MethodChannel('voicex/shared_epub');
 class WordSheet extends StatefulWidget {
   final String word;
 
-  /// Book language: definitions are only offered for English, since the
-  /// dictionary behind them is English-only.
+  /// Book language: picks which dictionary to consult.
   final String language;
 
   /// Plays the word. Returns false when no audio could be produced.
@@ -40,12 +39,13 @@ class _WordSheetState extends State<WordSheet> {
   @override
   void initState() {
     super.initState();
-    if (widget.language == 'en') _lookup();
+    _lookup();
   }
 
   Future<void> _lookup() async {
     setState(() => _loading = true);
-    final entry = await DictionaryService.lookup(widget.word);
+    final entry = await DictionaryService.lookup(widget.word,
+        language: widget.language);
     if (!mounted) return;
     setState(() {
       _entry = entry;
@@ -142,13 +142,7 @@ class _WordSheetState extends State<WordSheet> {
               ],
             ),
             const SizedBox(height: 16),
-            if (widget.language != 'en')
-              Text(
-                'Las definiciones solo están disponibles en inglés. Usa "Otra '
-                'app" para traducir.',
-                style: theme.textTheme.bodySmall,
-              )
-            else if (_loading)
+            if (_loading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 12),
                 child: Center(child: CircularProgressIndicator()),

@@ -31,6 +31,10 @@ const _charsPerSecond = 14.0;
 /// How long after the last scroll event the reading position is persisted.
 const _scrollSettleDelay = Duration(milliseconds: 900);
 
+/// How much of a paragraph may hang off the top before it stops counting as
+/// "where the reader is". 5 % of the viewport.
+const _partiallyVisible = 0.05;
+
 /// How much to pre-synthesize for offline listening.
 enum _DownloadScope { chapter, ahead, book }
 
@@ -53,6 +57,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   bool _chromeVisible = true;
   Timer? _scrollSettleTimer;
 
+  /// True while an automatic scroll is animating.
+  ///
+  /// The auto-scroll fires its own scroll events, and acting on those was the
+  /// bug behind "pausar y perder el sitio": the events queued a position update
+  /// that landed *after* playback stopped and rewrote the position with the
+  /// paragraph sitting above the one being read.
+  bool _programmaticScroll = false;
+  Timer? _programmaticScrollTimer;
+
   /// Separate from the book player: hearing one word must not move the
   /// listening position.
   final _wordPlayer = ja.AudioPlayer();
@@ -70,6 +83,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   @override
   void dispose() {
     _wordPlayer.dispose();
+    _programmaticScrollTimer?.cancel();
     _scrollSettleTimer?.cancel();
     _positionsListener.itemPositions.removeListener(_onScroll);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -80,19 +94,26 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   /// position. Without this, reading without audio saved nothing and reopening
   /// the book jumped back to wherever the audio had stopped.
   void _onScroll() {
+    // Only a scroll the reader performed says anything about where they are.
+    if (_programmaticScroll) return;
+
     final positions = _positionsListener.itemPositions.value;
     if (positions.isEmpty) return;
 
-    final topmost = positions
-        .where((p) => p.itemTrailingEdge > 0)
-        .fold<ItemPosition?>(null,
-            (best, p) => best == null || p.itemLeadingEdge < best.itemLeadingEdge ? p : best);
-    if (topmost == null) return;
+    // The first paragraph that is actually on screen, not merely clipping it.
+    // Taking the topmost with any visible pixel picked the paragraph half
+    // scrolled off the top, which is the one already read.
+    final candidates = positions
+        .where((p) => p.itemLeadingEdge >= -_partiallyVisible)
+        .toList()
+      ..sort((a, b) => a.itemLeadingEdge.compareTo(b.itemLeadingEdge));
+    if (candidates.isEmpty) return;
+    final index = candidates.first.index;
 
     _scrollSettleTimer?.cancel();
     _scrollSettleTimer = Timer(_scrollSettleDelay, () {
       if (!mounted) return;
-      ref.read(readerProvider.notifier).updateReadingPosition(topmost.index);
+      ref.read(readerProvider.notifier).updateReadingPosition(index);
     });
   }
 
@@ -116,10 +137,20 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
   void _scrollTo(int index, {double alignment = 0.15}) {
     if (!_scrollController.isAttached) return;
+
+    // Suppress position tracking for the whole animation plus a margin: the
+    // list keeps emitting settling events for a beat after it stops.
+    const duration = Duration(milliseconds: 350);
+    _programmaticScroll = true;
+    _scrollSettleTimer?.cancel();
+    _programmaticScrollTimer?.cancel();
+    _programmaticScrollTimer = Timer(duration + const Duration(milliseconds: 250),
+        () => _programmaticScroll = false);
+
     _scrollController.scrollTo(
       index: index,
       alignment: alignment,
-      duration: const Duration(milliseconds: 350),
+      duration: duration,
       curve: Curves.easeInOut,
     );
   }
@@ -134,6 +165,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         settings.readerTheme, MediaQuery.platformBrightnessOf(context));
 
     ref.listen<ReaderState>(readerProvider, (prev, next) {
+      // Playback started or stopped: drop anything the previous state queued,
+      // so a pending update cannot be applied under the new one.
+      if (prev?.status != next.status) {
+        _scrollSettleTimer?.cancel();
+      }
+
       final chapterChanged = prev?.chapterIndex != next.chapterIndex;
       final paragraphChanged = prev?.paragraphIndex != next.paragraphIndex;
       if (!chapterChanged && !paragraphChanged) return;
