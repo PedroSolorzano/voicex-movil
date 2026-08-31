@@ -173,6 +173,23 @@ class BookmarkRepo {
 
 // ─── Audio Cache ─────────────────────────────────────────────────────────────
 
+/// What one engine occupies for one book.
+class BookEngineUsage {
+  final String engine;
+  final int cacheKb;
+  final int downloadsKb;
+  final int items;
+
+  const BookEngineUsage({
+    required this.engine,
+    required this.cacheKb,
+    required this.downloadsKb,
+    required this.items,
+  });
+
+  int get totalKb => cacheKb + downloadsKb;
+}
+
 class AudioCacheRepo {
   Future<Database> get _db => getDatabase();
 
@@ -404,6 +421,67 @@ class AudioCacheRepo {
       await _deleteCachedFile(row['file_path'] as String);
     }
     await db.delete('audio_cache', where: 'pinned = 1');
+  }
+
+  /// Usage for one book, grouped by engine.
+  ///
+  /// The engine is the prefix of the cache key ("kokoro-af_bella"), so no extra
+  /// column is needed: the key already names what produced the audio.
+  Future<List<BookEngineUsage>> usageForBook(int bookId) async {
+    final db = await _db;
+    final rows = await db.rawQuery(
+      'SELECT voice_id, pinned, COUNT(*) AS n, SUM(file_size_kb) AS kb '
+      'FROM audio_cache WHERE book_id = ? GROUP BY voice_id, pinned',
+      [bookId],
+    );
+
+    final byEngine = <String, BookEngineUsage>{};
+    for (final r in rows) {
+      final key = (r['voice_id'] as String?) ?? '';
+      final engine = key.contains('-') ? key.split('-').first : 'edge';
+      final kb = (r['kb'] as int?) ?? 0;
+      final n = (r['n'] as int?) ?? 0;
+      final pinned = (r['pinned'] as int?) == 1;
+
+      final current = byEngine[engine] ??
+          BookEngineUsage(engine: engine, cacheKb: 0, downloadsKb: 0, items: 0);
+      byEngine[engine] = BookEngineUsage(
+        engine: engine,
+        cacheKb: current.cacheKb + (pinned ? 0 : kb),
+        downloadsKb: current.downloadsKb + (pinned ? kb : 0),
+        items: current.items + n,
+      );
+    }
+
+    final list = byEngine.values.toList()
+      ..sort((a, b) => (b.cacheKb + b.downloadsKb)
+          .compareTo(a.cacheKb + a.downloadsKb));
+    return list;
+  }
+
+  /// Deletes one book's audio, optionally narrowed to a single [engine].
+  Future<void> deleteForBook(int bookId, {String? engine}) async {
+    final db = await _db;
+    final where = engine == null
+        ? 'book_id = ?'
+        : 'book_id = ? AND voice_id LIKE ?';
+    final args = engine == null ? [bookId] : [bookId, '$engine-%'];
+
+    final rows = await db.query('audio_cache', where: where, whereArgs: args);
+    for (final row in rows) {
+      await _deleteCachedFile(row['file_path'] as String);
+    }
+    await db.delete('audio_cache', where: where, whereArgs: args);
+  }
+
+  /// Wipes everything: cache and downloads, every book.
+  Future<void> deleteEverything() async {
+    final db = await _db;
+    final rows = await db.query('audio_cache');
+    for (final row in rows) {
+      await _deleteCachedFile(row['file_path'] as String);
+    }
+    await db.delete('audio_cache');
   }
 
   /// Size in KB split by whether it was downloaded on purpose.

@@ -9,6 +9,7 @@ import '../../storage/repositories.dart';
 import '../../tts/tts_factory.dart';
 import '../../tts/kokoro_tts_provider.dart';
 import '../../tts/piper_tts_provider.dart';
+import '../providers/reader_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/voices_provider.dart';
 
@@ -28,6 +29,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _previewPlayer = ja.AudioPlayer();
   int _cacheSizeKb = 0;
   int _downloadsKb = 0;
+  List<BookEngineUsage> _bookUsage = const [];
   Timer? _saveDebounce;
   bool _testingServer = false;
   bool _serverOk = false;
@@ -103,10 +105,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _loadCacheSize() async {
     final size = await _cacheRepo.sizeBreakdown();
+    // The reader sits below this screen in the stack, so its provider still
+    // holds the open book: no need to thread an id through the route.
+    final bookId = ref.read(readerProvider).book?.id;
+    final usage =
+        bookId == null ? const <BookEngineUsage>[] : await _cacheRepo.usageForBook(bookId);
+
     if (!mounted) return;
     setState(() {
       _cacheSizeKb = size.cacheKb;
       _downloadsKb = size.downloadsKb;
+      _bookUsage = usage;
     });
   }
 
@@ -493,9 +502,51 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   label: const Text('Borrar descargas'),
                   onPressed: _downloadsKb > 0 ? _deleteDownloads : null,
                 ),
+                TextButton.icon(
+                  icon: const Icon(Icons.delete_forever_outlined),
+                  label: const Text('Borrar todo'),
+                  style: TextButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.error),
+                  onPressed: (_cacheSizeKb + _downloadsKb) > 0
+                      ? _deleteEverything
+                      : null,
+                ),
               ],
             ),
           ]),
+
+          if (_bookUsage.isNotEmpty)
+            _Section(title: 'Este libro', children: [
+              Text(
+                ref.read(readerProvider).book?.title ?? '',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Cada motor guarda su propio audio, así que puedes liberar el de '
+                'uno sin perder el de los demás.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 8),
+              for (final usage in _bookUsage)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: Text(providerLabel(usage.engine)),
+                  subtitle: Text(_usageLabel(usage),
+                      style: Theme.of(context).textTheme.labelSmall),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    tooltip: 'Borrar el audio de ${providerLabel(usage.engine)}',
+                    onPressed: () => _deleteBookEngine(usage),
+                  ),
+                ),
+              TextButton.icon(
+                icon: const Icon(Icons.delete_sweep_outlined),
+                label: const Text('Borrar todo lo de este libro'),
+                onPressed: () => _deleteBookEngine(null),
+              ),
+            ]),
 
           const SizedBox(height: 24),
           Center(
@@ -564,6 +615,78 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
       content: Text('Caché limpiada. Las descargas se conservan.'),
     ));
+  }
+
+  static String _usageLabel(BookEngineUsage u) {
+    final parts = <String>[];
+    if (u.downloadsKb > 0) {
+      parts.add('${(u.downloadsKb / 1024).toStringAsFixed(1)} MB descargados');
+    }
+    if (u.cacheKb > 0) {
+      parts.add('${(u.cacheKb / 1024).toStringAsFixed(1)} MB en caché');
+    }
+    parts.add('${u.items} párrafos');
+    return parts.join(' · ');
+  }
+
+  /// Frees one engine's audio for the open book, or all of it when [usage] is
+  /// null. Downloads are involved, so it confirms first.
+  Future<void> _deleteBookEngine(BookEngineUsage? usage) async {
+    final book = ref.read(readerProvider).book;
+    if (book?.id == null) return;
+
+    final label =
+        usage == null ? 'todo el audio de este libro' : providerLabel(usage.engine);
+    final mb = usage == null
+        ? _bookUsage.fold<int>(0, (sum, u) => sum + u.totalKb) / 1024
+        : usage.totalKb / 1024;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('Borrar $label'),
+        content: Text('Se liberarán ${mb.toStringAsFixed(1)} MB de '
+            '"${book!.title}". Lo que estuviera descargado habrá que volver a '
+            'generarlo.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Borrar')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    await _cacheRepo.deleteForBook(book!.id!, engine: usage?.engine);
+    await _loadCacheSize();
+  }
+
+  /// Everything, every book. The nuclear option.
+  Future<void> _deleteEverything() async {
+    final mb = ((_cacheSizeKb + _downloadsKb) / 1024).toStringAsFixed(1);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Borrar todo el audio'),
+        content: Text('Se eliminarán $mb MB de todos los libros y todos los '
+            'motores, incluidas las descargas para escuchar sin conexión.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Borrar todo')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    await _cacheRepo.deleteEverything();
+    await _loadCacheSize();
   }
 
   /// Downloads cost hours of synthesis, so this one asks first.
