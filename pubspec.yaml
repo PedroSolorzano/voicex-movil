@@ -1,7 +1,7 @@
 name: voicex_movil
 description: "EPUB reader with neural TTS voices for Android."
 publish_to: 'none'
-version: 0.5.1-preview.1+1
+version: 0.5.2-preview.1+1
 
 environment:
   sdk: ^3.11.5
@@ -50,6 +50,9 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  # Runs the real SQLite schema on the desktop, so the cache repositories can
+  # be tested without a device.
+  sqflite_common_ffi: ^2.3.3
 
 flutter:
   uses-material-design: true

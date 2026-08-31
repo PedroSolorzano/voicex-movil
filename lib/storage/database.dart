@@ -1,19 +1,32 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 Database? _db;
+String? _pathOverride;
 
 Future<Database> getDatabase() async {
   if (_db != null) return _db!;
-  final dbPath = await getDatabasesPath();
   _db = await openDatabase(
-    join(dbPath, 'voicex.db'),
+    _pathOverride ?? join(await getDatabasesPath(), 'voicex.db'),
     version: 6,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onConfigure: _onConfigure,
   );
   return _db!;
+}
+
+/// Points the repositories at [path] — `inMemoryDatabasePath` in tests.
+///
+/// The connection is a module-level singleton, so tests need a way to drop it
+/// between cases; without this the schema and rows of one test leak into the
+/// next.
+@visibleForTesting
+Future<void> useDatabaseAt(String path) async {
+  await _db?.close();
+  _db = null;
+  _pathOverride = path;
 }
 
 // sqflite opens every connection with foreign keys OFF. Without this the
