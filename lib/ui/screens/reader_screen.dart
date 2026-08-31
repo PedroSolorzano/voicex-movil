@@ -165,6 +165,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         settings.readerTheme, MediaQuery.platformBrightnessOf(context));
 
     ref.listen<ReaderState>(readerProvider, (prev, next) {
+      final startedPlaying = prev?.status != next.status &&
+          next.status == ReaderStatus.playing;
+
       // Playback started or stopped: drop anything the previous state queued,
       // so a pending update cannot be applied under the new one.
       if (prev?.status != next.status) {
@@ -173,6 +176,18 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
       final chapterChanged = prev?.chapterIndex != next.chapterIndex;
       final paragraphChanged = prev?.paragraphIndex != next.paragraphIndex;
+
+      // Resuming brings the view back to what is being read. Without this,
+      // scrolling away and pressing play left the highlight off screen: the
+      // paragraph had not changed, so nothing scrolled.
+      if (startedPlaying && settings.followAudioScroll) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _lastParagraphIndex = next.paragraphIndex;
+          _scrollTo(next.paragraphIndex);
+        });
+        return;
+      }
+
       if (!chapterChanged && !paragraphChanged) return;
 
       // Follow along only while audio drives the position; during silent

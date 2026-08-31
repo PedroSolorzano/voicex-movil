@@ -193,6 +193,13 @@ class ReaderNotifier extends Notifier<ReaderState> {
   bool _synthesizing = false;
   bool _downloadCancelled = false;
 
+  /// True from the first play until the reader presses Stop or leaves the book.
+  ///
+  /// Advancing between paragraphs passes through a brief "stopped" state, and
+  /// judging by status alone left a window there in which a stray scroll event
+  /// could rewrite the reading position. A session outlives those transitions.
+  bool _listening = false;
+
   /// Where the clip currently in the player came from. Resuming checks against
   /// this so the highlight can never end up on a different paragraph than the
   /// one being spoken.
@@ -582,6 +589,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
     if (book == null || para == null) return;
 
     final settings = _settings;
+    _listening = true;
     state = state.copyWith(
         status: ReaderStatus.synthesizing, statusMessage: 'Sintetizando…');
     _synthesizing = true;
@@ -739,7 +747,13 @@ class ReaderNotifier extends Notifier<ReaderState> {
     state = state.copyWith(status: ReaderStatus.playing);
   }
 
-  Future<void> stop() async {
+  /// The Stop button: ends the listening session, so scrolling drives the
+  /// position again for silent reading.
+  Future<void> stop() => _stopPlayback(endSession: true);
+
+  /// Used between paragraphs, where the session must survive.
+  Future<void> _stopPlayback({required bool endSession}) async {
+    if (endSession) _listening = false;
     await _saveProgress(offsetMs: audioHandler.elapsedMs);
     await audioHandler.stop();
     // The sentence highlight stays: it is the "you were here" marker. Only the
@@ -876,7 +890,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
   Future<void> navigateChapter(int index, {int paragraph = 0}) async {
     _prefetchToken++;
-    await stop();
+    await _stopPlayback(endSession: false);
     state = state.copyWith(
       chapterIndex: index,
       paragraphIndex: paragraph,
@@ -893,7 +907,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
   Future<void> navigateParagraph(int index) async {
     _prefetchToken++;
-    await stop();
+    await _stopPlayback(endSession: false);
     state = state.copyWith(
       paragraphIndex: index,
       highlightedSentence: -1,
@@ -909,9 +923,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// position without touching playback, so picking up the audio later resumes
   /// exactly where the eyes stopped.
   Future<void> updateReadingPosition(int paragraphIndex) async {
-    // Only genuine silent reading moves the position. With a clip loaded — even
-    // paused — the audio decides where the reader is.
-    if (state.isOnAudio) return;
+    // Only genuine silent reading moves the position: while a listening session
+    // is open the audio decides where the reader is, even between paragraphs.
+    if (_listening || state.isOnAudio) return;
     if (paragraphIndex == state.paragraphIndex) return;
     final chapter = state.currentChapter;
     if (chapter == null ||
@@ -1145,6 +1159,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
   }
 
   void cleanup() {
+    // Leaving the book must not lose the last few seconds of progress.
+    unawaited(_saveProgress(offsetMs: audioHandler.elapsedMs));
+    _listening = false;
     _loadedChapter = -1;
     _loadedParagraph = -1;
     _prefetchToken++;
