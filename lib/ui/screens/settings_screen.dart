@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,7 +27,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _cacheRepo = AudioCacheRepo();
   final _previewPlayer = ja.AudioPlayer();
   int _cacheSizeKb = 0;
-  bool _saving = false;
+  int _downloadsKb = 0;
+  Timer? _saveDebounce;
   bool _testingServer = false;
   bool _serverOk = false;
   String? _serverStatus;
@@ -51,6 +53,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   void dispose() {
+    // Leaving the screen must not drop a change still waiting on the debounce.
+    if (_saveDebounce?.isActive ?? false) {
+      _saveDebounce!.cancel();
+      unawaited(ref.read(settingsProvider.notifier).save(_settings));
+    }
     _previewPlayer.dispose();
     _kokoroUrlController.dispose();
     super.dispose();
@@ -95,14 +102,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _loadCacheSize() async {
-    final kb = await _cacheRepo.totalSizeKb();
-    if (mounted) setState(() => _cacheSizeKb = kb);
+    final size = await _cacheRepo.sizeBreakdown();
+    if (!mounted) return;
+    setState(() {
+      _cacheSizeKb = size.cacheKb;
+      _downloadsKb = size.downloadsKb;
+    });
   }
 
   AppSettings get _settings =>
       _draft ?? ref.read(settingsProvider).valueOrNull ?? AppSettings();
 
-  void _update(AppSettings next) => setState(() => _draft = next);
+  /// Applies a change straight away and persists it shortly after.
+  ///
+  /// Settings used to need an explicit Save at the bottom of a long page, so
+  /// switching engine meant scrolling past everything to confirm it. The draft
+  /// still exists so the UI reacts instantly; only the write is debounced, and
+  /// a drag across a slider does not become one write per pixel.
+  void _update(AppSettings next) {
+    setState(() => _draft = next);
+    _saveDebounce?.cancel();
+    _saveDebounce = Timer(const Duration(milliseconds: 400), _persist);
+  }
+
+  Future<void> _persist() async {
+    _saveDebounce?.cancel();
+    _saveDebounce = null;
+    await ref.read(settingsProvider.notifier).save(_settings);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -431,12 +458,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ]),
 
-          _Section(title: 'Caché de audio', children: [
-            Text(
-                'Uso actual: ${(_cacheSizeKb / 1024).toStringAsFixed(1)} MB / ${s.cacheMaxMb} MB'),
+          _Section(title: 'Almacenamiento', children: [
+            Text('Caché temporal: '
+                '${(_cacheSizeKb / 1024).toStringAsFixed(1)} MB / ${s.cacheMaxMb} MB'),
+            Text('Descargas: ${(_downloadsKb / 1024).toStringAsFixed(1)} MB',
+                style: Theme.of(context).textTheme.bodyMedium),
             const SizedBox(height: 8),
             _LabelledSlider(
-              label: 'Máximo',
+              label: 'Máximo caché',
               value: s.cacheMaxMb.toDouble(),
               min: 50,
               max: 500,
@@ -444,22 +473,41 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               display: '${s.cacheMaxMb} MB',
               onChanged: (v) => _update(s.copyWith(cacheMaxMb: v.toInt())),
             ),
-            TextButton.icon(
-              icon: const Icon(Icons.delete_sweep_outlined),
-              label: const Text('Limpiar caché'),
-              onPressed: _clearCache,
+            const SizedBox(height: 4),
+            Text(
+              'La caché se llena sola al escuchar y el sistema la va reciclando. '
+              'Las descargas son las que pediste tú y no se borran solas.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                TextButton.icon(
+                  icon: const Icon(Icons.delete_sweep_outlined),
+                  label: const Text('Limpiar caché'),
+                  onPressed: _clearCache,
+                ),
+                TextButton.icon(
+                  icon: const Icon(Icons.folder_delete_outlined),
+                  label: const Text('Borrar descargas'),
+                  onPressed: _downloadsKb > 0 ? _deleteDownloads : null,
+                ),
+              ],
             ),
           ]),
 
           const SizedBox(height: 24),
-          FilledButton(
-            onPressed: _saving ? null : _save,
-            child: _saving
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Guardar'),
+          Center(
+            child: Text(
+              'Los cambios se guardan solos.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.5),
+                  ),
+            ),
           ),
           const SizedBox(height: 32),
           if (_packageInfo != null)
@@ -478,15 +526,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ],
       ),
     );
-  }
-
-  Future<void> _save() async {
-    setState(() => _saving = true);
-    await ref.read(settingsProvider.notifier).save(_settings);
-    if (!mounted) return;
-    setState(() => _saving = false);
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Ajustes guardados')));
   }
 
   /// "1.25× · pausado". The number alone reads backwards for phoneme length.
@@ -516,8 +555,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ));
   }
 
+  /// Wipes the temporary cache only. Handy after switching engines: audio
+  /// cached under one engine is what made comparisons misleading.
   Future<void> _clearCache() async {
     await _cacheRepo.clearAll();
+    await _loadCacheSize();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Caché limpiada. Las descargas se conservan.'),
+    ));
+  }
+
+  /// Downloads cost hours of synthesis, so this one asks first.
+  Future<void> _deleteDownloads() async {
+    final mb = (_downloadsKb / 1024).toStringAsFixed(1);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Borrar descargas'),
+        content: Text('Se eliminarán $mb MB de audio descargado para escuchar '
+            'sin conexión. Volver a generarlo puede llevar horas.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Borrar')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    await _cacheRepo.deleteDownloads();
     await _loadCacheSize();
   }
 

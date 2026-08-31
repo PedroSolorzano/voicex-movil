@@ -381,13 +381,46 @@ class AudioCacheRepo {
     await db.delete('audio_cache', where: 'last_accessed < ?', whereArgs: [cutoff]);
   }
 
+  /// Clears the temporary cache, **keeping downloads**.
+  ///
+  /// Pinned entries are audio the reader deliberately downloaded for offline
+  /// listening — often hours of synthesis. Wiping those from a button labelled
+  /// "clear cache" would be a nasty surprise; [deleteDownloads] exists for when
+  /// that is really what is wanted.
   Future<void> clearAll() async {
     final db = await _db;
-    final rows = await db.query('audio_cache');
+    final rows = await db.query('audio_cache', where: 'pinned = 0');
     for (final row in rows) {
       await _deleteCachedFile(row['file_path'] as String);
     }
-    await db.delete('audio_cache');
+    await db.delete('audio_cache', where: 'pinned = 0');
+  }
+
+  /// Deletes the downloaded (pinned) audio.
+  Future<void> deleteDownloads() async {
+    final db = await _db;
+    final rows = await db.query('audio_cache', where: 'pinned = 1');
+    for (final row in rows) {
+      await _deleteCachedFile(row['file_path'] as String);
+    }
+    await db.delete('audio_cache', where: 'pinned = 1');
+  }
+
+  /// Size in KB split by whether it was downloaded on purpose.
+  Future<({int cacheKb, int downloadsKb})> sizeBreakdown() async {
+    final db = await _db;
+    final rows = await db.rawQuery(
+        'SELECT pinned, SUM(file_size_kb) AS kb FROM audio_cache GROUP BY pinned');
+    var cache = 0, downloads = 0;
+    for (final r in rows) {
+      final kb = (r['kb'] as int?) ?? 0;
+      if ((r['pinned'] as int?) == 1) {
+        downloads = kb;
+      } else {
+        cache = kb;
+      }
+    }
+    return (cacheKb: cache, downloadsKb: downloads);
   }
 
   Future<void> _evictToTarget(int targetKb) async {
