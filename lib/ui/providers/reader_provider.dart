@@ -154,6 +154,16 @@ class ReaderState {
   bool get isBusy =>
       status == ReaderStatus.playing || status == ReaderStatus.synthesizing;
 
+  /// True whenever a clip is loaded and the reader is sitting on it — playing,
+  /// about to play, or paused part-way through.
+  ///
+  /// Distinct from [isBusy] because *paused* matters here: pausing and then
+  /// scrolling used to move the reading position, and resuming carried on with
+  /// the old clip, so the highlight ended up on one paragraph while the audio
+  /// was reading another.
+  bool get isOnAudio =>
+      isBusy || status == ReaderStatus.paused;
+
   /// Fraction of the book already consumed, counting paragraphs across chapters.
   double get progressFraction {
     final b = book;
@@ -182,6 +192,12 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
   bool _synthesizing = false;
   bool _downloadCancelled = false;
+
+  /// Where the clip currently in the player came from. Resuming checks against
+  /// this so the highlight can never end up on a different paragraph than the
+  /// one being spoken.
+  int _loadedChapter = -1;
+  int _loadedParagraph = -1;
 
   /// Cover art path, for the lock-screen player. Lives in the books table, not
   /// in the parsed Book, so it is fetched separately on load.
@@ -611,6 +627,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
       );
 
       _publishNowPlaying(book, para);
+      _loadedChapter = state.chapterIndex;
+      _loadedParagraph = para.index;
       await audioHandler.playFile(audio.path,
           startMs: startMs, speed: settings.playbackSpeed);
 
@@ -705,6 +723,18 @@ class ReaderNotifier extends Notifier<ReaderState> {
   }
 
   Future<void> resume() async {
+    // Safety net: if anything moved the position while paused, snap back to the
+    // paragraph the loaded clip actually belongs to. Resuming into a mismatch
+    // leaves the highlight on one paragraph while another is read aloud.
+    if (_loadedParagraph >= 0 &&
+        (state.paragraphIndex != _loadedParagraph ||
+            state.chapterIndex != _loadedChapter)) {
+      dev.log('[Reader] Resume re-synced to ch$_loadedChapter/$_loadedParagraph');
+      state = state.copyWith(
+        chapterIndex: _loadedChapter,
+        paragraphIndex: _loadedParagraph,
+      );
+    }
     await audioHandler.play();
     state = state.copyWith(status: ReaderStatus.playing);
   }
@@ -879,7 +909,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// position without touching playback, so picking up the audio later resumes
   /// exactly where the eyes stopped.
   Future<void> updateReadingPosition(int paragraphIndex) async {
-    if (state.isBusy) return;
+    // Only genuine silent reading moves the position. With a clip loaded — even
+    // paused — the audio decides where the reader is.
+    if (state.isOnAudio) return;
     if (paragraphIndex == state.paragraphIndex) return;
     final chapter = state.currentChapter;
     if (chapter == null ||
@@ -1113,6 +1145,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
   }
 
   void cleanup() {
+    _loadedChapter = -1;
+    _loadedParagraph = -1;
     _prefetchToken++;
     // The handler is a long-lived singleton shared with the media service —
     // detach this screen's callbacks rather than disposing it.

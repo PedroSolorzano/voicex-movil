@@ -178,7 +178,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       // Follow along only while audio drives the position; during silent
       // reading the user owns the scroll.
       final shouldFollow = chapterChanged ||
-          (settings.followAudioScroll && next.isBusy);
+          (settings.followAudioScroll && next.isOnAudio);
       if (shouldFollow && next.paragraphIndex != _lastParagraphIndex) {
         _lastParagraphIndex = next.paragraphIndex;
         WidgetsBinding.instance.addPostFrameCallback((_) {
