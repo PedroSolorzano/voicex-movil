@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as dev;
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -430,19 +431,31 @@ class ReaderNotifier extends Notifier<ReaderState> {
   ///
   /// Piper additionally folds in the pace, because `length_scale` is baked into
   /// the samples — changing it must invalidate what was downloaded.
-  String _cacheKeyFor(String engine, AppSettings settings, Book book) {
+  static String _cacheKeyFor(String engine, AppSettings settings, Book book) {
     final raw = switch (engine) {
       'piper' => 'piper-${settings.voiceForEngine('piper', book.language)}'
-          '-${settings.piperLengthScale.toStringAsFixed(2)}',
+          '${piperPaceSuffix(settings.piperLengthScale)}',
       'kokoro' => 'kokoro-${settings.voiceForEngine('kokoro', book.language)}',
       'android' => 'android-${book.language}',
       _ => 'edge-${settings.voiceForEngine('edge', book.language)}',
     };
-    // The key is also embedded in the cache filename, so it must survive as a
-    // path segment. An earlier version used ':' and '@' here, which made every
-    // file write fail while the progress bar still marched to 100 %.
-    return raw.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+    return sanitizeCacheKey(raw);
   }
+
+  @visibleForTesting
+  static String cacheKeyFor(String engine, AppSettings settings, Book book) =>
+      _cacheKeyFor(engine, settings, book);
+
+  /// Tail of a Piper cache key: the pace is baked into the samples, so audio
+  /// downloaded at one `length_scale` cannot serve another.
+  static String piperPaceSuffix(double lengthScale) =>
+      sanitizeCacheKey('-${lengthScale.toStringAsFixed(2)}');
+
+  /// The key is embedded in the cache filename, so it must survive as a path
+  /// segment. An earlier version used ':' and '@' here, which made every file
+  /// write fail while the progress bar still marched to 100 %.
+  static String sanitizeCacheKey(String raw) =>
+      raw.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
 
   /// Key for the engine the user has selected.
   String _cacheKeyVoice(AppSettings settings, Book book) =>
@@ -529,7 +542,11 @@ class ReaderNotifier extends Notifier<ReaderState> {
     }
     final result = await provider.synthesize(
       text: para.rawText,
-      voice: settings.voiceFor(book.language),
+      // The engine that is about to run, not the one selected. Asking Edge for
+      // 'af_bella' or 'es_AR-daniela-high' — names from Kokoro's and Piper's
+      // catalogues — made every fallback come back empty, which is exactly the
+      // moment the fallback exists to cover.
+      voice: settings.voiceForEngine(_activeEngineKind, book.language),
       rate: settings.edgeRate,
       volume: settings.edgeVolume,
     );
@@ -1017,9 +1034,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
     final settings = _settings;
     // Resolve the engine up front: a download must be stored under whatever
-    // actually synthesizes it, not under what was selected.
+    // actually synthesizes it, not under what was selected. This first reading
+    // only decides what to skip; each paragraph re-derives its own key below.
     await _provider(settings, book.language);
-    final voice = _cacheKeyFor(_activeEngineKind, settings, book);
+    final skipKey = _cacheKeyFor(_activeEngineKind, settings, book);
     final docsDir = await getApplicationDocumentsDirectory();
 
     final totalParagraphs = [
@@ -1043,7 +1061,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
         if (_downloadCancelled) break;
 
         final alreadyPinned = await _cacheRepo.isPinnedParagraph(
-            book.id!, chapterIdx, para.index, voice, _cacheFormatTag);
+            book.id!, chapterIdx, para.index, skipKey, _cacheFormatTag);
         if (alreadyPinned) {
           state = state.copyWith(downloadDone: state.downloadDone + 1);
           continue;
@@ -1051,9 +1069,14 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
         try {
           final provider = await _provider(settings, book.language);
+          // Re-derived per paragraph: the server can drop out mid-download, and
+          // the key fixed before the loop would then file Edge's audio under
+          // Kokoro's name — audio that plays with the wrong voice and never
+          // gets regenerated because the row looks correct.
+          final voice = _cacheKeyFor(_activeEngineKind, settings, book);
           final result = await provider.synthesize(
             text: para.rawText,
-            voice: settings.voiceFor(book.language),
+            voice: settings.voiceForEngine(_activeEngineKind, book.language),
             rate: settings.edgeRate,
             volume: settings.edgeVolume,
           );

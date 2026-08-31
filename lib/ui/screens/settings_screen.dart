@@ -592,11 +592,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   /// Warns once when the Piper pace moves away from what was downloaded.
   Future<void> _warnPaceInvalidates(double value) async {
-    final downloaded = await _cacheRepo.countPinnedForPrefix('piper-');
+    final downloaded = await _cacheRepo.countPinnedByKey(prefix: 'piper-');
     if (!mounted || downloaded == 0) return;
 
-    final tag = 'piper-${value.toStringAsFixed(2)}'.replaceAll('.', '_');
-    final atThisPace = await _cacheRepo.countPinnedForPrefix(tag);
+    // The pace closes the key ('piper-<voice>-1_25'), it does not open it. The
+    // warning used to look for it as a prefix, never found it, and so fired at
+    // every nudge of the slider — including a nudge back to the value the
+    // downloads were made at.
+    final atThisPace = await _cacheRepo.countPinnedByKey(
+      prefix: 'piper-',
+      suffix: ReaderNotifier.piperPaceSuffix(value),
+    );
     if (!mounted || atThisPace > 0) return;
 
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(

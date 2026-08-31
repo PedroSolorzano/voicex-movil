@@ -193,6 +193,13 @@ class BookEngineUsage {
 class AudioCacheRepo {
   Future<Database> get _db => getDatabase();
 
+  /// Path to the cached audio for one paragraph, or null if there is none.
+  ///
+  /// Downloads come first and the search walks every candidate: a paragraph
+  /// played once and later downloaded used to hold two rows — the temporary
+  /// copy and the pinned one — and the oldest won. Once the OS cleared the
+  /// temp directory the reader re-synthesized a paragraph it had downloaded
+  /// hours before, falling back to Edge with the home server out of reach.
   Future<String?> get(int bookId, int chapterIdx, int paraIdx, String voiceId,
       String speedHash) async {
     final db = await _db;
@@ -201,47 +208,62 @@ class AudioCacheRepo {
       where:
           'book_id=? AND chapter_idx=? AND para_idx=? AND voice_id=? AND speed_hash=?',
       whereArgs: [bookId, chapterIdx, paraIdx, voiceId, speedHash],
+      orderBy: 'pinned DESC, id DESC',
     );
-    if (rows.isEmpty) return null;
-    final filePath = rows.first['file_path'] as String;
-    final file = File(filePath);
-    // Missing *or* empty: a truncated write would otherwise be served forever,
-    // and the player only reports a generic "source error".
-    if (!file.existsSync() || file.lengthSync() < 512) {
-      try {
-        if (file.existsSync()) file.deleteSync();
-      } catch (_) {}
-      await db.delete('audio_cache',
-          where: 'file_path = ?', whereArgs: [filePath]);
-      return null;
+    for (final row in rows) {
+      final filePath = row['file_path'] as String;
+      final file = File(filePath);
+      // Missing *or* empty: a truncated write would otherwise be served
+      // forever, and the player only reports a generic "source error".
+      if (!file.existsSync() || file.lengthSync() < 512) {
+        try {
+          if (file.existsSync()) file.deleteSync();
+        } catch (_) {}
+        await db.delete('audio_cache',
+            where: 'file_path = ?', whereArgs: [filePath]);
+        continue;
+      }
+      await _touch(row['id'] as int);
+      return filePath;
     }
-    await _touch(rows.first['id'] as int);
-    return filePath;
+    return null;
   }
 
   Future<void> save(int bookId, int chapterIdx, int paraIdx, String voiceId,
       String speedHash, String filePath, int fileSizeKb) async {
-    final db = await _db;
-    await db.insert(
-      'audio_cache',
-      {
-        'book_id': bookId,
-        'chapter_idx': chapterIdx,
-        'para_idx': paraIdx,
-        'voice_id': voiceId,
-        'speed_hash': speedHash,
-        'file_path': filePath,
-        'file_size_kb': fileSizeKb,
-        'pinned': 0,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await _replaceEntry(bookId, chapterIdx, paraIdx, voiceId, speedHash,
+        filePath, fileSizeKb, pinned: false);
   }
 
   // Saves as pinned (permanent download — not subject to LRU eviction).
   Future<void> savePin(int bookId, int chapterIdx, int paraIdx, String voiceId,
       String speedHash, String filePath, int fileSizeKb) async {
+    await _replaceEntry(bookId, chapterIdx, paraIdx, voiceId, speedHash,
+        filePath, fileSizeKb, pinned: true);
+  }
+
+  /// Writes one row per (paragraph, voice, format), dropping the temporary copy
+  /// it supersedes.
+  ///
+  /// `file_path` is the only UNIQUE column, so plain inserts piled up a second
+  /// row every time the same paragraph was cached under a new path — the temp
+  /// file and the download live in different directories. The stale rows then
+  /// competed in [get]. A pinned row is never removed here: only
+  /// [deleteDownloads] retires a download.
+  Future<void> _replaceEntry(int bookId, int chapterIdx, int paraIdx,
+      String voiceId, String speedHash, String filePath, int fileSizeKb,
+      {required bool pinned}) async {
     final db = await _db;
+    const where =
+        'book_id=? AND chapter_idx=? AND para_idx=? AND voice_id=? AND speed_hash=? '
+        'AND pinned=0 AND file_path<>?';
+    final args = [bookId, chapterIdx, paraIdx, voiceId, speedHash, filePath];
+    final stale = await db.query('audio_cache', where: where, whereArgs: args);
+    for (final row in stale) {
+      await _deleteCachedFile(row['file_path'] as String);
+    }
+    await db.delete('audio_cache', where: where, whereArgs: args);
+
     await db.insert(
       'audio_cache',
       {
@@ -252,7 +274,7 @@ class AudioCacheRepo {
         'speed_hash': speedHash,
         'file_path': filePath,
         'file_size_kb': fileSizeKb,
-        'pinned': 1,
+        'pinned': pinned ? 1 : 0,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -335,18 +357,62 @@ class AudioCacheRepo {
         "UPDATE audio_cache SET voice_id = 'edge-' || voice_id "
         "WHERE voice_id NOT LIKE 'edge-%' AND voice_id NOT LIKE 'kokoro-%' "
         "AND voice_id NOT LIKE 'piper-%' AND voice_id NOT LIKE 'android-%'");
+
+    await _dropDuplicateRows();
   }
 
-  /// Pinned paragraphs whose cache key starts with [prefix]. Used to warn
-  /// before a setting change orphans what is already downloaded.
-  Future<int> countPinnedForPrefix(String prefix) async {
+  /// Leaves one row per (paragraph, voice, format): the download if there is
+  /// one, otherwise the most recent.
+  ///
+  /// Builds before this one inserted a second row whenever the same paragraph
+  /// was cached under a new path, and the renames above can merge two keys into
+  /// one. Runs on every start, alongside [migrateCacheKeys], and does nothing
+  /// once the table is clean.
+  Future<void> _dropDuplicateRows() async {
+    final db = await _db;
+    // Deliberately no window function: Android 7 — the oldest release this app
+    // supports — ships SQLite 3.9, and ROW_NUMBER() needs 3.25. This picks out
+    // every row that has a better-ranked sibling, which is the same set.
+    final losers = await db.rawQuery('''
+      SELECT a.id AS id, a.file_path AS file_path FROM audio_cache a
+      WHERE EXISTS (
+        SELECT 1 FROM audio_cache b
+        WHERE b.book_id = a.book_id AND b.chapter_idx = a.chapter_idx
+          AND b.para_idx = a.para_idx AND b.voice_id = a.voice_id
+          AND b.speed_hash = a.speed_hash
+          AND (b.pinned > a.pinned OR (b.pinned = a.pinned AND b.id > a.id))
+      )
+    ''');
+    if (losers.isEmpty) return;
+    for (final row in losers) {
+      await _deleteCachedFile(row['file_path'] as String);
+    }
+    await db.delete('audio_cache',
+        where: 'id IN (${List.filled(losers.length, '?').join(',')})',
+        whereArgs: [for (final row in losers) row['id']]);
+  }
+
+  /// Pinned paragraphs whose cache key starts with [prefix] and ends with
+  /// [suffix]. Used to warn before a setting change orphans what is already
+  /// downloaded.
+  ///
+  /// Both are literals, not patterns: cache keys are full of '_', which `LIKE`
+  /// reads as "any character". Matching 'piper-1_25' without escaping also
+  /// matched 'piper-1x25', and every other key of that shape.
+  Future<int> countPinnedByKey({String prefix = '', String suffix = ''}) async {
     final db = await _db;
     final rows = await db.rawQuery(
-      'SELECT COUNT(*) AS c FROM audio_cache WHERE pinned=1 AND voice_id LIKE ?',
-      ['$prefix%'],
+      'SELECT COUNT(*) AS c FROM audio_cache WHERE pinned=1 '
+      "AND voice_id LIKE ? ESCAPE '\\'",
+      ['${_escapeLike(prefix)}%${_escapeLike(suffix)}'],
     );
     return (rows.first['c'] as int?) ?? 0;
   }
+
+  static String _escapeLike(String value) => value
+      .replaceAll(r'\', r'\\')
+      .replaceAll('%', r'\%')
+      .replaceAll('_', r'\_');
 
   /// Diagnostic: what is actually stored for a book, grouped by cache key.
   Future<List<Map<String, Object?>>> debugKeys(int bookId) async {
@@ -392,16 +458,23 @@ class AudioCacheRepo {
     await _evictToTarget((maxKb * 0.8).toInt());
   }
 
+  /// Drops cache entries untouched for five days — **never downloads**.
+  ///
+  /// This runs on every launch, so forgetting the `pinned` filter meant a book
+  /// downloaded and not opened for a week vanished on its own: hours of Kokoro
+  /// synthesis, gone without a word. Downloads expire only when the reader says
+  /// so, via [deleteDownloads].
   Future<void> pruneExpired() async {
     final db = await _db;
     final cutoff =
         DateTime.now().subtract(const Duration(days: 5)).toIso8601String();
-    final rows = await db.query('audio_cache',
-        where: 'last_accessed < ?', whereArgs: [cutoff]);
+    const where = 'last_accessed < ? AND pinned = 0';
+    final rows =
+        await db.query('audio_cache', where: where, whereArgs: [cutoff]);
     for (final row in rows) {
       await _deleteCachedFile(row['file_path'] as String);
     }
-    await db.delete('audio_cache', where: 'last_accessed < ?', whereArgs: [cutoff]);
+    await db.delete('audio_cache', where: where, whereArgs: [cutoff]);
   }
 
   /// Clears the temporary cache, **keeping downloads**.
