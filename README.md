@@ -1,22 +1,66 @@
 # VoiceX Móvil
 
-Versión Android de [VoiceX](https://github.com/Preston-IA/voicex) — lector EPUB con TTS neuronal. Construido con Flutter. Distribuido como APK.
+Lector EPUB con TTS neuronal para Android. Lee en voz alta con voces naturales,
+resalta el texto que va sonando, y funciona sin conexión con el audio que hayas
+descargado. Construido con Flutter y distribuido como APK.
 
-- TTS online: Edge TTS (voces Microsoft, vía WebSocket)
-- TTS offline: Android TTS nativo
-- Caché de audio para re-reproducción sin internet
-- Subrayado de oración activa en tiempo real
-- Sincronización de progreso y marcadores (SQLite local)
+Versión Android de [VoiceX](https://github.com/Preston-IA/voicex).
+
+## Qué hace
+
+**Cuatro motores de voz**, elegibles por libro:
+
+| Motor | Dónde corre | Notas |
+|---|---|---|
+| **Edge** | Nube (Microsoft) | 300+ voces, tiempos por palabra. Funciona en cualquier red |
+| **Kokoro** | Servidor propio | Mejor calidad de voz, con tiempos por palabra |
+| **Piper** | Servidor propio | Voces entrenadas por idioma. El más rápido |
+| **Android** | El propio teléfono | Sin internet, sin servidor |
+
+Kokoro y Piper corren en tu computadora ([`tools/`](tools/)); cuando no
+responden, la app cae a Edge automáticamente y lo dice en pantalla.
+
+**Como lector**
+
+- Modo inmersivo: el texto ocupa la pantalla y las barras se ocultan al tocar
+- Una sola posición compartida entre leer y escuchar, al estilo Kindle+Audible
+- Resaltado por palabra y por oración, sincronizado con el audio
+- Tipografía, interlineado, márgenes y fondo sepia/claro/oscuro configurables
+
+**Como audiolibro**
+
+- Controles en pantalla de bloqueo, notificaciones, auriculares y Bluetooth
+- Descarga por adelantado en WiFi para escuchar sin conexión
+- Velocidad de reproducción que no obliga a volver a sintetizar
+
+**Para practicar idiomas**
+
+- Repetir una oración, en bucle, para *shadowing*
+- Pulsación larga sobre una palabra: oírla o consultar su definición
+- Diccionario en inglés y español
+
+---
+
+## Versiones
+
+| Versión | Lo que trajo |
+|---|---|
+| **0.5.0** | Primera versión probada en teléfono real. Controles de bloqueo que nunca habían aparecido, el texto que se descolocaba al pausar, el cambio de motor que no cambiaba nada, y descargas que se guardaban en el vacío. Diccionario español, ajustes que se guardan solos, almacenamiento por libro y motor |
+| **0.4.0** | Motores auto-alojados: Kokoro y Piper en la red local, con repliegue automático a Edge. Descarga previa en WiFi. Repetir oración, oír una palabra, diccionario |
+| **0.3.0** | Modo lectura estilo Kindle: inmersivo, posición compartida, tipografía y temas. Audio en segundo plano. Resaltado por palabra. ~20 bugs, entre ellos un filtro que descartaba los diálogos cortos de las novelas |
+| **0.2.0** | Portadas y metadatos EPUB en la biblioteca |
+| **0.1.0** | Primera versión funcional |
+
+El detalle de cada cambio, con su causa, está en
+[`docs/RELEASES.md`](docs/RELEASES.md).
 
 ---
 
 ## Requisitos
 
 - [Flutter 3.x](https://docs.flutter.dev/get-started/install) (canal stable)
-- Android SDK API 21+ (Android 5.0)
-- Android Studio o un dispositivo/emulador conectado
-
-Verifica tu entorno:
+- Android 7.0 o superior (API 24+)
+- Android Studio o un dispositivo conectado
 
 ```bash
 flutter doctor
@@ -27,33 +71,35 @@ flutter doctor
 ## Quickstart
 
 ```bash
-# 1. Clonar
-git clone https://github.com/Preston-IA/voicex-movil.git
+git clone https://github.com/PedroSolorzano/voicex-movil.git
 cd voicex-movil
-
-# 2. Instalar dependencias
 flutter pub get
-
-# 3a. Correr en dispositivo/emulador conectado
 flutter run
-
-# 3b. Correr en emulador específico
-flutter run -d emulator-5554
 ```
+
+### Servidores de voz (opcional)
+
+Solo si quieres usar Kokoro o Piper. La app funciona sin ellos con Edge.
+
+```bash
+docker compose -f tools/kokoro/docker-compose.yml up -d   # puerto 8880
+docker compose -f tools/piper/docker-compose.yml up -d    # puerto 5000
+```
+
+Luego, en **Ajustes → Motor de voz**, apunta a `http://<IP-de-tu-PC>:8880`.
+Cada carpeta tiene su propio README con los detalles.
 
 ---
 
-## Build APK
+## Build
 
 ```bash
-# APK de debug (para pruebas)
-flutter build apk --debug
-
-# APK de release (para distribución)
 flutter build apk --release
 ```
 
-El APK queda en `build/app/outputs/flutter-apk/`.
+El APK queda en `build/app/outputs/flutter-apk/` con el nombre de la versión.
+`versionName` sale de `pubspec.yaml`; el `versionCode` se deriva del número de
+commits.
 
 ---
 
@@ -62,25 +108,23 @@ El APK queda en `build/app/outputs/flutter-apk/`.
 ```
 VoiceXMovil/
 ├── lib/
-│   ├── main.dart
 │   ├── config/          # AppSettings (SharedPreferences)
-│   ├── tts/             # Edge TTS + Android TTS (Strategy + Factory)
-│   ├── epub/            # Parser EPUB y modelos
-│   ├── audio/           # AudioPlayer con ticks de 50ms
-│   ├── storage/         # SQLite (libros, progreso, bookmarks, caché)
-│   └── ui/
-│       ├── providers/   # Riverpod state
-│       ├── screens/     # library, reader, settings
-│       └── widgets/     # BookCard, HighlightedText
-├── android/
+│   ├── tts/             # Edge, Kokoro, Piper y Android (Strategy + Factory)
+│   ├── epub/            # Parser EPUB, modelos y alineado texto-audio
+│   ├── audio/           # Handler de audio_service con MediaSession
+│   ├── services/        # Diccionario
+│   ├── storage/         # SQLite: libros, progreso, marcadores, caché
+│   └── ui/              # providers · screens · widgets
+├── tools/
+│   ├── kokoro/          # Servidor de voz Kokoro (Docker)
+│   └── piper/           # Servidor de voz Piper (Docker)
 ├── test/
-├── pubspec.yaml
 └── docs/
-    ├── context/TECHNICAL.md   # Especificación técnica completa
-    ├── tasks/IMPROVEMENTS.md  # Mejoras y nuevos requisitos
+    ├── RELEASES.md            # Historial de versiones
+    ├── context/TECHNICAL.md   # Especificación técnica
+    ├── tasks/IMPROVEMENTS.md  # Mejoras pendientes
     ├── tasks/TRACKING.md      # Estado de implementación
-    ├── bugs/EDGE_TTS_DEBUG.md # Investigaciones de bugs
-    └── RELEASES.md            # Historial de versiones
+    └── bugs/EDGE_TTS_DEBUG.md # Investigaciones de bugs
 ```
 
 ---
@@ -88,31 +132,15 @@ VoiceXMovil/
 ## Comandos útiles
 
 ```bash
-# Ver dispositivos disponibles
-flutter devices
-
-# Limpiar build cache
-flutter clean && flutter pub get
-
-# Correr tests
-flutter test
-
-# Analizar código
-flutter analyze
+flutter devices                  # dispositivos disponibles
+flutter test                     # tests
+flutter analyze                  # análisis estático
+flutter clean && flutter pub get # limpiar build cache
 ```
-
----
-
-## Tareas pendientes
-
-| # | Tarea | Estado |
-|---|-------|--------|
-| — | — | — |
-
-> Las tareas se agregan aquí a medida que surgen durante el desarrollo.
 
 ---
 
 ## Proyecto relacionado
 
-[VoiceX Desktop](https://github.com/PedroSolorzano/voicex) — versión Python/tkinter para escritorio (Linux/macOS/Windows).
+[VoiceX Desktop](https://github.com/PedroSolorzano/voicex) — versión
+Python/tkinter para escritorio (Linux/macOS/Windows).
