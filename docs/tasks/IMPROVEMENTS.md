@@ -4,63 +4,8 @@ Prioridades: `urgente` | `alto` | `medio` | `bajo`
 
 Formato: `- [ ] [prioridad] YYYY-MM-DD — descripción`
 
----
-
-## UX / Interfaz
-
-- [x] `medio` 2026-04-30 — Selector de velocidad de lectura en el reproductor (4 niveles: Lento -20%, Normal +0%, Rápido +25%, Veloz +50%). Requiere también corregir el cache key que ignora `edgeRate` y guarda el MP3 viejo cuando cambia la velocidad.
-- [x] `bajo` 2026-04-30 — Mostrar consumo de datos móviles acumulado durante la sesión de escucha directamente en la pantalla del reproductor (en MB). Útil para saber cuánto se gasta en una escucha sin WiFi.
-
----
-
-## TTS / Audio
-
-- [x] `alto` 2026-04-30 — El highlight de palabra no funciona durante la reproducción. Los `WordTimestamp` llegan del servidor pero el texto en pantalla no refleja la palabra activa en tiempo real.
-- [x] `alto` 2026-04-30 — Auto-continuar lectura: al terminar un párrafo/capítulo el texto cambia en pantalla pero el audio se detiene. Debería iniciar automáticamente la síntesis y reproducción del siguiente párrafo sin intervención del usuario, como un audiolibro.
-
----
-
-## Rendimiento
-
----
-
-## Bugs menores
-
----
-
-## Biblioteca
-
-- [x] `medio` 2026-04-30 — Portada y metadatos del EPUB (editorial, fecha, materia, descripción) visibles desde la biblioteca. Implementado en v0.2.0.
-
-## Encontrado probando en teléfono (2026-08-30)
-
-- [x] `urgente` — **No aparecían los controles en la pantalla de bloqueo ni al
-  bajar la barra de estado.** Causa: `MainActivity` extendía `FlutterActivity`
-  en vez de `AudioServiceActivity`. audio_service ejecuta el handler en un
-  FlutterEngine propio, y la Activity debe engancharse a ese mismo motor; con
-  FlutterActivity la app creaba un segundo motor aislado, el servicio se
-  quedaba sin handler, y la notificación no llegaba a existir aunque el audio
-  sonara con normalidad. Se rompió al reescribir la Activity para el intent de
-  compartir. **Corregido, falta confirmarlo en el teléfono.**
-- [ ] `urgente` — **El audio descargado no se reproduce: al dar play sintetiza
-  con Edge.** La interfaz dice que hay descargas de Kokoro y Piper, pero la
-  búsqueda en caché no las encuentra, así que vuelve a sintetizar y —sin
-  servidor alcanzable— cae a Edge. Sospechas: (a) se descargaron con el formato
-  de clave anterior al cambio de esta sesión, (b) se guardaron bajo la clave de
-  Edge porque el servidor no respondía al iniciar la descarga, o (c) los
-  archivos ya no están donde dice la base de datos. Hay un diagnóstico temporal
-  añadido que vuelca claves buscadas y guardadas; queda ejecutarlo.
-
-## UX / Interfaz — pendientes
-
-- [ ] `medio` 2026-08-30 — **Estimar el tiempo de descarga.** Hoy la barra dice
-  "Descargando 73 / 1350 párrafos", que no informa de nada útil. Debería mostrar
-  el tiempo restante, como ya hace el lector con "faltan ~3 h 18 min".
-  Contexto: *El Instituto* tiene 6.289 párrafos en 14 capítulos, ~450 por
-  capítulo, así que un capítulo cuesta ~15 min con Piper y ~37 min con Kokoro.
-  Descargar "los próximos 3 capítulos" con Kokoro son casi 2 horas, y ahora
-  mismo nada lo advierte. Medido: ~2 s/párrafo en Piper, ~5 s/párrafo en Kokoro.
-  Conviene además avisar del tamaño estimado antes de empezar.
+Lo que ya se entregó vive en [`docs/RELEASES.md`](../RELEASES.md), con su causa
+y su arreglo. Aquí solo queda lo que no está hecho.
 
 ---
 
@@ -74,13 +19,58 @@ Formato: `- [ ] [prioridad] YYYY-MM-DD — descripción`
   (cabecera `x-word-timestamps`), va a ~5x tiempo real en CPU, y solo tiene 3
   voces en español frente a las 11 de Edge.
 - [ ] `medio` 2026-08-30 — **Probar en teléfono físico** lo que el emulador no
-  reproduce: controles en pantalla de bloqueo, botones de auriculares y
-  Bluetooth, pausa y reanudación ante llamada entrante, y supervivencia de la
-  reproducción con la pantalla apagada.
+  reproduce: botones de auriculares y Bluetooth, pausa y reanudación ante
+  llamada entrante, y supervivencia de la reproducción con la pantalla apagada.
+  Los controles de pantalla de bloqueo ya se confirmaron en 0.5.0.
 - [ ] `bajo` 2026-08-30 — Decidir si el botón "siguiente" de la pantalla de
-  bloqueo debe saltar de párrafo (actual) o de capítulo. Por párrafo puede
-  resultar demasiado granular para un botón físico del coche.
+  bloqueo debe saltar de párrafo (actual, `reader_provider.dart` `onNext =
+  nextParagraph`) o de capítulo. Por párrafo puede resultar demasiado granular
+  para un botón físico del coche. `navigateChapter` ya existe; habría que
+  separar el handler del servicio de audio del de los botones en pantalla.
 
-## Ideas / Futuro
+---
 
-- [x] `medio` 2026-04-30 — Descarga de capítulos para escucha offline. La infraestructura de caché ya existe (AudioCacheRepo + SQLite). Falta: (1) guardar en `getApplicationDocumentsDirectory()` en vez de `getTemporaryDirectory()` para que el OS no lo borre, (2) botón "Descargar capítulo" que pre-sintetice todos los párrafos en background con progreso visible, (3) columna `pinned` en `audio_cache` para que el LRU eviction no toque los descargados, (4) detección de red offline para ir directo al caché. Peso estimado: ~3-5 MB por capítulo.
+## TTS / Audio
+
+- [ ] `medio` 2026-08-30 — **La clave de caché de Kokoro no lleva el idioma.**
+  `kokoroVoiceEs` y `kokoroVoiceEn` valen `af_bella` por defecto, así que un
+  libro con el idioma cambiado de ES a EN reutiliza el audio ya cacheado
+  aunque el `lang_code` enviado al servidor sea distinto — y con reglas
+  inglesas el español sale en ~17 s en vez de ~27 s, ininteligible. Lo mismo
+  aplica a Piper si se configura la misma voz en ambos idiomas. Edge se libra
+  porque el nombre de la voz ya lleva el locale. Arreglar significa meter
+  `book.language` en la clave y migrar las filas existentes leyendo
+  `books.language`; si no, se huerfanizan todas las descargas hechas hasta hoy.
+  Documentado en `test/cache_key_test.dart`.
+
+---
+
+## Calidad de código
+
+- [ ] `bajo` 2026-08-30 — **Código muerto:** `AudioCacheRepo.debugKeys` no tiene
+  ningún llamador. Es lo que quedó del diagnóstico que resolvió el bug de caché
+  de 0.5.0. Borrarlo o engancharlo a un botón en Ajustes.
+- [ ] `bajo` 2026-08-30 — **Dos `catch` que apagan la señal.** En
+  `edge_tts_provider.dart`, el parseo de los `WordBoundary` está envuelto en un
+  `catch (_) {}`: si Microsoft cambia el formato del JSON se pierden todas las
+  marcas de palabra sin que nada lo diga. En `reader_provider.dart`,
+  `_readSidecar` devuelve `[]` ante un `.ts.json` corrupto, indistinguible de un
+  audio sin timestamps. Basta un `dev.log` en cada uno.
+- [ ] `bajo` 2026-08-30 — **Sin tests de UI ni de widgets.** `lib/ui/` son 3.379
+  líneas con cobertura cero, `reader_provider.dart` incluido. Los repositorios y
+  la clave de caché sí quedaron cubiertos en 0.5.2.
+
+---
+
+## Mantenimiento
+
+- [ ] `medio` 2026-08-30 — **Dependencias.** 10 directas desactualizadas.
+  Seguras de subir ya: `html`, `path_provider`, `uuid`, `sqflite`. Requieren
+  probar la reproducción en el teléfono: `just_audio` 0.9→0.10 junto con
+  `audio_session` 0.1→0.2. Van cuatro majors por detrás `go_router` (14→18) y
+  `file_picker` (8→12). `flutter_riverpod` 2→3 se aparca: migración de calado
+  sin beneficio inmediato. `epubx` frena `archive`, `image` y `xml`.
+- [ ] `bajo` 2026-08-30 — **`main` va por detrás y no hay tags.** `develop`
+  acumula toda la historia desde 0.1.0 y `main` sigue en el commit inicial.
+  `docs/RELEASES.md` documenta el procedimiento de tag y no se ha aplicado
+  nunca.

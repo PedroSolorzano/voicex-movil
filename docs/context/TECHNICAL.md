@@ -2,264 +2,192 @@
 
 ## Resumen
 
-Replicación de VoiceX (lector EPUB con TTS neuronal) para Android. Distribuido vía APK. Todas las funcionalidades del prototipo de escritorio están contempladas, con mejoras propias del entorno móvil (caché de audio, modo offline parcial).
+Lector EPUB con TTS neuronal para Android, distribuido como APK. Nació como
+réplica de [VoiceX Desktop](https://github.com/PedroSolorzano/voicex)
+(Python/tkinter) y hoy lo supera: cuatro motores de voz, descarga para escucha
+sin conexión, controles en la pantalla de bloqueo y modo lectura estilo Kindle.
 
-- **Plataforma:** Android (API 21+)
+- **Plataforma:** Android 7.0+ (API 24)
 - **Framework:** Flutter 3.x / Dart 3.x
-- **Distribución:** APK sideload (fase inicial), Google Play (futuro)
-- **Prototipo base:** VoiceX Desktop (Python/customtkinter) en `../VoiceX/`
+- **Distribución:** APK sideload
+
+Este documento describe *cómo está construido*. El historial de por qué cada
+pieza es como es está en [RELEASES.md](../RELEASES.md).
 
 ---
 
-## Stack Tecnológico
+## Stack
 
-| Capa | Tecnología | Equivalente en escritorio |
-|------|-----------|--------------------------|
-| UI | Flutter + Material 3 | customtkinter |
-| Estado | Riverpod 2.x | Variables de instancia en vistas |
-| TTS primario | Edge TTS WebSocket (Dart) | edge-tts (Python) |
-| TTS offline | flutter_tts (Android nativo) | kokoro-onnx |
-| Audio | just_audio | pygame.mixer |
-| EPUB | epubx + html | ebooklib + beautifulsoup4 |
-| Base de datos | sqflite (SQLite) | sqlite3 |
-| Configuración | shared_preferences | Pydantic + JSON |
-| Directorios | path_provider | tempfile / ~/.config |
-| Archivos | file_picker | tkinter filedialog |
-
-### Dependencias (pubspec.yaml)
-
-```yaml
-dependencies:
-  flutter_riverpod: ^2.6.1       # State management
-  sqflite: ^2.3.3                # SQLite
-  path: ^1.9.0
-  path_provider: ^2.1.4          # Rutas de sistema (temp, docs, cache)
-  shared_preferences: ^2.3.3     # Persistencia de settings
-  just_audio: ^0.9.40            # Reproducción MP3/WAV
-  web_socket_channel: ^3.0.1     # WebSocket para Edge TTS
-  http: ^1.2.2
-  epubx: ^3.0.1                  # Parseo EPUB
-  html: ^0.15.4                  # Parseo HTML (equivalente a bs4)
-  file_picker: ^8.1.3            # Selector de archivos EPUB
-  flutter_tts: ^4.0.2            # Android TTS nativo
-  uuid: ^4.4.0                   # IDs para mensajes Edge TTS
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^4.0.0
-```
+| Capa | Tecnología |
+|------|-----------|
+| UI | Flutter + Material 3 |
+| Estado | Riverpod 2.x |
+| Navegación | GoRouter |
+| Motores TTS | Edge (WebSocket propio en Dart), Kokoro y Piper (HTTP), Android nativo |
+| Reproducción | just_audio + audio_service (MediaSession) |
+| EPUB | epubx + html |
+| Base de datos | sqflite (SQLite) |
+| Configuración | shared_preferences |
+| Red | http, connectivity_plus |
 
 ---
 
-## Estructura del Proyecto
+## Estructura
 
 ```
-VoiceXMovil/
-├── lib/
-│   ├── main.dart
-│   ├── config/
-│   │   └── settings.dart                 # AppSettings (SharedPreferences)
-│   ├── tts/
-│   │   ├── tts_provider.dart             # Interfaz abstracta TTSProvider
-│   │   ├── models.dart                   # Voice, WordTimestamp, TTSResult
-│   │   ├── edge_tts_provider.dart        # Edge TTS vía WebSocket
-│   │   ├── android_tts_provider.dart     # Android TTS nativo (offline)
-│   │   └── tts_factory.dart             # Factory: getProvider(settings, lang)
-│   ├── epub/
-│   │   ├── models.dart                   # Book, Chapter, Paragraph, Sentence
-│   │   └── parser.dart                   # parseEpub(path) → Book
-│   ├── audio/
-│   │   └── audio_player.dart            # AudioPlayer (IDLE/PLAYING/PAUSED)
-│   ├── storage/
-│   │   ├── database.dart                # Schema SQLite + initDb()
-│   │   └── repositories.dart            # LibraryRepo, ProgressRepo, BookmarkRepo, AudioCacheRepo
-│   └── ui/
-│       ├── app.dart                      # MaterialApp + GoRouter
-│       ├── providers/
-│       │   ├── library_provider.dart
-│       │   ├── reader_provider.dart
-│       │   └── settings_provider.dart
-│       ├── screens/
-│       │   ├── library_screen.dart
-│       │   ├── reader_screen.dart
-│       │   └── settings_screen.dart
-│       └── widgets/
-│           ├── book_card.dart
-│           └── highlighted_text.dart
-├── android/
-│   └── app/src/main/AndroidManifest.xml
-├── test/
-├── pubspec.yaml
-└── docs/
-    ├── context/TECHNICAL.md              # Este archivo
-    ├── tasks/TRACKING.md                 # Control de implementación
-    └── RELEASES.md                       # Historial de versiones
+lib/
+├── main.dart                  # Arranque: audio service + mantenimiento de caché
+├── config/settings.dart       # AppSettings, voiceMap, resolveVoice
+├── tts/
+│   ├── tts_provider.dart      # Interfaz TTSProvider
+│   ├── models.dart            # Voice, WordTimestamp, TTSResult
+│   ├── edge_tts_provider.dart # WebSocket con protocolo de Edge
+│   ├── kokoro_tts_provider.dart
+│   ├── piper_tts_provider.dart
+│   ├── android_tts_provider.dart
+│   └── tts_factory.dart       # getProvider(settings, lang)
+├── epub/
+│   ├── models.dart            # Book, Chapter, Paragraph, Sentence
+│   ├── parser.dart            # parseEpub(path) → Book
+│   └── text_align.dart        # Alineado texto-audio por palabra y oración
+├── audio/audio_player.dart    # VoiceXAudioHandler (audio_service)
+├── services/dictionary.dart   # Wiktionary ES + diccionario EN
+├── storage/
+│   ├── database.dart          # Esquema SQLite y migraciones (v6)
+│   └── repositories.dart      # LibraryRepo, ProgressRepo, BookmarkRepo, AudioCacheRepo
+└── ui/
+    ├── app.dart               # MaterialApp + GoRouter
+    ├── providers/             # library, reader, settings, voices, share_import, app_info
+    ├── screens/               # library, reader, settings
+    └── widgets/               # book_card, book_info_sheet, highlighted_text,
+                               # reader_theme, word_sheet
+
+tools/kokoro/                  # Servidor Kokoro (Docker, puerto 8880)
+tools/piper/                   # Servidor Piper (Docker, puerto 5000)
 ```
 
 ---
 
-## Arquitectura
+## Patrones
 
-### Capas del Sistema
-
-```
-┌─────────────────────────────────────────────┐
-│              UI Layer                        │
-│   Flutter Screens · Widgets · Riverpod      │
-├─────────────────────────────────────────────┤
-│         Application Logic Layer             │
-│   TTS Providers · AudioPlayer · EPUB Parser │
-├─────────────────────────────────────────────┤
-│         Data Access Layer                   │
-│   LibraryRepo · ProgressRepo · BookmarkRepo │
-│   AudioCacheRepo                            │
-├─────────────────────────────────────────────┤
-│         Config & Models                     │
-│   AppSettings · EPUB Models · TTS Models    │
-└─────────────────────────────────────────────┘
-```
-
-### Patrones de Diseño
-
-- **Strategy**: `TTSProvider` abstracto → `EdgeTtsProvider` / `AndroidTtsProvider`
-- **Factory**: `tts_factory.dart:getProvider()` instancia el proveedor según config
-- **Repository**: acceso a SQLite aislado por entidad
-- **Observer**: stream de ticks del `AudioPlayer` → `ReaderProvider` → `HighlightedText`
-- **State Notifier** (Riverpod): reemplaza las variables de instancia del escritorio
+- **Strategy** — `TTSProvider` con cuatro implementaciones.
+- **Factory** — `getProvider()` instancia según configuración e idioma.
+- **Repository** — acceso a SQLite aislado por entidad.
+- **Notifier** (Riverpod) — `ReaderNotifier` es el centro: posición, síntesis,
+  caché, descargas y resaltado.
 
 ---
 
-## Modelo de Concurrencia
+## Motores de voz
 
-```
-[Main Thread — Flutter UI]
-        │
-        ├─ Tap ▶ en párrafo
-        │       └─> Isolate / compute()
-        │               ├─> AudioCacheRepo.get() → hit o miss
-        │               ├─> [miss] evictLruUntilFit() → EdgeTtsProvider.synthesize()
-        │               └─> notifyProvider → UI reproduce audio
-        │
-        └─> AudioPlayer (just_audio)
-                ├─ Stream.periodic(50ms) → onTick(elapsedMs)
-                └─ playerStateStream → onEnd()
-```
+Los cuatro implementan `TTSProvider.synthesize()` y devuelven un `TTSResult`
+con la ruta del audio y la lista de `WordTimestamp`.
 
-- Toda síntesis TTS corre fuera del main thread (`compute()` o `Isolate`)
-- Los resultados se devuelven al main thread vía Riverpod state
-- Regla: ninguna operación costosa toca el main thread
+| Motor | Transporte | Formato | Timestamps |
+|---|---|---|---|
+| **Edge** | WebSocket a `speech.platform.bing.com` | MP3 24 kHz 96 kbps | Por palabra (`WordBoundary`) |
+| **Kokoro** | HTTP a servidor propio (`/dev/captioned_speech`) | MP3 24 kHz | Por palabra (`x-word-timestamps`) |
+| **Piper** | HTTP a servidor propio (`/synthesize`) | WAV 22,05 kHz | Ninguno |
+| **Android** | `flutter_tts` local | WAV | Ninguno |
 
----
+Sin timestamps, `text_align.dart` reparte el tiempo entre oraciones de forma
+aproximada y el resaltado baja de palabra a oración.
 
-## TTS: Edge TTS en Dart (WebSocket)
+### Repliegue automático
 
-El protocolo es el mismo que usa la librería Python `edge-tts` — cliente WebSocket que imita al navegador.
+Kokoro y Piper corren en una máquina de la red local que a menudo está apagada.
+`ReaderNotifier._provider()` sondea el servidor antes de sintetizar y, si no
+responde, sustituye el motor por Edge. Dos consecuencias que hay que respetar:
 
-**Endpoint:**
-```
-wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1
-    ?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4
-    &ConnectionId={uuid_v4}
-```
+- La voz enviada al motor se resuelve con `voiceForEngine(motorActivo, idioma)`,
+  no con `voiceFor(idioma)`. Pedirle `af_bella` a Edge devuelve audio vacío.
+- La clave de caché nombra el motor que *produjo* el audio, no el seleccionado.
 
-**Flujo de síntesis:**
-1. Conectar con cabeceras `Origin` y `User-Agent` de Chrome
-2. Enviar mensaje de configuración: formato `audio-24khz-48kbitrate-mono-mp3`
-3. Enviar SSML con voz, rate y texto
-4. Recibir chunks binarios (audio MP3) + mensajes `WordBoundary` (timestamps)
-5. Escribir audio a archivo en caché
-6. Retornar `TTSResult(filePath, [WordTimestamp(...)])`
+El motor realmente en uso aparece en la barra de estado del lector.
 
-**Bitrate:** 48 kbps → 6 KB/segundo de audio → ~240 KB por párrafo promedio
+### Edge: detalles del protocolo
 
-## TTS: Android TTS (fallback offline)
-
-- Usa `flutter_tts` que envuelve el motor TTS del sistema Android
-- Genera WAV sin timestamps (igual que Kokoro en el escritorio)
-- Voces disponibles: dependen del dispositivo y del idioma instalado
-- Sin internet requerido
+Mismo protocolo que la librería Python `edge-tts`. Requiere `TrustedClientToken`
+en la URL, un token `Sec-MS-GEC` (SHA-256 sobre una ventana de 300 s con
+corrección de desfase de reloj) y una cookie `muid`. El `HttpClient` se crea con
+`userAgent = null` porque `WebSocket.connect()` aplica las cabeceras con
+`add()`, no `set()`, y los duplicados provocan un 403. El historial completo de
+esa investigación está en [`docs/bugs/EDGE_TTS_DEBUG.md`](../bugs/EDGE_TTS_DEBUG.md).
 
 ---
 
-## Caché de Audio
+## Caché de audio y descargas
 
-Los archivos sintetizados se conservan para re-reproducción instantánea.
+Dos niveles sobre la misma tabla, distinguidos por la columna `pinned`.
 
-### Parámetros
+| | Caché (`pinned = 0`) | Descargas (`pinned = 1`) |
+|---|---|---|
+| Dónde | `getTemporaryDirectory()` | `getApplicationDocumentsDirectory()` |
+| Origen | Se llena sola al reproducir | Botón "Descargar" o prefetch en WiFi |
+| Caduca | 5 días sin usarse | Nunca |
+| Evicción LRU | Sí, sobre el tope configurado | Nunca |
+| "Limpiar caché" | La borra | No la toca |
 
-| Parámetro | Valor |
-|-----------|-------|
-| TTL | 5 días desde `last_accessed` |
-| Tope default | 150 MB (configurable sin máximo fijo) |
-| Mínimo configurable | 50 MB |
-| Evicción | LRU — dos momentos: startup + antes de cada síntesis |
-| Garantía | El usuario nunca recibe error por caché lleno |
+**Regla que ninguna función puede romper:** una descarga solo la borra quien la
+pidió, vía `deleteDownloads()`. Ni `pruneExpired()`, ni `evictLruUntilFit()`, ni
+`clearAll()` pueden tocarla. Cubierto por `test/audio_cache_repo_test.dart`.
 
 ### Clave de caché
 
 ```
-{book_id}_{chapter_idx}_{para_idx}_{voice_id}_{speed_hash}.mp3
+voice_id   = <motor>-<voz>[-<ritmo de Piper>]     # saneado a [A-Za-z0-9_-]
+speed_hash = 'f96'                                 # generación del formato
 ```
 
-Cambiar voz o velocidad produce claves distintas — los archivos anteriores quedan huérfanos y son eviccionados por LRU/TTL.
+Nombra el motor porque un repliegue a Edge guardado bajo la clave de Kokoro
+serviría después audio de Edge diciendo que es de Kokoro. Piper añade el
+`length_scale` porque el ritmo va grabado en las muestras. La velocidad de
+reproducción **no** entra: se aplica en el reproductor, así que un solo archivo
+sirve para todas las velocidades. El `speed_hash` es una generación de formato:
+subirlo retira todo lo cacheado con el códec anterior.
 
-### Tabla SQLite
+La clave se incrusta en el nombre del archivo, de ahí el saneo.
 
-```sql
-CREATE TABLE audio_cache (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    book_id        INTEGER NOT NULL,
-    chapter_idx    INTEGER NOT NULL,
-    para_idx       INTEGER NOT NULL,
-    voice_id       TEXT NOT NULL,
-    speed_hash     TEXT NOT NULL,
-    file_path      TEXT NOT NULL UNIQUE,
-    file_size_kb   INTEGER NOT NULL,
-    created_at     TEXT NOT NULL DEFAULT (datetime('now')),
-    last_accessed  TEXT NOT NULL DEFAULT (datetime('now'))
-);
-```
+### Búsqueda
 
-### Flujo de reproducción con caché
+`AudioCacheRepo.get()` ordena por `pinned DESC, id DESC` y recorre los
+candidatos, descartando los que ya no están en disco o pesan menos de 512 bytes
+(un audio truncado se reproduciría como "Source error" para siempre). Devuelve
+el primero que sirva.
 
-```
-Tap ▶ en párrafo
-  ↓
-AudioCacheRepo.get(book, chapter, para, voice, speed)
-  ├─ HIT  → touch(last_accessed) → reproducir (instantáneo, sin datos)
-  └─ MISS → estimar tamaño (~6 KB × seg estimados)
-               ↓
-             evictLruUntilFit(estimado, maxMb)  ← borra LRU si necesario
-               ↓
-             EdgeTtsProvider.synthesize() → guardar en caché
-               ↓
-             reproducir
-```
+### Mantenimiento al arrancar
 
-### Limpieza al iniciar la app (background Isolate)
+`main.dart` lanza, fuera del camino crítico:
 
-1. `pruneExpired()` — elimina entradas con `last_accessed` > 5 días
-2. `evict(maxMb)` — si supera el tope, elimina LRU hasta quedar al 80%
+1. `migrateCacheKeys()` — renombra claves de builds anteriores y elimina filas
+   duplicadas, quedándose con la descarga o, si no la hay, con la más reciente.
+2. `pruneExpired()` — retira la caché temporal de más de 5 días.
 
-### Beneficio offline
-
-Párrafos ya sintetizados con Edge TTS funcionan sin internet mientras estén en caché.
+> Las consultas SQL evitan funciones de ventana: Android 7 trae SQLite 3.9 y
+> `ROW_NUMBER()` necesita 3.25.
 
 ---
 
-## Base de Datos SQLite
+## Base de datos
 
-**Ubicación:** `getDatabasesPath()/voicex.db`
+`getDatabasesPath()/voicex.db`, esquema en la versión 6. `PRAGMA foreign_keys`
+se activa en `_onConfigure`: sqflite abre cada conexión con las claves ajenas
+desactivadas, y sin esto los `ON DELETE CASCADE` nunca se disparan.
 
 ```sql
 CREATE TABLE books (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    title       TEXT NOT NULL,
-    author      TEXT NOT NULL,
-    language    TEXT NOT NULL DEFAULT 'es',
-    file_path   TEXT NOT NULL UNIQUE,
-    added_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    title            TEXT NOT NULL,
+    author           TEXT NOT NULL,
+    language         TEXT NOT NULL DEFAULT 'es',
+    file_path        TEXT NOT NULL UNIQUE,
+    added_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    cover_path       TEXT,
+    description      TEXT,
+    publisher        TEXT,
+    published_date   TEXT,
+    subject          TEXT,
+    total_paragraphs INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE reading_progress (
@@ -267,6 +195,9 @@ CREATE TABLE reading_progress (
     book_id         INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
     chapter_index   INTEGER NOT NULL DEFAULT 0,
     paragraph_index INTEGER NOT NULL DEFAULT 0,
+    sentence_index  INTEGER NOT NULL DEFAULT 0,
+    offset_ms       INTEGER NOT NULL DEFAULT 0,
+    global_index    INTEGER NOT NULL DEFAULT 0,
     updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(book_id)
 );
@@ -276,6 +207,7 @@ CREATE TABLE bookmarks (
     book_id         INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
     chapter_index   INTEGER NOT NULL,
     paragraph_index INTEGER NOT NULL,
+    sentence_index  INTEGER NOT NULL DEFAULT 0,
     note            TEXT,
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -289,41 +221,68 @@ CREATE TABLE audio_cache (
     speed_hash     TEXT NOT NULL,
     file_path      TEXT NOT NULL UNIQUE,
     file_size_kb   INTEGER NOT NULL,
+    pinned         INTEGER NOT NULL DEFAULT 0,
     created_at     TEXT NOT NULL DEFAULT (datetime('now')),
     last_accessed  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 ```
 
+`file_path` es la única columna `UNIQUE`, así que la unicidad por párrafo la
+garantiza el código: `save()` y `savePin()` retiran la fila temporal que
+sustituyen antes de insertar.
+
 ---
 
-## Configuración (AppSettings)
+## Configuración (SharedPreferences)
 
-**Almacenamiento:** `SharedPreferences`
+| Campo | Default | Notas |
+|---|---|---|
+| `ttsProvider` | `edge` | `edge` · `kokoro` · `piper` · `android` |
+| `gender` | `female` | Solo para derivar la voz de Edge si no hay una explícita |
+| `edgeVoiceEs` / `edgeVoiceEn` | `''` | Vacío = derivar de `gender` con `voiceMap` |
+| `kokoroBaseUrl` | `''` | p. ej. `http://192.168.1.50:8880` |
+| `kokoroVoiceEs` / `kokoroVoiceEn` | `af_bella` | El mismo default en ambos idiomas |
+| `piperBaseUrl` | `''` | p. ej. `http://192.168.1.50:5000` |
+| `piperVoiceEs` | `es_AR-daniela-high` | Un modelo por idioma: sus voces no son multilingües |
+| `piperVoiceEn` | `en_US-lessac-high` | |
+| `piperLengthScale` | `1.0` | Longitud de fonema; >1 más pausado. Va grabado en el audio |
+| `playbackSpeed` | `1.0` | Se aplica al reproducir, no re-sintetiza |
+| `edgeRate` / `edgeVolume` | `+0%` | Neutros a propósito, para que la caché no dependa de ellos |
+| `highlightSentences` / `highlightWords` | `true` | |
+| `prefetchOnWifi` | `true` | Descarga adelantada solo con WiFi y servidor propio |
+| `prefetchChapters` | `3` | |
+| `cacheMaxMb` | `150` | Mínimo 50 |
+| `theme` | `dark` | `dark` · `light` · `system` |
+| `fontSize` · `lineHeight` · `margin` · `readerFont` · `readerTheme` | 18 · 1.7 · 24 · serif · sepia | Ajustes del lector |
+| `followAudioScroll` | `true` | El texto sigue al audio |
 
-| Campo | Tipo | Default | Notas |
-|-------|------|---------|-------|
-| `ttsProvider` | String | `"edge"` | `"edge"` \| `"android"` |
-| `gender` | String | `"female"` | `"female"` \| `"male"` |
-| `edgeRate` | String | `"+0%"` | `-50%` a `+50%` |
-| `edgeVolume` | String | `"+0%"` | `-50%` a `+50%` |
-| `androidSpeed` | double | `1.0` | `0.5` a `2.0` |
-| `highlightSentences` | bool | `true` | |
-| `theme` | String | `"dark"` | `"dark"` \| `"light"` \| `"system"` |
-| `cacheMaxMb` | int | `150` | Mínimo 50, sin máximo |
+`voiceForEngine(engine, lang)` resuelve la voz de un motor concreto;
+`voiceFor(lang)` es el atajo para el seleccionado. La distinción importa en el
+repliegue: usar el atajo manda a Edge una voz que no existe en su catálogo.
 
-**VOICE_MAP** (idéntico al prototipo de escritorio):
-```dart
-const voiceMap = {
-  'edge': {
-    'es': {'female': 'es-MX-DaliaNeural', 'male': 'es-MX-JorgeNeural'},
-    'en': {'female': 'en-US-JennyNeural', 'male': 'en-US-GuyNeural'},
-  },
-  'android': {
-    'es': {'female': 'es-ES', 'male': 'es-ES'},
-    'en': {'female': 'en-US', 'male': 'en-US'},
-  },
-};
-```
+---
+
+## Reproducción en segundo plano
+
+`VoiceXAudioHandler` (audio_service) publica la MediaSession con controles de
+anterior / play-pausa / detener / siguiente. `MainActivity` **debe** extender
+`AudioServiceActivity`: audio_service ejecuta el handler en su propio
+FlutterEngine, y con `FlutterActivity` la app levanta un segundo motor aislado,
+el servicio se queda sin handler y la notificación nunca llega a existir aunque
+el audio suene con normalidad.
+
+`skipToNext` y `skipToPrevious` delegan hoy en `nextParagraph` /
+`previousParagraph`.
+
+---
+
+## Concurrencia
+
+- El parseo de EPUB va en `compute()`: un libro grande bloquearía la UI.
+- La síntesis es asíncrona y su resultado vuelve por el estado de Riverpod.
+- El reproductor emite ticks periódicos que mueven el resaltado.
+- El prefetch en WiFi es cancelable y se rinde al primer fallo, para no moler
+  capítulos enteros contra un servidor caído.
 
 ---
 
@@ -331,58 +290,27 @@ const voiceMap = {
 
 | Aspecto | Decisión |
 |---------|----------|
-| Claves API | Ninguna — Edge TTS usa token público del navegador |
-| Permisos Android | `INTERNET`, `READ_EXTERNAL_STORAGE` (scoped storage API 29+) |
-| Caché de audio | Directorio privado de la app, no accesible por otras apps |
-| Datos del usuario | EPUBs y audio nunca salen del dispositivo |
-| Analytics | Ninguno |
-| Telemetría | Ninguna |
+| Claves API | Ninguna — Edge usa el token público del navegador |
+| Permisos | `INTERNET`, `FOREGROUND_SERVICE`, scoped storage |
+| Servidores propios | HTTP plano en red local, sin autenticación: no exponer fuera de la LAN |
+| Datos del usuario | Los EPUB y el audio nunca salen del dispositivo |
+| Analytics / telemetría | Ninguna |
 
 ---
 
-## Pantallas y Funcionalidades
+## Tests
 
-### Biblioteca (`/library`)
-- Lista scrollable de libros con tarjetas
-- Cada tarjeta: título, autor, badge idioma (ES/EN), botón Leer, botón eliminar
-- Toggle de idioma por libro
-- FAB "+ Agregar EPUB" con file picker
-- Estado vacío con instrucciones
-- Detección de archivo faltante + diálogo para relocalizar
+`flutter test` — cubre las funciones puras y los repositorios:
 
-### Lector (`/reader/:bookId`)
-- Navegación entre capítulos y párrafos
-- Área de texto con fuente serif y fondo sepia
-- Resaltado de oración activa durante reproducción (RichText + TextSpan)
-- Controles: ▶ Reproducir / ⏸ Pausar / ▶ Continuar / ⏹ Detener
-- Selección de género de voz (♀ / ♂)
-- Auto-avance al terminar párrafo → siguiente párrafo → siguiente capítulo
-- Marcadores: agregar (🔖), listar/saltar/eliminar (BottomSheet)
-- Guardado de progreso al navegar o salir
-- Barra de estado: "Sintetizando…", "Reproduciendo…", errores de red
+| Archivo | Cubre |
+|---|---|
+| `text_align_test.dart` | Alineado texto-audio |
+| `parser_test.dart` | Troceado en oraciones, filtro de bloques cortos |
+| `kokoro_test.dart` | `lang_code`, parseo de timestamps |
+| `dictionary_test.dart` | Extracto de Wiktionary en español |
+| `edge_tts_test.dart` | Locale de voz, troceado para síntesis |
+| `audio_cache_repo_test.dart` | Caché y descargas sobre SQLite real (`sqflite_common_ffi`) |
+| `cache_key_test.dart` | Construcción y saneo de la clave de caché |
 
-### Ajustes (`/settings`)
-- Selector de proveedor TTS (Edge / Android)
-- Grilla de voces: ES♀, ES♂, EN♀, EN♂ con botón "Probar" por voz
-- Slider de velocidad: 0.5× → 2.0× (15 pasos)
-- Toggle de resaltado de oraciones
-- Selector de tema: dark / light / system
-- **Sección caché:** uso actual (ej. "87 MB / 150 MB"), campo para ajustar tope, botón "Limpiar caché"
-- Botón Guardar
-
----
-
-## Equivalencias Escritorio → Android
-
-| Desktop Python | Android Flutter |
-|---------------|-----------------|
-| `asyncio` en thread daemon | `compute()` / `Isolate` |
-| `widget.after(0, fn)` | `ref.read(notifier).state = ...` |
-| `pygame.mixer` | `just_audio` |
-| `CTkTextbox` + highlight tag | `RichText` + `TextSpan` |
-| `CTkScrollableFrame` | `ListView.builder` |
-| `tempfile.mkdtemp()` | `getTemporaryDirectory()` |
-| `~/.config/voicex/library.db` | `getDatabasesPath()/voicex.db` |
-| Modal `CTkToplevel` | `showModalBottomSheet()` |
-| `filedialog.askopenfilename()` | `FilePicker.platform.pickFiles()` |
-| Settings JSON en `~/.config` | `SharedPreferences` |
+`lib/ui/` no tiene cobertura. Anotado en
+[IMPROVEMENTS.md](../tasks/IMPROVEMENTS.md).

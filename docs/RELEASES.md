@@ -9,6 +9,76 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## 0.5.2-preview.1 — 2026-08-30
+
+Cuatro fallos en el camino de la caché y las descargas, encontrados revisando
+el código y no usando la app: ninguno daba la cara hasta que ya había hecho
+daño.
+
+### Las descargas se borraban solas a los cinco días
+
+La limpieza que corre en cada arranque retiraba todo lo que llevara cinco días
+sin tocarse, **sin distinguir las descargas**. Descargar un libro con Kokoro
+—dos horas de síntesis—, no abrirlo en una semana, y encontrarlo vacío sin que
+nada lo avisara.
+
+Es el mismo fallo que 0.5.0 arregló en el botón "Limpiar caché", en otra
+función que se saltó la regla. Ahora la regla está escrita y probada: una
+descarga solo la borra quien la pidió.
+
+### El repliegue a Edge pedía una voz que Edge no tiene
+
+Con Kokoro o Piper seleccionado y el servidor apagado, la app cambiaba de motor
+pero seguía mandando la voz del motor caído: `af_bella` o
+`es_AR-daniela-high`, nombres que no existen en el catálogo de Microsoft. La
+petición volvía sin audio, así que el repliegue automático —lo que hace usable
+un servidor doméstico— no funcionaba justo cuando hacía falta.
+
+La función que resuelve la voz por motor ya existía, y su comentario explicaba
+este caso exacto. La llamada de síntesis usaba el atajo equivocado.
+
+De paso, una descarga que empieza con el servidor en pie y lo pierde a mitad ya
+no archiva el audio de Edge bajo el nombre de Kokoro: cada párrafo re-deriva su
+clave.
+
+### Un párrafo descargado se volvía a sintetizar
+
+Reproducir un párrafo y descargarlo después dejaba dos filas para el mismo
+párrafo: la copia temporal y la descarga. La búsqueda tomaba la primera —la
+temporal, más antigua— y cuando el sistema limpiaba el directorio temporal la
+daba por perdida y se rendía, **sin mirar la descarga que estaba justo detrás**.
+Sin servidor alcanzable, eso era volver a sintetizar con Edge.
+
+Es exactamente el síntoma que se creía cerrado en 0.5.0. Aquel arreglo atacó
+otra causa —la clave con `:` y `@`— y esta quedó viva.
+
+Ahora la búsqueda prioriza las descargas y recorre todos los candidatos antes
+de rendirse; guardar retira la copia que sustituye, así que no vuelven a
+acumularse; y el mantenimiento del arranque limpia los duplicados que ya
+existan, quedándose siempre con la descarga.
+
+### El aviso del ritmo de Piper saltaba siempre
+
+"Con este ritmo no se usarán los N párrafos ya descargados" aparecía a cada
+roce del deslizador, incluso al volver al valor con el que se descargó. Buscaba
+el ritmo al principio de la clave cuando va al final, y además los guiones
+bajos de la clave se interpretaban como comodines.
+
+### Debajo del capó
+
+- `sqflite_common_ffi` en las dependencias de desarrollo: los repositorios se
+  prueban ahora contra SQLite de verdad. De 53 tests a 80.
+- Las consultas nuevas evitan funciones de ventana: Android 7, el mínimo que
+  soporta la app, trae SQLite 3.9 y `ROW_NUMBER()` necesita la 3.25.
+- `TECHNICAL.md` describía una app de dos motores que dejó de existir en 0.4.0.
+  Reescrito. `TRACKING.md` decía "completado" sobre noventa casillas sin marcar.
+- Anotado un fallo que este trabajo destapó y no se arregla aquí: la clave de
+  Kokoro no lleva el idioma, y como la misma voz sirve para español e inglés,
+  un libro con el idioma cambiado reutiliza el audio del anterior. Arreglarlo
+  huerfanizaría las descargas existentes sin una migración.
+
+---
+
 ## 0.5.1-preview.1 — 2026-08-30
 
 ### Un párrafo mudo se quedaba mudo para siempre

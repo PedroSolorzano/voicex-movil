@@ -45,6 +45,7 @@ responden, la app cae a Edge automáticamente y lo dice en pantalla.
 
 | Versión | Lo que trajo |
 |---|---|
+| **0.5.2** | Las descargas se borraban solas a los cinco días, el repliegue a Edge pedía una voz que Edge no tiene, y un párrafo ya descargado se volvía a sintetizar. Los repositorios pasan a tener tests contra SQLite real |
 | **0.5.1** | Un párrafo cuyo audio salía vacío se guardaba en caché igual y quedaba mudo para siempre: en inglés con Edge no sonaba nada. Ahora ningún motor entrega audio vacío, la caché descarta lo que no se puede reproducir y el error se explica en pantalla |
 | **0.5.0** | Primera versión probada en teléfono real. Controles de bloqueo que nunca habían aparecido, el texto que se descolocaba al pausar, el cambio de motor que no cambiaba nada, y descargas que se guardaban en el vacío. Diccionario español, ajustes que se guardan solos, almacenamiento por libro y motor |
 | **0.4.0** | Motores auto-alojados: Kokoro y Piper en la red local, con repliegue automático a Edge. Descarga previa en WiFi. Repetir oración, oír una palabra, diccionario |

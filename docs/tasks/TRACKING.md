@@ -1,205 +1,46 @@
 # VoiceX Móvil — Control de Implementación
 
-**Proyecto:** Lector EPUB con TTS neuronal para Android  
-**Stack:** Flutter / Dart  
-**Inicio:** 2026-04-29  
+**Proyecto:** Lector EPUB con TTS neuronal para Android
+**Stack:** Flutter / Dart
+**Inicio:** 2026-04-29
 **Referencia técnica:** [TECHNICAL.md](../context/TECHNICAL.md)
 
 ---
 
 ## Estado General
 
-| Fase | Descripción | Estado | Inicio | Fin |
-|------|-------------|--------|--------|-----|
-| 1 | Setup y arquitectura base | Completado | 2026-04-29 | 2026-04-29 |
-| 2 | Capa EPUB | Completado | 2026-04-29 | 2026-04-29 |
-| 3 | Capa de almacenamiento | Completado | 2026-04-29 | 2026-04-29 |
-| 4 | Capa TTS | Completado | 2026-04-29 | 2026-04-29 |
-| 5 | Reproductor de audio | Completado | 2026-04-29 | 2026-04-29 |
-| 6 | Pantalla Biblioteca | Completado | 2026-04-29 | 2026-04-29 |
-| 7 | Pantalla Lectora | Completado | 2026-04-29 | 2026-04-29 |
-| 8 | Pantalla Ajustes | Completado | 2026-04-29 | 2026-04-29 |
-| 9 | Seguridad y rendimiento | Completado | 2026-04-29 | 2026-04-29 |
-| 10 | Build y distribución APK | Completado | 2026-04-29 | 2026-04-29 |
+Las diez fases del plan original están cerradas. Lo que se construyó después
+—Kokoro, Piper, descargas offline, diccionario, modo lectura— no estaba en ese
+plan y se documenta versión a versión en [RELEASES.md](../RELEASES.md).
 
-**Leyenda de estado:** `Pendiente` · `En progreso` · `Completado` · `Bloqueado`
+| Fase | Descripción | Estado | Cerrada |
+|------|-------------|--------|---------|
+| 1 | Setup y arquitectura base | Completado | 2026-04-29 |
+| 2 | Capa EPUB | Completado | 2026-04-29 |
+| 3 | Capa de almacenamiento | Completado | 2026-04-29 |
+| 4 | Capa TTS | Completado | 2026-04-29 |
+| 5 | Reproductor de audio | Completado | 2026-04-29 |
+| 6 | Pantalla Biblioteca | Completado | 2026-04-29 |
+| 7 | Pantalla Lectora | Completado | 2026-04-29 |
+| 8 | Pantalla Ajustes | Completado | 2026-04-29 |
+| 9 | Seguridad y rendimiento | Completado | 2026-04-29 |
+| 10 | Build y distribución APK | Completado | 2026-04-30 |
 
----
-
-## Fase 1 — Setup y arquitectura base
-
-**Estimado:** 3–4 días
-
-- [ ] Instalar Flutter SDK y configurar entorno Android (Android Studio / SDK)
-- [ ] Crear proyecto: `flutter create voicex_movil`
-- [ ] Configurar `pubspec.yaml` con todas las dependencias
-- [ ] Crear estructura de carpetas (`lib/config/`, `lib/tts/`, `lib/epub/`, etc.)
-- [ ] Configurar navegación con GoRouter (rutas: `/library`, `/reader/:bookId`, `/settings`)
-- [ ] Implementar tema visual (Material 3, colores dark/light, fondo sepia para lector)
-- [ ] Verificar que la app arranca en emulador Android
-
-**Notas:**
-> _(espacio para anotar decisiones, problemas encontrados o cambios de rumbo)_
+El trabajo pendiente vive en [IMPROVEMENTS.md](IMPROVEMENTS.md).
 
 ---
 
-## Fase 2 — Capa EPUB
+## Verificación pendiente en teléfono físico
 
-**Estimado:** 2–3 días
+Lo que el emulador no puede reproducir. Todo lo demás se confirmó en 0.5.0 y
+0.5.1 sobre un teléfono real.
 
-- [ ] Implementar modelos: `Sentence`, `Paragraph`, `Chapter`, `Book` en `epub/models.dart`
-- [ ] Implementar `parseEpub(String path) → Book` usando `epubx` + `html`
-- [ ] Replicar pipeline de limpieza: eliminar tags inútiles, filtro 20 chars, normalizar espacios
-- [ ] Implementar `_splitSentences(text)` con regex `(?<=[.!?…])\s+`
-- [ ] Detección de idioma (normaliza a `"es"` o `"en"`)
-- [ ] Tests unitarios del parser con un EPUB real
-
-**Notas:**
-
----
-
-## Fase 3 — Capa de almacenamiento
-
-**Estimado:** 2–3 días
-
-- [ ] Implementar `database.dart`: schema SQLite completo (books, reading_progress, bookmarks, audio_cache)
-- [ ] Implementar `LibraryRepo` (add, all, get, delete, updateLanguage, updateFilePath)
-- [ ] Implementar `ProgressRepo` (save, get)
-- [ ] Implementar `BookmarkRepo` (add, listForBook, delete)
-- [ ] Implementar `AudioCacheRepo` (get, save, touch, totalSizeKb, evictLruUntilFit, evict, pruneExpired)
-- [ ] Implementar `AppSettings` con SharedPreferences (todos los campos + `cacheMaxMb: 150`)
-- [ ] `VOICE_MAP` y `resolveVoice()` idénticos al prototipo de escritorio
-- [ ] Tests de repositorios con SQLite en memoria
-
-**Notas:**
-
----
-
-## Fase 4 — Capa TTS
-
-**Estimado:** 4–5 días
-
-- [ ] Definir clase abstracta `TTSProvider` con métodos `synthesize` y `listVoices`
-- [ ] Implementar modelos `Voice`, `WordTimestamp`, `TTSResult` en `tts/models.dart`
-- [ ] Implementar `EdgeTtsProvider`: protocolo WebSocket, audio MP3, word timestamps
-- [ ] Implementar `AndroidTtsProvider`: flutter_tts, audio WAV, timestamps vacíos
-- [ ] Implementar `tts_factory.dart`: `getProvider(settings, lang) → TTSProvider`
-- [ ] Caché de lista de voces Edge: TTL 7 días en SharedPreferences
-- [ ] Test de integración: sintetizar frase corta en español e inglés con cada proveedor
-
-**Notas:**
-
----
-
-## Fase 5 — Reproductor de audio
-
-**Estimado:** 1–2 días
-
-- [ ] Implementar `AudioPlayer` con just_audio
-- [ ] Máquina de estados: `IDLE → PLAYING → PAUSED → IDLE`
-- [ ] Stream de ticks cada 50 ms con `elapsedMs`
-- [ ] Callbacks `onTick(int elapsedMs)` y `onEnd()`
-- [ ] Manejo de audio en background (Android foreground service + notificación)
-
-**Notas:**
-
----
-
-## Fase 6 — Pantalla Biblioteca
-
-**Estimado:** 2–3 días
-
-- [ ] `LibraryScreen` con `ListView.builder` de `BookCard`
-- [ ] `BookCard`: título, autor, badge idioma ES/EN, botón Leer, botón eliminar
-- [ ] Toggle de idioma por libro (actualiza DB)
-- [ ] FAB "+ Agregar EPUB" con `file_picker`
-- [ ] Estado vacío con mensaje de instrucciones
-- [ ] Detección de archivo faltante + diálogo para relocalizar el EPUB
-
-**Notas:**
-
----
-
-## Fase 7 — Pantalla Lectora
-
-**Estimado:** 5–7 días
-
-- [ ] Layout completo (AppBar, nav capítulo, área texto, nav párrafo, controles, barra estado)
-- [ ] Widget `HighlightedText`: `RichText` con `TextSpan` para resaltado de oración activa
-- [ ] Controles: ▶ Reproducir / ⏸ Pausar / ▶ Continuar / ⏹ Detener
-- [ ] Selección de género de voz (♀ Femenina / ♂ Masculina)
-- [ ] Navegación entre capítulos y párrafos
-- [ ] Auto-avance: al terminar párrafo → siguiente; al terminar capítulo → siguiente
-- [ ] Guardado de progreso al navegar o salir
-- [ ] Marcadores: agregar (🔖), listar/saltar/eliminar (BottomSheet)
-- [ ] Barra de estado: "Sintetizando…", "Reproduciendo…", "Fin del libro", errores
-
-**Notas:**
-
----
-
-## Fase 8 — Pantalla Ajustes
-
-**Estimado:** 2–3 días
-
-- [ ] Selector de proveedor TTS (Edge / Android)
-- [ ] Grilla de voces: ES♀, ES♂, EN♀, EN♂ con botón "Probar" por cada una
-- [ ] Slider de velocidad: 0.5× → 2.0× (15 pasos)
-- [ ] Toggle de resaltado de oraciones
-- [ ] Selector de tema: dark / light / system
-- [ ] Sección caché: indicador de uso ("87 MB / 150 MB"), campo para ajustar tope (mín. 50 MB), botón "Limpiar caché"
-- [ ] Botón Guardar con feedback visual
-
-**Notas:**
-
----
-
-## Fase 9 — Seguridad y rendimiento
-
-**Estimado:** 2–3 días
-
-- [ ] Permisos Android en `AndroidManifest.xml` (INTERNET, scoped storage API 29+)
-- [ ] Limpieza de caché al iniciar: `pruneExpired()` + `evict(cacheMaxMb)` en Isolate background
-- [ ] Lógica hit/miss: consultar caché antes de sintetizar; si hay hit → `touch()` + reproducir
-- [ ] Evicción inline antes de síntesis: `evictLruUntilFit(estimado, maxMb)`
-- [ ] Parseo de EPUBs grandes en `compute()` para no bloquear UI
-- [ ] Liberar recursos TTS al cambiar de proveedor
-- [ ] Manejo de errores de red: si Edge TTS falla → intentar caché → si no hay, mostrar mensaje claro
-- [ ] Debounce en botón de play para evitar síntesis doble
-
-**Notas:**
-
----
-
-## Fase 10 — Build y distribución APK
-
-**Estimado:** 1 día
-
-- [x] Configurar `build.gradle`: `applicationId`, `versionCode = 1`, `versionName = 1.0.0`
-- [x] Generar keystore: `android/app/voicex.keystore` (10000 días, RSA 2048)
-- [x] Configurar `key.properties` (en `.gitignore`)
-- [x] Build release: `flutter build apk --release` → `app-release.apk` (55 MB)
-- [ ] Instalar APK en dispositivo Android físico y verificar funcionamiento completo
-- [ ] Verificación end-to-end (ver checklist abajo)
-
-**Notas:**
-
----
-
-## Checklist de Verificación Final
-
-- [ ] Abrir app → pantalla biblioteca vacía
-- [ ] Agregar EPUB en español → aparece en lista
-- [ ] Abrir libro → va al capítulo y párrafo guardado (o cap 1, pár 1 si es nuevo)
-- [ ] Tap ▶ → sintetiza con Edge TTS → reproduce con resaltado de oración
-- [ ] Tap ⏸ → pausa. Tap ▶ Continuar → reanuda desde posición exacta
-- [ ] Al terminar párrafo → avanza automáticamente al siguiente
-- [ ] Tap 🔖 → guarda marcador. Tap 📋 → lista marcadores, saltar a uno funciona
-- [ ] Salir y volver → libro retoma donde se dejó
-- [ ] Cambiar a Android TTS en ajustes → leer sin internet → funciona
-- [ ] Volver a Edge TTS → el caché del párrafo anterior se reutiliza (sin re-síntesis)
-- [ ] Ajustar tope de caché → limpiar caché → indicador muestra 0 MB
-- [ ] APK instalable en dispositivo físico sin errores
+- [ ] Botones de auriculares con cable (play/pausa, siguiente)
+- [ ] Controles de un mando Bluetooth o del coche
+- [ ] Pausa automática ante llamada entrante, y reanudación al colgar
+- [ ] La reproducción sobrevive con la pantalla apagada un rato largo
+- [ ] Una descarga completa de capítulo con Kokoro sin que el sistema mate el
+      proceso a mitad
 
 ---
 
@@ -211,8 +52,12 @@
 | 2026-04-29 | Riverpod como gestor de estado | Más robusto que Provider, tipado estricto similar a C# |
 | 2026-04-29 | Edge TTS vía WebSocket (reimplementado en Dart) | Paridad total con el prototipo de escritorio, mismas voces neuronales |
 | 2026-04-29 | Android TTS nativo como fallback | Cero dependencias externas, funciona offline |
-| 2026-04-29 | Caché de audio 5 días + LRU + 150 MB default | El usuario necesita re-escuchar párrafos sin re-síntesis ni consumo de datos |
-| 2026-04-29 | Evicción inline antes de síntesis | Garantiza que el usuario nunca reciba error por caché lleno |
+| 2026-04-29 | Caché de audio 5 días + LRU + 150 MB default | Re-escuchar párrafos sin re-síntesis ni consumo de datos |
+| 2026-04-29 | Evicción inline antes de síntesis | El usuario nunca recibe un error por caché lleno |
+| 2026-08-30 | Kokoro y Piper como motores auto-alojados, con repliegue a Edge | Mejor voz y funcionamiento sin internet, sin quedarse mudo cuando el servidor no está |
+| 2026-08-30 | La clave de caché nombra el motor, no solo la voz | Un repliegue a Edge guardado bajo la clave de Kokoro servía audio de Edge diciendo que era de Kokoro |
+| 2026-08-30 | Las descargas (`pinned`) solo las borra quien las pidió | Ni la evicción LRU, ni "Limpiar caché", ni la purga de 5 días pueden tocarlas |
+| 2026-08-30 | Nada de funciones de ventana en SQL | Android 7, el mínimo soportado (API 24), trae SQLite 3.9; `ROW_NUMBER()` necesita 3.25 |
 
 ---
 
