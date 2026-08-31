@@ -285,9 +285,18 @@ class EdgeTtsProvider implements TTSProvider {
       httpClient.close(force: true);
     }
 
+    final combined = Uint8List.fromList(audioChunks.expand((b) => b).toList());
+
+    // A timeout or a dropped connection leaves zero chunks. Writing that out
+    // produces a file the player cannot open — and worse, the caller caches it,
+    // so the paragraph stays broken for good. Fail loudly instead.
+    if (combined.isEmpty) {
+      throw const WebSocketException(
+          'Edge TTS no devolvió audio (conexión interrumpida o texto rechazado)');
+    }
+
     final tmpDir = await getTemporaryDirectory();
     final filePath = '${tmpDir.path}/edge_${_uuid.v4()}.mp3';
-    final combined = Uint8List.fromList(audioChunks.expand((b) => b).toList());
     await File(filePath).writeAsBytes(combined);
 
     dev.log('[EdgeTTS] ${combined.length}B in $binaryCount frames, '

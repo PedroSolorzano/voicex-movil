@@ -139,9 +139,14 @@ class KokoroTtsProvider implements TTSProvider {
       }
     }
 
+    final audio = bytes.takeBytes();
+    if (audio.isEmpty) {
+      throw const HttpException('Kokoro no devolvió audio');
+    }
+
     final tmpDir = await getTemporaryDirectory();
     final filePath = '${tmpDir.path}/kokoro_${_uuid.v4()}.mp3';
-    await File(filePath).writeAsBytes(bytes.takeBytes());
+    await File(filePath).writeAsBytes(audio);
 
     dev.log('[Kokoro] ${chunks.length} chunk(s), ${timestamps.length} word marks');
     return TTSResult(filePath: filePath, timestamps: timestamps);

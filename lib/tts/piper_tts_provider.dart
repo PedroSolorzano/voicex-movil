@@ -84,9 +84,15 @@ class PiperTtsProvider implements TTSProvider {
       wavs.add(await _synthesizeChunk(chunk, voice));
     }
 
+    final audio = _concatWav(wavs);
+    // A WAV header alone is 44 bytes and plays as silence.
+    if (audio.length <= 64) {
+      throw const HttpException('Piper no devolvió audio');
+    }
+
     final tmpDir = await getTemporaryDirectory();
     final filePath = '${tmpDir.path}/piper_${_uuid.v4()}.wav';
-    await File(filePath).writeAsBytes(_concatWav(wavs));
+    await File(filePath).writeAsBytes(audio);
 
     dev.log('[Piper] ${chunks.length} chunk(s) → $filePath');
     // No timings: ReaderNotifier estimates sentence marks from the duration.

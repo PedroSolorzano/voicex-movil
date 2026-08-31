@@ -204,7 +204,13 @@ class AudioCacheRepo {
     );
     if (rows.isEmpty) return null;
     final filePath = rows.first['file_path'] as String;
-    if (!File(filePath).existsSync()) {
+    final file = File(filePath);
+    // Missing *or* empty: a truncated write would otherwise be served forever,
+    // and the player only reports a generic "source error".
+    if (!file.existsSync() || file.lengthSync() < 512) {
+      try {
+        if (file.existsSync()) file.deleteSync();
+      } catch (_) {}
       await db.delete('audio_cache',
           where: 'file_path = ?', whereArgs: [filePath]);
       return null;

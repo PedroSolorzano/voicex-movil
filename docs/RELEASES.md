@@ -9,6 +9,43 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## 0.5.1-preview.1 — 2026-08-30
+
+### Un párrafo mudo se quedaba mudo para siempre
+
+En inglés con Edge no sonaba nada. La barra de estado del lector decía
+`Error: (0) Source error · Edge · 1.1 MB`: el contador de datos probaba que la
+síntesis había corrido, así que el fallo estaba entre escribir el archivo y
+reproducirlo.
+
+**Causa.** Si la síntesis no devolvía audio —un timeout, una conexión cortada—
+el archivo se escribía igual, con cero bytes, y se registraba en la caché. A
+partir de ahí ese párrafo estaba condenado: cada intento posterior encontraba
+la entrada en caché, se la pasaba al reproductor, y el reproductor solo sabía
+decir "Source error". Ninguna de las dos capas comprobaba que hubiera audio.
+
+Explica por qué era permanente y por qué solo pasaba en un libro: bastaba un
+único fallo de red para envenenar ese párrafo.
+
+**Arreglo, en tres capas:**
+
+- Edge, Kokoro y Piper fallan con un mensaje claro cuando no hay audio, en vez
+  de escribir un archivo que nadie puede abrir. En Piper el umbral son 64
+  bytes: una cabecera WAV sola son 44 y se reproduce como silencio.
+- El lector no registra en caché un archivo de menos de 512 bytes; lo borra y
+  propaga el error.
+- `AudioCacheRepo.get` trata como ausente lo que esté vacío, no solo lo que
+  falte. Esto **repara solo** las entradas ya envenenadas: se regeneran al
+  siguiente intento, sin tener que limpiar la caché a mano.
+- Los mensajes de error explican qué pasó en vez de mostrar el texto crudo de
+  la excepción.
+
+**Verificado en el teléfono.** Con *The Gunslinger* en inglés y Edge:
+`Reproduciendo… · Edge · 0.3 MB`, `PlaybackState state=3` avanzando, y el
+resaltado por palabra siguiendo el texto.
+
+---
+
 ## 0.5.0-preview.1 — 2026-08-30
 
 Primera versión probada en un teléfono real. Casi todo lo que sigue son fallos

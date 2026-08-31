@@ -547,7 +547,17 @@ class ReaderNotifier extends Notifier<ReaderState> {
       await File(result.filePath).delete();
     } catch (_) {}
 
-    final sizeKb = (await File(dest).length() / 1024).ceil();
+    final bytes = await File(dest).length();
+    // Never register an unplayable file: it would be served from cache on every
+    // later attempt, leaving that paragraph permanently silent.
+    if (bytes < 512) {
+      try {
+        await File(dest).delete();
+      } catch (_) {}
+      throw Exception('El audio generado salió vacío ($bytes bytes)');
+    }
+
+    final sizeKb = (bytes / 1024).ceil();
     await _cacheRepo.save(
         book.id!, chapterIdx, para.index, voice, _cacheFormatTag, dest, sizeKb);
     await _writeSidecar(dest, result.timestamps);
@@ -663,6 +673,12 @@ class ReaderNotifier extends Notifier<ReaderState> {
         s.contains('Failed host lookup') ||
         s.contains('TimeoutException')) {
       return 'Sin conexión. Cambia a TTS de Android en Ajustes para leer sin internet.';
+    }
+    if (s.contains('Source error') || s.contains('PlatformException')) {
+      return 'El audio de este párrafo está dañado. Se regenerará al reintentar.';
+    }
+    if (s.contains('no devolvió audio') || s.contains('salió vacío')) {
+      return 'El motor no devolvió audio. Reintenta o cambia de motor.';
     }
     return 'Error: $s';
   }
