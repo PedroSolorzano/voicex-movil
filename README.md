@@ -123,6 +123,7 @@ VoiceXMovil/
 └── docs/
     ├── RELEASES.md            # Historial de versiones
     ├── context/TECHNICAL.md   # Especificación técnica
+    ├── context/ACCESO_REMOTO.md # Kokoro/Piper fuera de casa
     ├── tasks/IMPROVEMENTS.md  # Mejoras pendientes
     ├── tasks/TRACKING.md      # Estado de implementación
     └── bugs/EDGE_TTS_DEBUG.md # Investigaciones de bugs
