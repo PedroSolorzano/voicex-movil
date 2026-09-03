@@ -50,10 +50,41 @@ Estos tres pasos son de `login.tailscale.com/admin`, no de la terminal.
 
 ## Conectar el teléfono
 
-En la app: **Ajustes → Motor de voz**, dirección
-`http://voicex-server.<tu-tailnet>.ts.net:8880` (Kokoro) o `:5000` (Piper) —
-con MagicDNS activado no hace falta memorizar la IP `100.x.y.z`. El teléfono
-necesita tener Tailscale instalado y logueado con la misma cuenta.
+Desde 0.7.0 la dirección **no se escribe en Ajustes**: va compilada en el APK y
+apunta al proxy, que es quien valida el token (ver
+[`tools/proxy/README.md`](../proxy/README.md) y
+[`tools/release/README.md`](../release/README.md)). Kokoro y Piper ya solo
+escuchan en loopback, así que `100.x.y.z:8880` no responde a nadie.
+
+El teléfono necesita Tailscale instalado, logueado con la misma cuenta **y con
+la VPN encendida**.
+
+### `tailscale status` no prueba que el teléfono encamine
+
+Comprobado en la práctica, y engaña: `tailscale status` decía
+`active; relay "mia"` y `tailscale ping` respondía en 83 ms, y aun así el
+teléfono no alcanzaba ni un puerto del servidor. Su interfaz estaba caída:
+
+```
+37: tun0: <POINTOPOINT> mtu 1280 ... state DOWN
+    inet 100.78.120.70/32
+```
+
+El proceso de Tailscale sigue hablando con el relevo —de ahí el ping y el
+"active"— mientras la VPN de Android está apagada. Con la interfaz caída,
+Android enruta las direcciones `100.x` por el WiFi normal, salen a internet y se
+pierden. El síntoma es un **timeout limpio**, no una conexión rechazada, que es
+justo lo que despista: parece el servidor y es el teléfono.
+
+Para saberlo, pregúntale al teléfono y no al servidor:
+
+```bash
+adb shell ip -4 addr show tun0        # tiene que decir UP
+adb shell ip route get 100.91.42.26   # tiene que salir por tun0, no por wlan0
+```
+
+Si dice `via 192.168.x.1 dev wlan0`, la VPN está apagada por mucho que el panel
+de Tailscale diga lo contrario.
 
 ## Parar
 
