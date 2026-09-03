@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import '../widgets/typography_sheet.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart' as ja;
@@ -317,6 +318,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               onBookmarks: () => _showBookmarks(context),
               onAddBookmark: () => _addBookmark(context),
               onSettings: () => context.push('/settings'),
+              onTypography: () => showTypographySheet(context),
               isDownloading: reader.isDownloading,
               onCancelDownload:
                   ref.read(readerProvider.notifier).cancelDownload,
@@ -627,6 +629,7 @@ class _TopBar extends StatelessWidget {
   final String title;
   final ReaderPalette palette;
   final VoidCallback onBack, onToc, onBookmarks, onAddBookmark, onSettings;
+  final VoidCallback onTypography;
   final ValueChanged<_DownloadScope> onDownload;
   final VoidCallback onCancelDownload;
   final bool isDownloading;
@@ -639,6 +642,7 @@ class _TopBar extends StatelessWidget {
     required this.onBookmarks,
     required this.onAddBookmark,
     required this.onSettings,
+    required this.onTypography,
     required this.onDownload,
     required this.onCancelDownload,
     required this.isDownloading,
@@ -708,6 +712,14 @@ class _TopBar extends StatelessWidget {
               tooltip: 'Ver marcadores',
               color: palette.text,
               onPressed: onBookmarks,
+            ),
+            // Delante de Ajustes a propósito: es lo que más se toca, y hasta
+            // ahora obligaba a salir del libro para llegar a ello.
+            IconButton(
+              icon: const Icon(Icons.text_fields),
+              tooltip: 'Letra y márgenes',
+              color: palette.text,
+              onPressed: onTypography,
             ),
             IconButton(
               icon: const Icon(Icons.settings_outlined),

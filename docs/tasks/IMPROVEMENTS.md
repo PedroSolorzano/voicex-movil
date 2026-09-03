@@ -75,7 +75,7 @@ atendido.
   palabra que falla deja de fallar para siempre), la lectura del cuerpo tiene
   plazo, y el mensaje de error dejó de ser el objeto de Dart.
 
-- [ ] `alto` 2026-09-02 — **Ajustar el tamaño del texto sin salir del libro.**
+- [x] `alto` 2026-09-02 — **Ajustar el tamaño del texto sin salir del libro.**
   Los controles existen —tamaño 12-32, interlineado, márgenes, tipografía y
   fondo— pero viven en la pantalla global de Ajustes
   (`settings_screen.dart:398-450`), entre el motor TTS y la caché: el botón de
