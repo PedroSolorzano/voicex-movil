@@ -91,10 +91,5 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
-        <!-- Android 11+ package visibility: without this flutter_tts cannot
-             discover the installed speech engines and offline TTS silently fails. -->
-        <intent>
-            <action android:name="android.intent.action.TTS_SERVICE"/>
-        </intent>
     </queries>
 </manifest>

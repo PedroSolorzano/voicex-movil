@@ -26,21 +26,18 @@ void main() {
       expect(keyFor('edge'), startsWith('edge-'));
       expect(keyFor('kokoro'), startsWith('kokoro-'));
       expect(keyFor('piper'), startsWith('piper-'));
-      expect(keyFor('android'), startsWith('android-'));
     });
 
     test('gives each engine a distinct key for the same paragraph', () {
-      final keys = {
-        for (final e in ['edge', 'kokoro', 'piper', 'android']) keyFor(e)
-      };
-      expect(keys.length, 4);
+      final keys = {for (final e in ttsEngines) keyFor(e)};
+      expect(keys.length, ttsEngines.length);
     });
 
     test('separates languages where the voice does not already do it', () {
-      expect(keyFor('android'), 'android-es');
-      expect(keyFor('android', forBook: english), 'android-en');
-      // Edge voice ids carry their locale, so the key differs on its own.
+      // Edge and Piper voice ids carry their language, so the keys differ on
+      // their own. Kokoro's do not — see the collision test below.
       expect(keyFor('edge'), isNot(keyFor('edge', forBook: english)));
+      expect(keyFor('piper'), isNot(keyFor('piper', forBook: english)));
     });
 
     test('collides across languages when one voice serves both', () {
@@ -66,7 +63,7 @@ void main() {
     test('yields something usable as a filename', () {
       // The key is embedded in the cache filename. ':' and '@' once made every
       // write fail while the download bar still reached 100 %.
-      for (final engine in ['edge', 'kokoro', 'piper', 'android']) {
+      for (final engine in ttsEngines) {
         for (final b in [book, english]) {
           expect(keyFor(engine, forBook: b),
               matches(RegExp(r'^[A-Za-z0-9_-]+$')),

@@ -4,7 +4,7 @@
 
 Lector EPUB con TTS neuronal para Android, distribuido como APK. Nació como
 réplica de [VoiceX Desktop](https://github.com/PedroSolorzano/voicex)
-(Python/tkinter) y hoy lo supera: cuatro motores de voz, descarga para escucha
+(Python/tkinter) y hoy lo supera: tres motores de voz, descarga para escucha
 sin conexión, controles en la pantalla de bloqueo y modo lectura estilo Kindle.
 
 - **Plataforma:** Android 7.0+ (API 24)
@@ -23,7 +23,7 @@ pieza es como es está en [RELEASES.md](../RELEASES.md).
 | UI | Flutter + Material 3 |
 | Estado | Riverpod 2.x |
 | Navegación | GoRouter |
-| Motores TTS | Edge (WebSocket propio en Dart), Kokoro y Piper (HTTP), Android nativo |
+| Motores TTS | Edge (WebSocket propio en Dart), Kokoro y Piper (HTTP) |
 | Reproducción | just_audio + audio_service (MediaSession) |
 | EPUB | epubx + html |
 | Base de datos | sqflite (SQLite) |
@@ -44,7 +44,6 @@ lib/
 │   ├── edge_tts_provider.dart # WebSocket con protocolo de Edge
 │   ├── kokoro_tts_provider.dart
 │   ├── piper_tts_provider.dart
-│   ├── android_tts_provider.dart
 │   └── tts_factory.dart       # getProvider(settings, lang)
 ├── epub/
 │   ├── models.dart            # Book, Chapter, Paragraph, Sentence
@@ -80,7 +79,7 @@ tools/piper/                   # Servidor Piper (Docker, puerto 5000)
 
 ## Motores de voz
 
-Los cuatro implementan `TTSProvider.synthesize()` y devuelven un `TTSResult`
+Los tres implementan `TTSProvider.synthesize()` y devuelven un `TTSResult`
 con la ruta del audio y la lista de `WordTimestamp`.
 
 | Motor | Transporte | Formato | Timestamps |
@@ -88,7 +87,12 @@ con la ruta del audio y la lista de `WordTimestamp`.
 | **Edge** | WebSocket a `speech.platform.bing.com` | MP3 24 kHz 96 kbps | Por palabra (`WordBoundary`) |
 | **Kokoro** | HTTP a servidor propio (`/dev/captioned_speech`) | MP3 24 kHz | Por palabra (`x-word-timestamps`) |
 | **Piper** | HTTP a servidor propio (`/synthesize`) | WAV 22,05 kHz | Ninguno |
-| **Android** | `flutter_tts` local | WAV | Ninguno |
+
+Ninguno de los tres funciona sin red: Edge necesita internet, Kokoro y Piper la
+red local. Escuchar sin conexión se resuelve descargando por adelantado, no con
+un motor local. El TTS del propio teléfono (`flutter_tts`) existió hasta 0.5.2 y
+se retiró en 0.6.0: no marcaba palabras, sonaba a robot frente a las voces
+neuronales y su WAV llenaba la caché.
 
 Sin timestamps, `text_align.dart` reparte el tiempo entre oraciones de forma
 aproximada y el resaltado baja de palabra a oración.
@@ -159,8 +163,11 @@ el primero que sirva.
 
 `main.dart` lanza, fuera del camino crítico:
 
-1. `migrateCacheKeys()` — renombra claves de builds anteriores y elimina filas
-   duplicadas, quedándose con la descarga o, si no la hay, con la más reciente.
+1. `migrateCacheKeys()` — borra el audio de motores retirados, renombra claves
+   de builds anteriores y elimina filas duplicadas, quedándose con la descarga
+   o, si no la hay, con la más reciente. El borrado va primero: la regla
+   catch-all del final etiqueta como `edge-` todo lo que no reconozca, y
+   reetiquetaría un audio que ningún motor va a volver a pedir.
 2. `pruneExpired()` — retira la caché temporal de más de 5 días.
 
 > Las consultas SQL evitan funciones de ventana: Android 7 trae SQLite 3.9 y
@@ -237,7 +244,7 @@ sustituyen antes de insertar.
 
 | Campo | Default | Notas |
 |---|---|---|
-| `ttsProvider` | `edge` | `edge` · `kokoro` · `piper` · `android` |
+| `ttsProvider` | `edge` | `edge` · `kokoro` · `piper`. `AppSettings.resolveEngine()` devuelve a `edge` cualquier otro valor guardado por una versión anterior |
 | `gender` | `female` | Solo para derivar la voz de Edge si no hay una explícita |
 | `edgeVoiceEs` / `edgeVoiceEn` | `''` | Vacío = derivar de `gender` con `voiceMap` |
 | `kokoroBaseUrl` | `''` | p. ej. `http://192.168.1.50:8880` |
@@ -311,6 +318,7 @@ el audio suene con normalidad.
 | `edge_tts_test.dart` | Locale de voz, troceado para síntesis |
 | `audio_cache_repo_test.dart` | Caché y descargas sobre SQLite real (`sqflite_common_ffi`) |
 | `cache_key_test.dart` | Construcción y saneo de la clave de caché |
+| `settings_engine_test.dart` | Motor guardado por una versión que ofrecía más |
 
 `lib/ui/` no tiene cobertura. Anotado en
 [IMPROVEMENTS.md](../tasks/IMPROVEMENTS.md).

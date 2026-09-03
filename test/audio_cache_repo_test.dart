@@ -213,6 +213,28 @@ void main() {
       expect(File(temp).existsSync(), isFalse);
     });
 
+    test('retires the audio of an engine the app no longer has', () async {
+      final db = await getDatabase();
+      // Both spellings the Android key ever had: 'android:' before 0.5.0,
+      // 'android-' after it. Pinned, to prove even a download goes.
+      final oldSpelling = await audioFile('old.wav');
+      final newSpelling = await audioFile('new.wav');
+      await insertRow(oldSpelling, pinned: true, voiceId: 'android:es-ES');
+      await insertRow(newSpelling, pinned: true, voiceId: 'android-es');
+      final kept = await audioFile('kokoro.mp3');
+      await repo.savePin(1, 0, 1, 'kokoro-af_bella', 'f96', kept, 2);
+
+      await repo.migrateCacheKeys();
+
+      expect(File(oldSpelling).existsSync(), isFalse);
+      expect(File(newSpelling).existsSync(), isFalse);
+      // A deletion, not a relabelling: the catch-all rule at the end of the
+      // migration would otherwise have turned them into 'edge-android-es'.
+      expect(await db.query('audio_cache', where: "voice_id LIKE '%android%'"),
+          isEmpty);
+      expect(await repo.get(1, 0, 1, 'kokoro-af_bella', 'f96'), kept);
+    });
+
     test('is idempotent on a clean table', () async {
       final download = await audioFile('pinned.mp3');
       await repo.savePin(1, 0, 0, 'kokoro-af_bella', 'f96', download, 2);

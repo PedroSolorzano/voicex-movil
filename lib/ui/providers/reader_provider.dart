@@ -402,9 +402,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
     return result;
   }
 
-  /// Fallback for engines that report no word boundaries (the offline Android
-  /// engine): spread sentences across the clip proportionally to their length.
-  /// Approximate, but enough to keep the highlight moving instead of frozen.
+  /// Fallback for engines that report no word boundaries (Piper): spread
+  /// sentences across the clip proportionally to their length. Approximate, but
+  /// enough to keep the highlight moving instead of frozen.
   List<SentenceMark> _estimateSentenceMarks(
       List<Sentence> sentences, int durationMs) {
     if (sentences.isEmpty || durationMs <= 0) return [];
@@ -436,7 +436,6 @@ class ReaderNotifier extends Notifier<ReaderState> {
       'piper' => 'piper-${settings.voiceForEngine('piper', book.language)}'
           '${piperPaceSuffix(settings.piperLengthScale)}',
       'kokoro' => 'kokoro-${settings.voiceForEngine('kokoro', book.language)}',
-      'android' => 'android-${book.language}',
       _ => 'edge-${settings.voiceForEngine('edge', book.language)}',
     };
     return sanitizeCacheKey(raw);
@@ -551,7 +550,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
       volume: settings.edgeVolume,
     );
 
-    // Keep the real extension: the Android engine emits WAV, Edge emits MP3.
+    // Keep the real extension: Piper emits WAV, Edge and Kokoro emit MP3.
     final ext = result.filePath.split('.').last;
     final cacheDir = await getTemporaryDirectory();
     final dest = '${cacheDir.path}/'
@@ -689,7 +688,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
     if (s.contains('SocketException') ||
         s.contains('Failed host lookup') ||
         s.contains('TimeoutException')) {
-      return 'Sin conexión. Cambia a TTS de Android en Ajustes para leer sin internet.';
+      return 'Sin conexión. Descarga los capítulos por adelantado para '
+          'escucharlos sin red.';
     }
     if (s.contains('Source error') || s.contains('PlatformException')) {
       return 'El audio de este párrafo está dañado. Se regenerará al reintentar.';
@@ -859,7 +859,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
       final provider = await _provider(settings, book.language);
       final result = await provider.synthesize(
         text: word.trim(),
-        voice: settings.voiceFor(book.language),
+        // As in _ensureAudio: the engine that will run, not the one selected.
+        // Asking Edge for Kokoro's voice returned nothing, and the catch below
+        // swallowed it — long-pressing a word simply did nothing.
+        voice: settings.voiceForEngine(_activeEngineKind, book.language),
         rate: settings.edgeRate,
         volume: settings.edgeVolume,
       );
@@ -1133,7 +1136,6 @@ class ReaderNotifier extends Notifier<ReaderState> {
       switch (settings.ttsProvider) {
         'piper' => 2.0,
         'kokoro' => 5.0,
-        'android' => 1.5,
         _ => 3.0, // Edge, dominated by the network
       };
 

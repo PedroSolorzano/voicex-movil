@@ -1,7 +1,6 @@
 import '../config/settings.dart';
 import 'tts_provider.dart';
 import 'edge_tts_provider.dart';
-import 'android_tts_provider.dart';
 import 'kokoro_tts_provider.dart';
 import 'piper_tts_provider.dart';
 
@@ -11,8 +10,6 @@ import 'piper_tts_provider.dart';
 /// the voice prefix and reads Spanish with English pronunciation.
 TTSProvider getProvider(AppSettings settings, {String lang = 'es'}) {
   switch (settings.ttsProvider) {
-    case 'android':
-      return AndroidTtsProvider();
     case 'kokoro':
       return KokoroTtsProvider(settings.kokoroBaseUrl,
           langCode: kokoroLangCode(lang));
@@ -30,6 +27,5 @@ TTSProvider getProvider(AppSettings settings, {String lang = 'es'}) {
 String providerLabel(String kind) => switch (kind) {
       'kokoro' => 'Kokoro',
       'piper' => 'Piper',
-      'android' => 'Android',
       _ => 'Edge',
     };

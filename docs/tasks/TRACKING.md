@@ -58,6 +58,7 @@ Lo que el emulador no puede reproducir. Todo lo demás se confirmó en 0.5.0 y
 | 2026-08-30 | La clave de caché nombra el motor, no solo la voz | Un repliegue a Edge guardado bajo la clave de Kokoro servía audio de Edge diciendo que era de Kokoro |
 | 2026-08-30 | Las descargas (`pinned`) solo las borra quien las pidió | Ni la evicción LRU, ni "Limpiar caché", ni la purga de 5 días pueden tocarlas |
 | 2026-08-30 | Nada de funciones de ventana en SQL | Android 7, el mínimo soportado (API 24), trae SQLite 3.9; `ROW_NUMBER()` necesita 3.25 |
+| 2026-09-02 | Retirar el TTS nativo de Android | Sin marcas de palabra, voz de calidad muy inferior y WAV que llena la caché; escuchar sin conexión lo cubre mejor la descarga por adelantado. Revierte la decisión del 2026-04-29 |
 
 ---
 

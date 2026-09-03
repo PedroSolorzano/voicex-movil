@@ -9,6 +9,52 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## 0.6.0-preview.1 — 2026-09-02
+
+### Fuera el TTS del teléfono
+
+Estuvo desde 0.1.0, cuando era el único motor que no pedía nada a nadie. Con
+Edge, Kokoro y Piper delante ya no ganaba en nada: no marca palabras, así que el
+resaltado bajaba a oración estimada; suena a robot al lado de una voz neuronal;
+y escribía WAV, que ocupa varias veces lo que el MP3 de los otros tres en la
+misma caché de 150 MB. Lo que justificaba tenerlo —escuchar sin conexión— hoy lo
+resuelve mejor la descarga por adelantado, que además suena bien.
+
+Se va el proveedor, el chip de Ajustes y la dependencia `flutter_tts`.
+
+**Un móvil que lo tuviera seleccionado no se queda a medias.** El nombre del
+motor vive en SharedPreferences: al arrancar seguiría diciendo `android`. La
+fábrica devolvía Edge en silencio, pero la clave de caché y la barra de estado
+del lector habrían seguido nombrando un motor inexistente, y el sondeo del
+servidor propio se habría lanzado a buscar una máquina que no toca. Ahora
+`AppSettings.load()` devuelve a Edge cualquier motor que la app ya no tenga.
+
+Su audio también se va: el mantenimiento del arranque borra las filas y los
+archivos de los dos nombres que la clave tuvo (`android:` antes de 0.5.0,
+`android-` después). Se hace **antes** de renombrar nada, porque la regla
+catch-all del final etiqueta como `edge-` todo lo que no reconoce, y habría
+convertido ese WAV en audio de Edge que ningún párrafo va a pedir jamás.
+
+### Oír una palabra suelta no hacía nada con Kokoro o Piper
+
+Misma causa que el repliegue roto de 0.5.2, en la función de al lado: la
+pulsación larga sobre una palabra pedía la voz **seleccionada** en vez de la del
+motor que iba a sintetizar. Con el servidor caído, eso mandaba `af_bella` a
+Edge, que devolvía nada, y el `catch` de alrededor se tragaba el error. Sin
+sonido, sin aviso, sin nada.
+
+### Debajo del capó
+
+- El mensaje de "sin conexión" ya no sugiere cambiar a un motor que no existe;
+  ahora manda a descargar los capítulos por adelantado.
+- `settings_engine_test.dart` fija que un motor retirado vuelve a Edge y que uno
+  válido sobrevive con sus ajustes. 86 tests.
+- Los comentarios que describían el motor local —el reparto estimado de
+  oraciones, la extensión WAV, el catálogo de voces— nombran ahora a Piper, que
+  es quien hereda esos casos.
+
+---
+
 ## 0.5.2-preview.1 — 2026-08-30
 
 Cuatro fallos en el camino de la caché y las descargas, encontrados revisando

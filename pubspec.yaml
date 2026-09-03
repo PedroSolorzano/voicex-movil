@@ -1,7 +1,7 @@
 name: voicex_movil
 description: "EPUB reader with neural TTS voices for Android."
 publish_to: 'none'
-version: 0.5.2-preview.1+1
+version: 0.6.0-preview.1+1
 
 environment:
   sdk: ^3.11.5
@@ -28,7 +28,6 @@ dependencies:
   # TTS / WebSocket
   web_socket_channel: ^3.0.1
   http: ^1.2.2
-  flutter_tts: ^4.0.2
 
   # EPUB
   epubx: ^4.0.0

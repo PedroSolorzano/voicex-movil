@@ -14,8 +14,8 @@ y su arreglo. Aquí solo queda lo que no está hecho.
 - [ ] `alto` 2026-08-30 — **Elegir motor de voz definitivo.** Hay 9 muestras del
   mismo párrafo en `muestras_voz/` (6 de Edge, 3 de Kokoro) con un LEEME que
   explica cómo compararlas. Edge se queda como motor principal pase lo que pase;
-  Kokoro entraría como proveedor adicional para funcionar sin internet, que hoy
-  solo cubre el TTS nativo de Android. Medido: Kokoro da timestamps por palabra
+  Kokoro entraría como proveedor adicional para no depender de internet.
+  Medido: Kokoro da timestamps por palabra
   (cabecera `x-word-timestamps`), va a ~5x tiempo real en CPU, y solo tiene 3
   voces en español frente a las 11 de Edge.
 - [ ] `medio` 2026-08-30 — **Probar en teléfono físico** lo que el emulador no

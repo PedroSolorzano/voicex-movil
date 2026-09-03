@@ -173,7 +173,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ('edge', 'Edge', Icons.cloud_outlined),
                   ('kokoro', 'Kokoro', Icons.home_outlined),
                   ('piper', 'Piper', Icons.record_voice_over_outlined),
-                  ('android', 'Android', Icons.phone_android),
                 ])
                   ChoiceChip(
                     avatar: Icon(engine.$3, size: 18),
@@ -195,10 +194,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   'Servidor propio con voces entrenadas en cada idioma. Muy '
                       'rápido, pero no marca las palabras: el resaltado se calcula '
                       'por oración de forma aproximada.',
-                'android' =>
-                  'Motor de voz del propio teléfono. Funciona sin internet, pero '
-                      'no marca las palabras, así que el resaltado se calcula de '
-                      'forma aproximada.',
                 _ =>
                   'Voces neuronales de Microsoft. Requiere internet; el audio se '
                       'guarda en caché para volver a escucharlo sin conexión.',

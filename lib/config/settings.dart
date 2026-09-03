@@ -8,11 +8,11 @@ const voiceMap = {
     'es': {'female': 'es-MX-DaliaNeural', 'male': 'es-MX-JorgeNeural'},
     'en': {'female': 'en-US-JennyNeural', 'male': 'en-US-GuyNeural'},
   },
-  'android': {
-    'es': {'female': 'es-ES', 'male': 'es-ES'},
-    'en': {'female': 'en-US', 'male': 'en-US'},
-  },
 };
+
+/// Engines the app can build. Anything else found in stored settings comes from
+/// a version that offered more of them, and has to be brought back here.
+const ttsEngines = ['edge', 'kokoro', 'piper'];
 
 String resolveVoice(String provider, String lang, String gender) {
   return voiceMap[provider]?[lang]?[gender] ??
@@ -145,10 +145,19 @@ class AppSettings {
   bool get usesSelfHostedServer =>
       ttsProvider == 'kokoro' || ttsProvider == 'piper';
 
+  /// Brings a stored engine name back to one the app still has.
+  ///
+  /// Android TTS was retired in 0.6.0. Left as-is, a phone that had it selected
+  /// would boot with `ttsProvider = 'android'`: the factory would quietly hand
+  /// back Edge, but the cache key and the status bar would keep claiming an
+  /// engine that no longer exists.
+  static String resolveEngine(String? stored) =>
+      ttsEngines.contains(stored) ? stored! : 'edge';
+
   static Future<AppSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
     return AppSettings(
-      ttsProvider: prefs.getString('ttsProvider') ?? 'edge',
+      ttsProvider: resolveEngine(prefs.getString('ttsProvider')),
       gender: prefs.getString('gender') ?? 'female',
       edgeVoiceEs: prefs.getString('edgeVoiceEs') ?? '',
       edgeVoiceEn: prefs.getString('edgeVoiceEn') ?? '',

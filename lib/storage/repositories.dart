@@ -330,15 +330,17 @@ class AudioCacheRepo {
   /// Idempotent, so it can run on every start.
   Future<void> migrateCacheKeys() async {
     final db = await _db;
+    // Before anything renames them: audio from an engine the app no longer
+    // has. Nothing will ever ask for it again, and Android TTS wrote WAV, so
+    // these are the bulkiest rows on disk. Runs first so the catch-all rule at
+    // the end does not relabel them as Edge.
+    await _dropRetiredEngineRows();
     await db.execute(
         "UPDATE audio_cache SET voice_id = 'kokoro-' || substr(voice_id, 8) "
         "WHERE voice_id LIKE 'kokoro:%'");
     await db.execute(
         "UPDATE audio_cache SET voice_id = 'piper-' || "
         "replace(substr(voice_id, 7), '.', '_') WHERE voice_id LIKE 'piper@%'");
-    await db.execute(
-        "UPDATE audio_cache SET voice_id = 'android-' || substr(voice_id, 9) "
-        "WHERE voice_id LIKE 'android:%'");
     // Kokoro voice ids look like af_bella or ef_dora: a language letter, a
     // gender letter, an underscore. Without this they fall through to the Edge
     // rule below and downloads get labelled with an engine that never made
@@ -356,9 +358,23 @@ class AudioCacheRepo {
     await db.execute(
         "UPDATE audio_cache SET voice_id = 'edge-' || voice_id "
         "WHERE voice_id NOT LIKE 'edge-%' AND voice_id NOT LIKE 'kokoro-%' "
-        "AND voice_id NOT LIKE 'piper-%' AND voice_id NOT LIKE 'android-%'");
+        "AND voice_id NOT LIKE 'piper-%'");
 
     await _dropDuplicateRows();
+  }
+
+  /// Deletes audio produced by an engine the app has since dropped.
+  ///
+  /// Android TTS went away in 0.6.0. Covers both spellings its key ever had:
+  /// the 'android:' form used before 0.5.0 and the 'android-' one after it.
+  Future<void> _dropRetiredEngineRows() async {
+    final db = await _db;
+    const where = "voice_id LIKE 'android-%' OR voice_id LIKE 'android:%'";
+    final rows = await db.query('audio_cache', where: where);
+    for (final row in rows) {
+      await _deleteCachedFile(row['file_path'] as String);
+    }
+    await db.delete('audio_cache', where: where);
   }
 
   /// Leaves one row per (paragraph, voice, format): the download if there is

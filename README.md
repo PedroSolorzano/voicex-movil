@@ -8,14 +8,13 @@ Versión Android de [VoiceX](https://github.com/Preston-IA/voicex).
 
 ## Qué hace
 
-**Cuatro motores de voz**, elegibles por libro:
+**Tres motores de voz**, elegibles por libro:
 
 | Motor | Dónde corre | Notas |
 |---|---|---|
 | **Edge** | Nube (Microsoft) | 300+ voces, tiempos por palabra. Funciona en cualquier red |
 | **Kokoro** | Servidor propio | Mejor calidad de voz, con tiempos por palabra |
 | **Piper** | Servidor propio | Voces entrenadas por idioma. El más rápido |
-| **Android** | El propio teléfono | Sin internet, sin servidor |
 
 Kokoro y Piper corren en tu computadora ([`tools/`](tools/)); cuando no
 responden, la app cae a Edge automáticamente y lo dice en pantalla.
@@ -45,6 +44,7 @@ responden, la app cae a Edge automáticamente y lo dice en pantalla.
 
 | Versión | Lo que trajo |
 |---|---|
+| **0.6.0** | Fuera el TTS del teléfono: no marcaba palabras, sonaba a robot al lado de las voces neuronales y su WAV llenaba la caché. Un móvil que lo tuviera puesto vuelve a Edge solo, y su audio se borra en el arranque. Oír una palabra suelta con Kokoro o Piper vuelve a funcionar |
 | **0.5.2** | Las descargas se borraban solas a los cinco días, el repliegue a Edge pedía una voz que Edge no tiene, y un párrafo ya descargado se volvía a sintetizar. Los repositorios pasan a tener tests contra SQLite real |
 | **0.5.1** | Un párrafo cuyo audio salía vacío se guardaba en caché igual y quedaba mudo para siempre: en inglés con Edge no sonaba nada. Ahora ningún motor entrega audio vacío, la caché descarta lo que no se puede reproducir y el error se explica en pantalla |
 | **0.5.0** | Primera versión probada en teléfono real. Controles de bloqueo que nunca habían aparecido, el texto que se descolocaba al pausar, el cambio de motor que no cambiaba nada, y descargas que se guardaban en el vacío. Diccionario español, ajustes que se guardan solos, almacenamiento por libro y motor |
@@ -111,7 +111,7 @@ commits.
 VoiceXMovil/
 ├── lib/
 │   ├── config/          # AppSettings (SharedPreferences)
-│   ├── tts/             # Edge, Kokoro, Piper y Android (Strategy + Factory)
+│   ├── tts/             # Edge, Kokoro y Piper (Strategy + Factory)
 │   ├── epub/            # Parser EPUB, modelos y alineado texto-audio
 │   ├── audio/           # Handler de audio_service con MediaSession
 │   ├── services/        # Diccionario
