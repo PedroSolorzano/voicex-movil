@@ -1,0 +1,23 @@
+# Mapa token -> alias del probador.
+#
+# Copia este fichero a tokens.conf (gitignorado) y sustituye los valores.
+# Genera cada token con:
+#
+#     openssl rand -base64 32 | tr -d '=+/'
+#
+# Uno por persona, nunca compartido: es lo que hace que una filtración sea
+# atribuible y revocable sin tocar a los demás. Revocar es borrar la línea y
+# recargar:
+#
+#     docker compose -f tools/proxy/docker-compose.yml exec proxy nginx -s reload
+#
+# El alias es lo que aparece en el log; el token no aparece nunca.
+
+map $http_authorization $tester {
+    default "";
+
+    "Bearer REEMPLAZA_ESTE_TOKEN_DE_PEDRO"    "pedro";
+    "Bearer REEMPLAZA_ESTE_TOKEN_DEL_AMIGO"   "amigo";
+    "Bearer REEMPLAZA_ESTE_TOKEN_HERMANA_1"   "hermana1";
+    "Bearer REEMPLAZA_ESTE_TOKEN_HERMANA_2"   "hermana2";
+}

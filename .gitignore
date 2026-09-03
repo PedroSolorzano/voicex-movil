@@ -55,3 +55,8 @@ muestras_voz/
 # Capturas de referencia (apps de la competencia, pruebas en el teléfono):
 # material de trabajo, no documentación del repo
 docs/screenshot/
+
+# Tokens reales del proxy y sus logs: identidades revocables y registros de
+# acceso de personas concretas, nada de eso va al repo
+tools/proxy/tokens.conf
+tools/proxy/logs/

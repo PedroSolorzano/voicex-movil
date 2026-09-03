@@ -13,20 +13,19 @@ docker compose -f tools/kokoro/docker-compose.yml logs -f   # esperar "Applicati
 
 El primer arranque tarda un poco: carga el modelo y 67 paquetes de voz.
 
-## Configurar el teléfono
+## Cómo llega el teléfono hasta aquí
 
-1. Averigua la IP de la computadora en tu red:
+**Ya no escribiendo una IP.** Este servidor solo escucha en `127.0.0.1`: no
+sabe autenticar a nadie, así que no puede estar expuesto ni siquiera a la WiFi
+de casa. Todo entra por el proxy, que valida un token y limita el ritmo — ver
+[`tools/proxy/README.md`](../proxy/README.md).
 
-   ```bash
-   hostname -I | awk '{print $1}'
-   ```
+La dirección y el token van compilados en el APK
+(`--dart-define-from-file`), no en un campo de Ajustes. El botón **Probar
+conexión** de la app sigue estando, y ahora distingue "no responde" de "clave
+rechazada".
 
-2. En la app: **Ajustes → Motor de voz → Kokoro**, y escribe
-   `http://<esa-IP>:8880`.
-3. Pulsa el icono de conexión del campo para comprobar que responde.
-
-El teléfono debe estar en la misma red WiFi. Fuera de casa la app usará Edge, o
-el audio que hayas descargado por adelantado.
+Con el servidor apagado la app cae a Edge sola, así que nunca se queda muda.
 
 ## Voces
 

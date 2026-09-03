@@ -2,17 +2,19 @@
 #
 #   docker compose -f tools/kokoro/docker-compose.yml up -d
 #
-# El teléfono se conecta a http://<IP-de-esta-máquina>:8880 desde la misma red.
-# Averigua la IP con:  hostname -I | awk '{print $1}'
+# El teléfono NO se conecta aquí: entra por el proxy (tools/proxy), que es
+# quien valida el token. Este servidor no sabe autenticar -su "API key" es la
+# cadena literal `not-needed`-, así que solo escucha en loopback.
 services:
   kokoro:
     image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.8.1
     container_name: voicex-kokoro
     restart: unless-stopped
-    # 0.0.0.0 a propósito: sin esto solo respondería a localhost y el teléfono
-    # no podría alcanzarlo.
+    # 127.0.0.1 a propósito: alcanzable por el proxy, que corre en la red del
+    # host, y por nadie más. Con 0.0.0.0 cualquiera en la WiFi entraría por
+    # aquí saltándose la autenticación, y el proxy sería decorativo.
     ports:
-      - "0.0.0.0:8880:8880"
+      - "127.0.0.1:8880:8880"
     environment:
       # A partir de v0.8 la app manda `lang_code` en cada petición, así que un
       # único contenedor sirve para español e inglés.

@@ -256,29 +256,31 @@ mientras **Kokoro devuelve MP3**
 Para Piper la cifra es aritmética, no estimación: los modelos `high` sintetizan
 a 22 050 Hz, 16 bits y un canal, o sea 44 100 bytes por segundo de audio.
 
-| Motor | Formato | Por minuto de audio | Por hora de escucha |
+**Kokoro ya está medido** (2026-09-02, v0.8.1, voz `ef_dora`, párrafo de 61
+caracteres): 55 724 bytes de MP3 para 3,39 s de audio.
+
+| Motor | Formato | Por hora de audio | En la red, por hora |
 |---|---|---|---|
-| Piper | WAV sin comprimir | ~2,6 MB | **~159 MB** |
-| Kokoro | MP3 | ~0,5 MB (a 64 kbps) | ~29 MB |
+| Piper | WAV sin comprimir | ~159 MB | ~159 MB |
+| Kokoro | MP3 a **131 kbps** | ~56 MB | **~75 MB** |
 
-**La cifra de Kokoro está sin verificar**: depende del bitrate que use el
-encoder, que no está documentado. A 128 kbps se doblaría hasta ~58 MB por hora.
-Medirlo con los servidores arriba:
+Dos correcciones sobre lo que decía este documento antes, y las dos van en
+contra:
 
-```bash
-curl -s -X POST http://localhost:8880/dev/captioned_speech \
-  -H 'Content-Type: application/json' \
-  -d '{"model":"kokoro","input":"<párrafo de prueba>","voice":"af_bella",
-       "response_format":"mp3","speed":1.0,"lang_code":"e","stream":false,
-       "return_timestamps":true}' | wc -c
+- **El encoder de Kokoro va a 131 kbps, no a 64.** La cifra estimada de ~29 MB
+  por hora era menos de la mitad de la real.
+- **Por la red viaja un 33 % más todavía.** Desde v0.8 el audio llega en base64
+  dentro de un JSON
+  ([`kokoro_tts_provider.dart:184-192`](../../lib/tts/kokoro_tts_provider.dart)),
+  y esa expansión no aparece en el tamaño del MP3. Son ~75 MB por hora de
+  escucha.
 
-curl -s -X POST http://localhost:5000/synthesize \
-  -H 'Content-Type: application/json' \
-  -d '{"text":"<mismo párrafo>","voice":"es_AR-daniela-high","length_scale":1.0}' | wc -c
-```
-
-**Ojo:** Piper con datos móviles es caro. Una hora de escucha se lleva 159 MB, y
-un plan de 5 GB al mes da para unas 31 horas contando solo el audio.
+**Ojo con los datos móviles.** Piper se lleva 159 MB por hora, y un plan de 5 GB
+da para unas 31 horas contando solo el audio; Kokoro, 75 MB por hora, da para
+unas 68. Ninguno de los dos es un motor para escuchar por 4G sin mirar el
+contador. Es la razón principal por la que **Piper no va al reparto** a los
+probadores: mandarle WAV sin comprimir al plan de datos de otra persona no es
+razonable.
 
 Y un matiz operativo: **la descarga por adelantado está atada al WiFi por
 diseño**. `maybePrefetchAhead`

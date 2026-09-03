@@ -1,0 +1,31 @@
+# Proxy de autenticación para Kokoro y Piper.
+#
+#   docker compose -f tools/proxy/docker-compose.yml up -d
+#
+# Ninguno de los dos servidores sabe autenticar: la "API key" de Kokoro es la
+# cadena literal `not-needed`. Toda la validación vive aquí, y por eso ellos
+# pasan a escuchar solo en loopback (ver sus compose): sin esa parte, este
+# proxy sería decorativo, porque cualquiera en la LAN entraría por el 8880.
+#
+# network_mode: host, igual que el contenedor de Tailscale, para alcanzar los
+# backends en 127.0.0.1 y para que `tailscale funnel 8080` -que corre en la
+# misma red del host- llegue aquí sin plumbing adicional.
+services:
+  proxy:
+    image: nginx:1.27-alpine
+    container_name: voicex-proxy
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./tokens.conf:/etc/nginx/tokens.conf:ro
+      - ./logs:/var/log/voicex
+    healthcheck:
+      # Sin token la respuesta correcta es 401: comprobarlo verifica a la vez
+      # que nginx responde y que la autenticación está puesta.
+      test: ["CMD-SHELL",
+             "wget -q -S -O /dev/null http://127.0.0.1:8080/kokoro/health 2>&1 | grep -q ' 401'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

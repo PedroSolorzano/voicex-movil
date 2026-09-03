@@ -11,8 +11,13 @@ docker compose -f tools/piper/docker-compose.yml up -d --build
 
 La primera construcción descarga el modelo (~110 MB para daniela-high).
 
-Luego, en la app: **Ajustes → Motor de voz → Piper**, y la dirección
-`http://<IP-de-la-computadora>:5000`.
+Como Kokoro, solo escucha en `127.0.0.1` y el teléfono entra por el proxy
+(ver [`tools/proxy/README.md`](../proxy/README.md)): la dirección va compilada
+en el APK, no se escribe en Ajustes.
+
+**Piper no se reparte a los probadores.** Devuelve WAV sin comprimir, ~159 MB
+por hora de escucha, y eso no se le manda al plan de datos de otra persona por
+un túnel.
 
 ## Voces: una por idioma
 

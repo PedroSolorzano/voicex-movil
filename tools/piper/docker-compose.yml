@@ -2,7 +2,8 @@
 #
 #   docker compose -f tools/piper/docker-compose.yml up -d --build
 #
-# El teléfono se conecta a http://<IP-de-esta-máquina>:5000
+# El teléfono NO se conecta aquí: entra por el proxy (tools/proxy). Este
+# servidor tampoco sabe autenticar, así que solo escucha en loopback.
 services:
   piper:
     build:
@@ -17,8 +18,9 @@ services:
         VOICE_EN_PATH: en/en_US/lessac/high
     container_name: voicex-piper
     restart: unless-stopped
+    # Ver el comentario del compose de Kokoro: solo el proxy llega hasta aquí.
     ports:
-      - "0.0.0.0:5000:5000"
+      - "127.0.0.1:5000:5000"
     healthcheck:
       test: ["CMD", "curl", "-fs", "http://localhost:5000/info"]
       interval: 30s
