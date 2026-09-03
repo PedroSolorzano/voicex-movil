@@ -1,12 +1,24 @@
 import 'dart:io';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../../epub/parser.dart';
 import '../../storage/repositories.dart';
 
 final _libraryRepo = LibraryRepo();
 const _uuid = Uuid();
+
+/// Dos libros de dominio público verificado (Project Gutenberg), uno en cada
+/// idioma que la app sabe leer. Empaquetados sin modificar -- el aviso legal
+/// de Gutenberg va dentro del propio EPUB, y así se mantiene intacto.
+const _demoBooks = [
+  'assets/demo/don_quijote_de_la_mancha.epub',
+  'assets/demo/alices_adventures_in_wonderland.epub',
+];
+
+const _demoSeededKey = 'demo_books_seeded';
 
 /// Copies the picked EPUB into app storage.
 ///
@@ -26,9 +38,53 @@ Future<String> _importToAppStorage(String sourcePath) async {
 
 class LibraryNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
   @override
-  Future<List<Map<String, dynamic>>> build() => _libraryRepo.all();
+  Future<List<Map<String, dynamic>>> build() async {
+    final books = await _libraryRepo.all();
+    if (books.isEmpty) {
+      // Nunca debe impedir que la biblioteca real cargue: una biblioteca
+      // vacía sigue siendo mejor resultado que una pantalla que no abre.
+      try {
+        await _seedDemoLibraryIfNeeded();
+      } catch (_) {}
+      return _libraryRepo.all();
+    }
+    return books;
+  }
+
+  /// Copia los dos libros de muestra la primera vez que la biblioteca está
+  /// vacía. La marca en SharedPreferences es lo que evita que un libro de
+  /// muestra borrado por la persona reaparezca en el siguiente arranque.
+  Future<void> _seedDemoLibraryIfNeeded() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_demoSeededKey) ?? false) return;
+    await prefs.setBool(_demoSeededKey, true);
+
+    final tmpDir = await getTemporaryDirectory();
+    for (final asset in _demoBooks) {
+      String? tmpPath;
+      try {
+        final bytes = await rootBundle.load(asset);
+        tmpPath = '${tmpDir.path}/${_uuid.v4()}.epub';
+        await File(tmpPath).writeAsBytes(bytes.buffer.asUint8List());
+        await _importFile(tmpPath);
+      } catch (_) {
+        // Un libro de muestra que no carga no debe impedir que la app abra.
+      } finally {
+        if (tmpPath != null) {
+          try {
+            await File(tmpPath).delete();
+          } catch (_) {}
+        }
+      }
+    }
+  }
 
   Future<void> addBook(String filePath) async {
+    await _importFile(filePath);
+    ref.invalidateSelf();
+  }
+
+  Future<void> _importFile(String filePath) async {
     // Parse first: a malformed EPUB should fail before anything is copied.
     // Off the UI isolate, since unzipping a novel janks the list otherwise.
     final book = await parseEpubInBackground(filePath);
@@ -80,8 +136,6 @@ class LibraryNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
     } catch (_) {
       // Extras extraction is non-critical; ignore failures.
     }
-
-    ref.invalidateSelf();
   }
 
   Future<void> deleteBook(int id) async {

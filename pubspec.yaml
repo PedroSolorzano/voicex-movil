@@ -67,6 +67,17 @@ dev_dependencies:
   # Runs the real SQLite schema on the desktop, so the cache repositories can
   # be tested without a device.
   sqflite_common_ffi: ^2.3.3
+  # Fake PathProviderPlatform for tests that import an EPUB: there is no
+  # platform implementation for getApplicationDocumentsDirectory() under
+  # `flutter test`.
+  path_provider_platform_interface: ^2.1.2
+  plugin_platform_interface: ^2.1.8
 
 flutter:
   uses-material-design: true
+
+  # Dos libros de dominio público verificado (Project Gutenberg), uno en cada
+  # idioma que la app sabe leer, para que una instalación nueva no arranque
+  # con la biblioteca vacía. Ver LibraryNotifier._seedDemoLibraryIfNeeded.
+  assets:
+    - assets/demo/
