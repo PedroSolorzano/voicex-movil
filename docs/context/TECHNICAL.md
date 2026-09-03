@@ -85,7 +85,7 @@ con la ruta del audio y la lista de `WordTimestamp`.
 | Motor | Transporte | Formato | Timestamps |
 |---|---|---|---|
 | **Edge** | WebSocket a `speech.platform.bing.com` | MP3 24 kHz 96 kbps | Por palabra (`WordBoundary`) |
-| **Kokoro** | HTTP a servidor propio (`/dev/captioned_speech`) | MP3 24 kHz | Por palabra (`x-word-timestamps`) |
+| **Kokoro** | HTTP a servidor propio (`/dev/captioned_speech`) | AAC-LC 24 kHz ~94 kbps | Por palabra (`x-word-timestamps`) |
 | **Piper** | HTTP a servidor propio (`/synthesize`) | WAV 22,05 kHz | Ninguno |
 
 Ninguno de los tres funciona sin red: Edge necesita internet, Kokoro y Piper la

@@ -256,28 +256,41 @@ mientras **Kokoro devuelve MP3**
 Para Piper la cifra es aritmética, no estimación: los modelos `high` sintetizan
 a 22 050 Hz, 16 bits y un canal, o sea 44 100 bytes por segundo de audio.
 
-**Kokoro ya está medido** (2026-09-02, v0.8.1, voz `ef_dora`, párrafo de 61
-caracteres): 55 724 bytes de MP3 para 3,39 s de audio.
+**Kokoro ya está medido** (2026-09-02, v0.8.1, voz `ef_dora`, mismo párrafo en
+todos los formatos). El servidor **no expone ningún parámetro de bitrate**: su
+API solo acepta `response_format`, así que la única palanca es el códec.
 
-| Motor | Formato | Por hora de audio | En la red, por hora |
+| Formato | kbps | Por hora de audio | En la red, por hora |
 |---|---|---|---|
-| Piper | WAV sin comprimir | ~159 MB | ~159 MB |
-| Kokoro | MP3 a **131 kbps** | ~56 MB | **~75 MB** |
+| **AAC-LC** ← el que usa la app | **94** | ~40 MB | **~54 MB** |
+| MP3 (lo anterior) | 130 | ~56 MB | ~74 MB |
+| Opus | 140 | ~60 MB | ~80 MB |
+| FLAC | 198 | ~85 MB | ~113 MB |
+| WAV | 386 | ~166 MB | ~221 MB |
+| Piper (WAV, sin opción) | 353 | ~159 MB | ~159 MB |
 
-Dos correcciones sobre lo que decía este documento antes, y las dos van en
-contra:
+Tres cosas que la medición dejó claras, y ninguna era la esperada:
 
-- **El encoder de Kokoro va a 131 kbps, no a 64.** La cifra estimada de ~29 MB
-  por hora era menos de la mitad de la real.
-- **Por la red viaja un 33 % más todavía.** Desde v0.8 el audio llega en base64
-  dentro de un JSON
-  ([`kokoro_tts_provider.dart:184-192`](../../lib/tts/kokoro_tts_provider.dart)),
-  y esa expansión no aparece en el tamaño del MP3. Son ~75 MB por hora de
-  escucha.
+- **El encoder iba a 131 kbps, no a 64.** La cifra estimada de ~29 MB por hora
+  que traía este documento era menos de la mitad de la real.
+- **Opus sale peor que MP3**, que es exactamente lo contrario de lo que se
+  supone del formato más eficiente para voz: el servidor lo codifica también a
+  tasa fija alta y su ventaja se pierde. Además viaja en Ogg, que no se
+  concatena por tramas como necesita el troceado de párrafos largos.
+- **AAC es la única mejora real**, un 28 % menos, y sin coste: AAC-LC a 94 kbps
+  rinde por encima de MP3 a 130, y es ADTS igual que el MP3, así que se
+  concatena igual. Verificado: dos respuestas unidas dan 148 tramas sin
+  desincronizar.
+
+Y una parte que ningún códec arregla: **por la red viaja un 33 % más**. Desde
+v0.8 el audio llega en base64 dentro de un JSON
+([`kokoro_tts_provider.dart:175-184`](../../lib/tts/kokoro_tts_provider.dart)),
+y esa expansión no está en el tamaño del audio. Es el precio del endpoint que
+devuelve los timestamps.
 
 **Ojo con los datos móviles.** Piper se lleva 159 MB por hora, y un plan de 5 GB
-da para unas 31 horas contando solo el audio; Kokoro, 75 MB por hora, da para
-unas 68. Ninguno de los dos es un motor para escuchar por 4G sin mirar el
+da para unas 31 horas contando solo el audio; Kokoro, 54 MB por hora, da para
+unas 95. Ninguno de los dos es un motor para escuchar por 4G sin mirar el
 contador. Es la razón principal por la que **Piper no va al reparto** a los
 probadores: mandarle WAV sin comprimir al plan de datos de otra persona no es
 razonable.

@@ -29,6 +29,12 @@ typedef SentenceMark = ({int startMs, int sentenceIdx});
 /// every previously cached file — used when the output format changed from
 /// 48 kbit/s to 96 kbit/s. Playback speed is deliberately NOT part of the key:
 /// speed is applied at playback time, so one file serves every speed.
+///
+/// **Deliberately not bumped when Kokoro moved from MP3 to AAC.** The old files
+/// still play, and AAC-LC at 94 kbit/s is not a downgrade from MP3 at 130, so
+/// there is nothing to retire — while bumping would have orphaned every
+/// download already on the phone, which is the one thing this cache must never
+/// do. The two codecs coexist: the extension is stored per file.
 const _cacheFormatTag = 'f96';
 
 /// How often progress is persisted while audio is playing.
@@ -603,7 +609,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
       volume: settings.edgeVolume,
     );
 
-    // Keep the real extension: Piper emits WAV, Edge and Kokoro emit MP3.
+    // Keep the real extension: Piper emits WAV, Edge MP3, Kokoro AAC.
     final ext = result.filePath.split('.').last;
     final cacheDir = await getTemporaryDirectory();
     final dest = '${cacheDir.path}/'

@@ -127,7 +127,7 @@ class KokoroTtsProvider implements TTSProvider {
     }
 
     final tmpDir = await getTemporaryDirectory();
-    final filePath = '${tmpDir.path}/kokoro_${_uuid.v4()}.mp3';
+    final filePath = '${tmpDir.path}/kokoro_${_uuid.v4()}.aac';
     await File(filePath).writeAsBytes(audio);
 
     dev.log('[Kokoro] ${chunks.length} chunk(s), ${timestamps.length} word marks');
@@ -145,7 +145,14 @@ class KokoroTtsProvider implements TTSProvider {
       'model': 'kokoro',
       'input': text,
       'voice': voice,
-      'response_format': 'mp3',
+      // AAC, no MP3: medido sobre el mismo párrafo, el servidor entrega 94
+      // kbps frente a los 130 del MP3 -un 28 % menos por la red- y AAC-LC
+      // rinde por encima de MP3 a igual tasa, así que no se pierde calidad,
+      // se deja de desperdiciar. Opus, que sería el candidato obvio, sale
+      // *peor* aquí (140 kbps): el servidor lo codifica también a una tasa
+      // fija alta y su ventaja se pierde, y además viaja en Ogg, que no se
+      // concatena por tramas como necesita _synthesizeChunk.
+      'response_format': 'aac',
       // Playback speed is applied by the player so one cached file serves every
       // speed; synthesis stays neutral.
       'speed': 1.0,
@@ -166,7 +173,7 @@ class KokoroTtsProvider implements TTSProvider {
         resp.headers.contentType?.mimeType.contains('json') ?? false;
 
     if (isJson) {
-      // v0.8+: {"audio": base64, "audio_format": "mp3", "timestamps": [...]}.
+      // v0.8+: {"audio": base64, "audio_format": ..., "timestamps": [...]}.
       // Carrying the timings in the body removes the header size ceiling.
       final body = await readBodyString(resp);
       final json = jsonDecode(body) as Map<String, dynamic>;
