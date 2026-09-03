@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 import 'package:package_info_plus/package_info_plus.dart';
+import '../../config/server_config.dart';
 import '../../config/settings.dart';
 import '../../storage/repositories.dart';
 import '../../tts/tts_factory.dart';
@@ -35,19 +36,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _testingServer = false;
   bool _serverOk = false;
   String? _serverStatus;
-  late final TextEditingController _kokoroUrlController;
-
-  /// Engine whose URL the text field currently holds.
-  String? _urlFieldOwner;
   String? _previewing;
   PackageInfo? _packageInfo;
 
   @override
   void initState() {
     super.initState();
-    final loaded = ref.read(settingsProvider).valueOrNull;
-    _kokoroUrlController =
-        TextEditingController(text: loaded?.selfHostedUrl ?? '');
     _loadCacheSize();
     PackageInfo.fromPlatform().then((info) {
       if (mounted) setState(() => _packageInfo = info);
@@ -62,18 +56,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       unawaited(ref.read(settingsProvider.notifier).save(_settings));
     }
     _previewPlayer.dispose();
-    _kokoroUrlController.dispose();
     super.dispose();
   }
 
   /// Probes the configured server so a typo in the address is caught here
   /// rather than as a silent fallback to Edge mid-chapter.
-  Future<void> _testKokoro() async {
-    final url = _kokoroUrlController.text.trim();
-    if (url.isEmpty) {
+  Future<void> _testServer() async {
+    final url = _settings.selfHostedUrl;
+    if (url.trim().isEmpty) {
       setState(() {
         _serverOk = false;
-        _serverStatus = 'Escribe la dirección del servidor.';
+        _serverStatus =
+            'Esta versión de la app no trae servidor configurado. Solo puede '
+            'usar Edge.';
       });
       return;
     }
@@ -157,15 +152,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     final s = _settings;
 
-    // Each engine keeps its own address. Without this the field would still be
-    // showing the previous engine's URL after switching, while typing wrote to
-    // the new one — so a Kokoro address could silently land in Piper's setting.
-    if (_urlFieldOwner != s.ttsProvider) {
-      _urlFieldOwner = s.ttsProvider;
-      _kokoroUrlController.text = s.selfHostedUrl;
-      _serverStatus = null;
-    }
-
     return Scaffold(
       appBar: AppBar(title: const Text('Ajustes')),
       body: ListView(
@@ -176,11 +162,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
+                // Solo lo que esta compilación puede usar de verdad. Mostrar
+                // un motor sin servidor configurado sería ofrecer algo que cae
+                // a Edge en silencio: exactamente "una función rota".
                 for (final engine in const [
                   ('edge', 'Edge', Icons.cloud_outlined),
                   ('kokoro', 'Kokoro', Icons.home_outlined),
                   ('piper', 'Piper', Icons.record_voice_over_outlined),
-                ])
+                ].where((e) => TtsServerConfig.availableEngines.contains(e.$1)))
                   ChoiceChip(
                     avatar: Icon(engine.$3, size: 18),
                     label: Text(engine.$2),
@@ -194,11 +183,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             Text(
               switch (s.ttsProvider) {
                 'kokoro' =>
-                  'Servidor propio en tu red. Mejor calidad de voz, pero solo '
-                      'responde con la computadora encendida: fuera de casa la app '
-                      'usa Edge automáticamente, o el audio ya descargado.',
+                  'La mejor voz, generada en una computadora que no es la tuya. '
+                      'Necesita que esté encendida: cuando no lo está, la app usa '
+                      'Edge automáticamente o el audio ya descargado, sin quedarse '
+                      'muda.',
                 'piper' =>
-                  'Servidor propio con voces entrenadas en cada idioma. Muy '
+                  'Voces entrenadas en cada idioma, en esa misma computadora. Muy '
                       'rápido, pero no marca las palabras: el resaltado se calcula '
                       'por oración de forma aproximada.',
                 _ =>
@@ -213,29 +203,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             _Section(
                 title: 'Servidor ${providerLabel(s.ttsProvider)}',
                 children: [
-              TextField(
-                controller: _kokoroUrlController,
-                decoration: InputDecoration(
-                  labelText: 'Dirección del servidor',
-                  hintText: 'http://192.168.1.50:8880',
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                  suffixIcon: IconButton(
+              // Sin campo de dirección, y sin mostrarla: va compilada en el
+              // APK (ver TtsServerConfig). Ocultarla no la hace secreta -un
+              // APK se descompila- pero evita que se rompa por accidente, que
+              // acabe en una captura, o que se pegue en un grupo de mensajes.
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Servidor configurado en esta versión de la app.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.tonalIcon(
                     icon: _testingServer
                         ? const SizedBox(
-                            width: 18,
-                            height: 18,
+                            width: 16,
+                            height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.wifi_tethering),
-                    tooltip: 'Probar conexión',
-                    onPressed: _testingServer ? null : _testKokoro,
+                        : const Icon(Icons.wifi_tethering, size: 18),
+                    label: const Text('Probar'),
+                    onPressed: _testingServer ? null : _testServer,
                   ),
-                ),
-                keyboardType: TextInputType.url,
-                autocorrect: false,
-                onChanged: (v) => _update(s.ttsProvider == 'piper'
-                    ? s.copyWith(piperBaseUrl: v.trim())
-                    : s.copyWith(kokoroBaseUrl: v.trim())),
+                ],
               ),
               if (_serverStatus != null)
                 Padding(
@@ -562,6 +553,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
             ),
           ),
+          // Plegada: no estorba a quien solo quiere leer, y convierte un "no me
+          // funciona" en cinco líneas con números. Es la mitad que el log del
+          // servidor no puede dar — un sondeo que expira en el teléfono se ve
+          // allí como un 200 impecable, porque lo que se perdió fue la vuelta.
+          _DiagnosticsSection(version: _packageInfo),
+
           const SizedBox(height: 32),
           if (_packageInfo != null)
             Center(
@@ -1033,5 +1030,69 @@ class _Section extends StatelessWidget {
         const Divider(height: 24),
       ],
     );
+  }
+}
+
+/// Últimos sondeos medidos en el teléfono, listos para compartir.
+class _DiagnosticsSection extends StatefulWidget {
+  const _DiagnosticsSection({required this.version});
+
+  final PackageInfo? version;
+
+  @override
+  State<_DiagnosticsSection> createState() => _DiagnosticsSectionState();
+}
+
+class _DiagnosticsSectionState extends State<_DiagnosticsSection> {
+  bool _open = false;
+
+  String _report() {
+    final v = widget.version;
+    final head = v == null ? 'VoiceX' : 'VoiceX ${v.version}+${v.buildNumber}';
+    return '$head\n${TtsDiagnostics.asText()}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = TtsDiagnostics.entries.reversed.toList();
+    return _Section(title: 'Diagnóstico', children: [
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              entries.isEmpty
+                  ? 'Todavía no se ha consultado ningún servidor.'
+                  : '${entries.length} consulta(s) al servidor en esta sesión.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          TextButton(
+            onPressed: () => setState(() => _open = !_open),
+            child: Text(_open ? 'Ocultar' : 'Ver'),
+          ),
+        ],
+      ),
+      if (_open) ...[
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: SelectableText(
+            _report(),
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Si algo falla, copia esto y mándalo: dice cuánto tardó cada intento '
+          'y en qué acabó.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    ]);
   }
 }

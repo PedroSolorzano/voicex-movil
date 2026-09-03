@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'audio/audio_player.dart';
+import 'config/settings.dart';
 import 'storage/repositories.dart';
 import 'tts/tts_endpoint.dart';
 import 'ui/app.dart';
@@ -22,6 +23,7 @@ void main() {
     }
 
     unawaited(_stampVersion());
+    unawaited(AppSettings.forgetRetiredKeys());
     unawaited(_pruneCache());
     runApp(const ProviderScope(child: VoiceXApp()));
   }, (error, stack) {

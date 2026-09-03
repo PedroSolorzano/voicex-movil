@@ -60,3 +60,7 @@ docs/screenshot/
 # acceso de personas concretas, nada de eso va al repo
 tools/proxy/tokens.conf
 tools/proxy/logs/
+
+# Configuración de compilación por probador: lleva el token dentro
+tools/release/*.json
+!tools/release/tester.example.json

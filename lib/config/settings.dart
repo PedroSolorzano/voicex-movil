@@ -154,14 +154,30 @@ class AppSettings {
   /// its server directly on the LAN, where there is no proxy to authenticate to.
   String get serverToken => TtsServerConfig.token;
 
-  /// Brings a stored engine name back to one the app still has.
+  /// Brings a stored engine name back to one **this build** can actually use.
   ///
-  /// Android TTS was retired in 0.6.0. Left as-is, a phone that had it selected
-  /// would boot with `ttsProvider = 'android'`: the factory would quietly hand
-  /// back Edge, but the cache key and the status bar would keep claiming an
-  /// engine that no longer exists.
+  /// Two ways to end up with a name that no longer means anything. Android TTS
+  /// was retired in 0.6.0, so a phone that had it selected would boot with
+  /// `ttsProvider = 'android'`. And from 0.7.0 the self-hosted engines only
+  /// exist in a build compiled with their address, so an APK handed to a tester
+  /// without one has no Kokoro at all — while their phone may still carry the
+  /// name from a previous build.
+  ///
+  /// Both cases fail the same way if left alone: the factory quietly returns
+  /// Edge, but the cache key and the status bar keep naming an engine that is
+  /// not there, and `usesSelfHostedServer` sends the reader probing for a
+  /// machine it will never find.
   static String resolveEngine(String? stored) =>
-      ttsEngines.contains(stored) ? stored! : 'edge';
+      TtsServerConfig.availableEngines.contains(stored) ? stored! : 'edge';
+
+  /// Removes settings that a previous version persisted and this one no longer
+  /// reads, so a stale server address does not linger on disk.
+  static Future<void> forgetRetiredKeys() async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final key in ['kokoroBaseUrl', 'piperBaseUrl']) {
+      await prefs.remove(key);
+    }
+  }
 
   static Future<AppSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -177,12 +193,15 @@ class AppSettings {
       edgeVolume: prefs.getString('edgeVolume') ?? '+0%',
       highlightSentences: prefs.getBool('highlightSentences') ?? true,
       highlightWords: prefs.getBool('highlightWords') ?? true,
-      kokoroBaseUrl: prefs.getString('kokoroBaseUrl') ?? '',
+      // Compilada, no guardada: ver [TtsServerConfig]. Las claves viejas se
+      // borran más abajo para que no quede en disco la dirección de una
+      // versión anterior.
+      kokoroBaseUrl: TtsServerConfig.kokoroUrl,
       kokoroVoiceEs: prefs.getString('kokoroVoiceEs') ?? 'af_bella',
       kokoroVoiceEn: prefs.getString('kokoroVoiceEn') ?? 'af_bella',
       prefetchOnWifi: prefs.getBool('prefetchOnWifi') ?? true,
       prefetchChapters: prefs.getInt('prefetchChapters') ?? 3,
-      piperBaseUrl: prefs.getString('piperBaseUrl') ?? '',
+      piperBaseUrl: TtsServerConfig.piperUrl,
       piperVoiceEs: prefs.getString('piperVoiceEs') ?? 'es_AR-daniela-high',
       piperVoiceEn: prefs.getString('piperVoiceEn') ?? 'en_US-lessac-high',
       piperLengthScale: prefs.getDouble('piperLengthScale') ?? 1.0,
@@ -208,12 +227,10 @@ class AppSettings {
     await prefs.setString('edgeVolume', edgeVolume);
     await prefs.setBool('highlightSentences', highlightSentences);
     await prefs.setBool('highlightWords', highlightWords);
-    await prefs.setString('kokoroBaseUrl', kokoroBaseUrl);
     await prefs.setString('kokoroVoiceEs', kokoroVoiceEs);
     await prefs.setString('kokoroVoiceEn', kokoroVoiceEn);
     await prefs.setBool('prefetchOnWifi', prefetchOnWifi);
     await prefs.setInt('prefetchChapters', prefetchChapters);
-    await prefs.setString('piperBaseUrl', piperBaseUrl);
     await prefs.setString('piperVoiceEs', piperVoiceEs);
     await prefs.setString('piperVoiceEn', piperVoiceEn);
     await prefs.setDouble('piperLengthScale', piperLengthScale);

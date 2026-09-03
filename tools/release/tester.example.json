@@ -1,0 +1,10 @@
+{
+  "_comentario": "Copia este fichero como <nombre>.json por cada persona. Los reales están gitignorados: llevan el token.",
+  "_kokoro": "La dirección apunta al proxy con el prefijo del motor, no al servidor: es lo que valida el token.",
+
+  "KOKORO_URL": "https://voicex-server.tu-tailnet.ts.net/kokoro",
+  "TTS_TOKEN": "el-token-de-esta-persona-sacado-de-tools-proxy-tokens-conf",
+
+  "_piper": "Piper solo en tu propia compilación: devuelve WAV sin comprimir, ~159 MB por hora, y eso no se le manda al plan de datos de otra persona. Borra la línea para los probadores.",
+  "PIPER_URL": "https://voicex-server.tu-tailnet.ts.net/piper"
+}
