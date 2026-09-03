@@ -32,8 +32,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -55,6 +57,10 @@ FALLIDOS = LOGS_DIR / "fallidos.jsonl"
 
 BUGS_DOC = REPO / "docs" / "bugs" / "REPORTES_TESTERS.md"
 IMPROVEMENTS_DOC = REPO / "docs" / "tasks" / "IMPROVEMENTS.md"
+
+# Ledger de qué build ya incluye qué arreglo, versionado en git (a diferencia
+# de estado/, que es del probador). Ver tools/reportes/README.md.
+VERSIONES = AQUI / "versiones.jsonl"
 
 # Modelo balanceado a propósito hacia calidad: las notas duran <=90s y las
 # corridas son periódicas, no en vivo, así que unos segundos más de CPU
@@ -196,12 +202,94 @@ def _contexto(reporte: dict) -> str | None:
     return ", ".join(partes) if partes else None
 
 
+# Demasiado comunes para contar como coincidencia por sí solas.
+_STOPWORDS = {
+    "el", "la", "los", "las", "un", "una", "unos", "unas", "de", "del", "que",
+    "y", "o", "a", "en", "no", "me", "mi", "es", "se", "con", "por", "para",
+    "lo", "le", "su", "sus", "al", "the", "and", "for", "with", "to", "of",
+    "in", "on", "voz", "tts", "app",
+}
+
+
+def _tokenizar(texto: str) -> set[str]:
+    sin_acentos = "".join(
+        c for c in unicodedata.normalize("NFKD", texto.lower())
+        if not unicodedata.combining(c))
+    return {p for p in re.findall(r"[a-z0-9]+", sin_acentos)
+            if len(p) > 2 and p not in _STOPWORDS}
+
+
+def _build_de(reporte: dict) -> int | None:
+    m = re.search(r"\+(\d+)$", reporte.get("app") or "")
+    return int(m.group(1)) if m else None
+
+
+def _cargar_versiones() -> list[dict]:
+    if not VERSIONES.exists():
+        return []
+    versiones = []
+    for linea in VERSIONES.read_text(encoding="utf-8").splitlines():
+        if not linea.strip():
+            continue
+        try:
+            versiones.append(json.loads(linea))
+        except json.JSONDecodeError:
+            continue
+    return versiones
+
+
+def buscar_coincidencias(reporte: dict, transcripcion: str | None) -> list[dict]:
+    """Compara el build de este reporte contra `versiones.jsonl` por solape
+    de palabras. Nunca decide "es el mismo bug" -eso lo sigue mirando una
+    persona-, solo avisa cuándo vale la pena mirar dos veces antes de
+    investigar de cero."""
+    build_reporte = _build_de(reporte)
+    if build_reporte is None:
+        return []
+
+    texto = " ".join(filter(None, [reporte.get("texto"), transcripcion]))
+    palabras_reporte = _tokenizar(texto)
+    if not palabras_reporte:
+        return []
+
+    coincidencias = []
+    for v in _cargar_versiones():
+        build_arreglo = v.get("build")
+        if build_arreglo is None:
+            continue
+        palabras_v = _tokenizar(f"{v.get('tag', '')} {v.get('resumen', '')}")
+        if len(palabras_reporte & palabras_v) < 2:
+            continue
+        coincidencias.append({
+            "build_reporte": build_reporte,
+            "build_arreglo": build_arreglo,
+            "duplicado": build_reporte >= build_arreglo,
+            "resumen": v.get("resumen", "?"),
+            "commit": v.get("commit", "?"),
+        })
+    return coincidencias
+
+
 def bloque_bug(entrada: dict, reporte: dict, transcripcion: str | None,
                aproximada: bool) -> str:
     tester = entrada.get("tester", "?")
     tipo = reporte.get("tipo", "?")
     fecha = _fecha_hora(entrada.get("ts", ""))
     lineas = [f"## {fecha} — {tipo} — {tester}"]
+
+    for c in buscar_coincidencias(reporte, transcripcion):
+        if c["duplicado"]:
+            lineas.append(
+                f"\n⚠️ **Posible duplicado:** este build ({c['build_reporte']}) "
+                f"ya incluye «{c['resumen']}» (build {c['build_arreglo']}, "
+                f"commit `{c['commit']}`). Revisar si es el mismo caso antes "
+                f"de investigar de cero.")
+        else:
+            lineas.append(
+                f"\nℹ️ Este build ({c['build_reporte']}) es anterior a "
+                f"«{c['resumen']}» (build {c['build_arreglo']}, commit "
+                f"`{c['commit']}`). Puede que ya esté resuelto en una "
+                f"versión más nueva.")
 
     contexto = _contexto(reporte)
     if contexto:
@@ -245,6 +333,14 @@ def bloque_mejora(entrada: dict, reporte: dict, transcripcion: str | None,
     contexto = _contexto(reporte)
     if contexto:
         linea += f" _({contexto})_"
+
+    for c in buscar_coincidencias(reporte, transcripcion):
+        if c["duplicado"]:
+            linea += (f" ⚠️ _posible duplicado de «{c['resumen']}» "
+                       f"(build {c['build_arreglo']})_")
+        else:
+            linea += (f" ℹ️ _build anterior a «{c['resumen']}» "
+                       f"(build {c['build_arreglo']})_")
     return linea
 
 

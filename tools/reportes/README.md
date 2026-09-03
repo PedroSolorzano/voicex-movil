@@ -82,6 +82,38 @@ corridas se superpongan si una transcripción tarda más que el intervalo.
 - El script solo hace `git add` de los dos documentos que tocó. Nunca
   `git commit` -- eso lo sigue haciendo la persona, como el resto del repo.
 
+## Qué build ya incluye qué arreglo
+
+`versiones.jsonl` es un ledger chico, versionado en git (a diferencia de
+`estado/`, que es datos de esta máquina): una línea por arreglo o feature que
+le importa a un tester, con el número de build en que salió.
+
+```json
+{"build": 65, "commit": "ddc3517", "fecha": "2026-09-03", "tag": "capitulo-siguiente", "resumen": "Botones de saltar capítulo en el lector, en vez de pasar por el índice"}
+```
+
+`build` sale de `git rev-list --count <commit>` -- el mismo número que usa
+`versionCode` (`android/app/build.gradle.kts`), así que compara directo
+contra el `app` que manda cada reporte (`reporter.dart`, `X-Voicex-Client`).
+Se completa a mano, junto con `RELEASES.md`, cuando algo se arregla.
+
+Cada reporte nuevo se compara contra el ledger por solape de palabras
+(`buscar_coincidencias` en `procesar.py`) y, si hay coincidencia, la entrada
+sale con una nota:
+
+- **Build igual o posterior al del arreglo:** "⚠️ Posible duplicado" -- puede
+  ser el mismo bug reportado de nuevo por alguien con una versión ya
+  parchada.
+- **Build anterior:** "ℹ️ build anterior a..." -- a esa persona ese arreglo
+  todavía no le había llegado.
+
+Es una nota, nunca una decisión: comparar números de build es mecánico y
+confiable, decidir si es el mismo bug no, así que sigue haciendo falta
+mirarlo. El solape de palabras es deliberadamente simple (sin acentos, sin
+conectores, mínimo dos palabras en común) -- prefiere un falso positivo
+ocasional (una nota de más, fácil de ignorar) a uno negativo (un duplicado
+real sin avisar).
+
 ## Si algo falla
 
 Un reporte que no se puede parsear (o cuya transcripción falla) no tumba el

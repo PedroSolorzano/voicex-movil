@@ -1,0 +1,4 @@
+{"build": 62, "commit": "6265c4a", "fecha": "2026-09-03", "tag": "pipeline-reportes", "resumen": "Los reportes de testers ya no se revisan a mano: un pipeline local transcribe el audio y los vuelca al backlog"}
+{"build": 63, "commit": "18410b9", "fecha": "2026-09-03", "tag": "tts-telefono-android11", "resumen": "El motor de voz del teléfono no generaba audio en Android 11 o superior"}
+{"build": 64, "commit": "029bc18", "fecha": "2026-09-03", "tag": "biblioteca-vacia-demo", "resumen": "Una instalación nueva ya no arranca con la biblioteca vacía: siembra Don Quijote y Alice's Adventures in Wonderland"}
+{"build": 65, "commit": "ddc3517", "fecha": "2026-09-03", "tag": "capitulo-siguiente", "resumen": "Botones de saltar capítulo en el lector, en vez de pasar por el índice"}
