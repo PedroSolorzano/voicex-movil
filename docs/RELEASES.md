@@ -118,6 +118,25 @@ reportaba que el motor no había generado nada, cuando sí lo había hecho.
 Pasar `isFullPath: true` alcanza: el resto del código ya construye una ruta
 absoluta. Verificado en el mismo teléfono que lo reportó.
 
+### Descargar un capítulo con un motor podía romper el de otro
+
+Reportado como "cambio de motor y no me deja, hay un proceso corriendo".
+`ReaderNotifier` guardaba el motor de voz activo en un solo campo compartido
+(`_ttsProvider`), y tanto la descarga (`downloadChapters`) como la
+reproducción en vivo (`play`) pasaban por él. Cambiar de motor mientras una
+descarga corría destruía la instancia que la descarga estaba usando a mitad
+de una síntesis (`_provider`, línea 594: `unawaited(old.dispose())`) -y como
+la descarga fijaba los ajustes una sola vez al arrancar, en la siguiente
+vuelta del bucle volvía a pedir el motor viejo y destruía a su vez lo que la
+reproducción acababa de crear. Las dos se turnaban la manguera.
+
+Ahora la descarga tiene su propia instancia, nunca la de la reproducción en
+vivo: cambiar de motor en Ajustes mientras algo se descarga ya no interrumpe
+ni una cosa ni la otra. La descarga sigue terminando con el motor que tenía
+al arrancar -salvo que el servidor se caiga a mitad, que ahí sí se repliega a
+Edge como antes-, y solo un cambio de motor deliberado en Ajustes afecta a
+partir de ese momento a la reproducción en vivo.
+
 ### Lectura
 
 - El **tamaño de letra se ajusta sin salir del libro**. Los controles existían

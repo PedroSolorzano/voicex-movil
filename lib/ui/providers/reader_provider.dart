@@ -232,6 +232,13 @@ class ReaderNotifier extends Notifier<ReaderState> {
   final _bookmarkRepo = BookmarkRepo();
   final _cacheRepo = AudioCacheRepo();
 
+  /// The engine used by interactive playback ([play], previews). Never
+  /// shared with a download: `downloadChapters` keeps its own local
+  /// instance, because switching engine here disposes the old one
+  /// (`_provider`), and a download mid-`synthesize()` on that old instance
+  /// would have its connection pulled out from under it -- that used to
+  /// make "download with Kokoro, then try another engine" fail with no
+  /// clear reason.
   TTSProvider? _ttsProvider;
   String? _ttsProviderKind;
 
@@ -567,7 +574,13 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// probed first and quietly replaced by Edge when unavailable — the reader
   /// must never go silent just because the home server is down. The engine in
   /// use is surfaced in [ReaderState.engineLabel] so the swap is visible.
-  Future<TTSProvider> _provider(AppSettings settings, String lang) async {
+  /// Decides which engine to actually use right now -- the self-hosted health
+  /// check and its fallback to Edge -- without touching any provider
+  /// *instance*. Shared by interactive playback ([_provider]) and downloads
+  /// ([downloadChapters]), which must each own their instance: see the note
+  /// on [_ttsProvider] for why sharing one caused downloads and playback to
+  /// dispose each other's connection mid-request.
+  Future<String> _resolveEngineKind(AppSettings settings) async {
     var kind = settings.ttsProvider;
 
     if (settings.usesSelfHostedServer) {
@@ -584,7 +597,11 @@ class ReaderNotifier extends Notifier<ReaderState> {
         kind = 'edge';
       }
     }
+    return kind;
+  }
 
+  Future<TTSProvider> _provider(AppSettings settings, String lang) async {
+    final kind = await _resolveEngineKind(settings);
     final key = '$kind/$lang';
     if (_ttsProvider == null || _ttsProviderKind != key) {
       final old = _ttsProvider;
@@ -1187,11 +1204,19 @@ class ReaderNotifier extends Notifier<ReaderState> {
     if (from >= chapters.length || from < 0) return;
 
     final settings = _settings;
+    // Its own instance, never `_provider`/`_ttsProvider`: those belong to
+    // interactive playback, and switching *that* engine mid-download used to
+    // dispose the instance this loop was still awaiting a response from --
+    // see the note on `_ttsProvider`. A download keeps the engine it started
+    // with even if the person changes engine in Ajustes while it runs; only
+    // the server dropping out mid-download falls it back to Edge below.
+    var dlKind = await _resolveEngineKind(settings);
+    var dlProvider =
+        getProvider(settings.copyWith(ttsProvider: dlKind), lang: book.language);
     // Resolve the engine up front: a download must be stored under whatever
     // actually synthesizes it, not under what was selected. This first reading
     // only decides what to skip; each paragraph re-derives its own key below.
-    await _provider(settings, book.language);
-    final skipKey = _cacheKeyFor(_activeEngineKind, settings, book);
+    final skipKey = _cacheKeyFor(dlKind, settings, book);
     final docsDir = await getApplicationDocumentsDirectory();
 
     final totalParagraphs = [
@@ -1222,15 +1247,23 @@ class ReaderNotifier extends Notifier<ReaderState> {
         }
 
         try {
-          final provider = await _provider(settings, book.language);
-          // Re-derived per paragraph: the server can drop out mid-download, and
-          // the key fixed before the loop would then file Edge's audio under
-          // Kokoro's name — audio that plays with the wrong voice and never
-          // gets regenerated because the row looks correct.
-          final voice = _cacheKeyFor(_activeEngineKind, settings, book);
-          final result = await provider.synthesize(
+          // Re-resolved per paragraph: the server can drop out mid-download,
+          // and the key fixed before the loop would then file Edge's audio
+          // under Kokoro's name — audio that plays with the wrong voice and
+          // never gets regenerated because the row looks correct. Only the
+          // *kind* is re-checked here; the settings snapshot stays the one
+          // taken when the download started (see above).
+          final nuevoKind = await _resolveEngineKind(settings);
+          if (nuevoKind != dlKind) {
+            unawaited(dlProvider.dispose());
+            dlKind = nuevoKind;
+            dlProvider = getProvider(settings.copyWith(ttsProvider: dlKind),
+                lang: book.language);
+          }
+          final voice = _cacheKeyFor(dlKind, settings, book);
+          final result = await dlProvider.synthesize(
             text: para.rawText,
-            voice: settings.voiceForEngine(_activeEngineKind, book.language),
+            voice: settings.voiceForEngine(dlKind, book.language),
             rate: settings.edgeRate,
             volume: settings.edgeVolume,
           );
@@ -1266,6 +1299,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
       }
       if (_downloadCancelled) break;
     }
+
+    unawaited(dlProvider.dispose());
 
     final failed = state.downloadFailed;
     state = state.copyWith(
