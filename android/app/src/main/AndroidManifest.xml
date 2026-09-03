@@ -14,6 +14,13 @@
     <!-- Media notification on API 33+ -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
+    <!-- Solo para las notas de voz de los reportes, y se pide al pulsar
+         grabar, nunca al arrancar. Es el único permiso que la app pide por
+         una función suya, así que aparecer sin motivo aparente sería la forma
+         más rápida de que alguien desconfíe de un APK que Android ya marca
+         como peligroso por venir de fuera de Play. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
     <application
         android:label="VoiceX"
         android:name="${applicationName}"

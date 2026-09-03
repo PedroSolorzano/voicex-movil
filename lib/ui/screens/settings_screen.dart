@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 import 'package:package_info_plus/package_info_plus.dart';
 import '../../config/server_config.dart';
@@ -553,6 +554,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
             ),
           ),
+          _Section(title: 'Contar un problema', children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Si algo falla o se te ocurre una mejora, cuéntalo. Puedes '
+                    'escribirlo o grabar una nota de voz.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.tonalIcon(
+                  icon: const Icon(Icons.feedback_outlined, size: 18),
+                  label: const Text('Escribir'),
+                  onPressed: () => context.push('/report'),
+                ),
+              ],
+            ),
+          ]),
+
           // Plegada: no estorba a quien solo quiere leer, y convierte un "no me
           // funciona" en cinco líneas con números. Es la mitad que el log del
           // servidor no puede dar — un sondeo que expira en el teléfono se ve

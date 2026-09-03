@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'audio/audio_player.dart';
 import 'config/settings.dart';
+import 'services/reporter.dart';
 import 'storage/repositories.dart';
 import 'tts/tts_endpoint.dart';
 import 'ui/app.dart';
@@ -11,6 +12,8 @@ import 'ui/app.dart';
 void main() {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
+    // Antes que nada: si el arranque falla, el fallo también se recoge.
+    Reporter.install();
 
     // Must complete before the first playback request: it starts the media
     // service that owns the notification and lock-screen controls.
@@ -28,6 +31,10 @@ void main() {
     runApp(const ProviderScope(child: VoiceXApp()));
   }, (error, stack) {
     debugPrint('Unhandled error: $error\n$stack');
+    // Lo que se escapa de FlutterError.onError cae aquí. Se encola; nunca se
+    // manda desde el propio manejador, que puede estar corriendo con la app ya
+    // rota.
+    unawaited(Reporter.recordCrash(error, stack));
   });
 }
 

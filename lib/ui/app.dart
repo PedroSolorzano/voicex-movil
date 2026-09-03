@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'providers/settings_provider.dart';
 import 'screens/library_screen.dart';
 import 'screens/reader_screen.dart';
+import 'screens/report_screen.dart';
 import 'screens/settings_screen.dart';
 
 final _router = GoRouter(
@@ -26,6 +27,10 @@ final _router = GoRouter(
     GoRoute(
       path: '/settings',
       builder: (context, state) => const SettingsScreen(),
+    ),
+    GoRoute(
+      path: '/report',
+      builder: (context, state) => const ReportScreen(),
     ),
   ],
 );

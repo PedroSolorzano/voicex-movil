@@ -82,8 +82,37 @@ versión del APK.
 - **La IP completa.** Solo la /24. La IP de una conexión móvil dice operador y
   zona aproximada de un familiar, y el alias ya identifica quién es.
 
-**Cuánto tiempo:** rotación diaria y 14 días de retención, con `rotate.sh` desde
-el cron del host:
+## Reportes de los probadores
+
+Dos rutas más, con el mismo token y un ritmo propio más estricto (10/min: un
+reporte es un acto humano, no un bucle).
+
+```bash
+# Lo que han contado, más reciente al final
+jq -r '"\(.ts[11:19])  \(.tester)  \(.reporte | fromjson | .tipo)"' tools/proxy/logs/reportes.jsonl
+
+# Un reporte entero
+jq -r 'select(.tester == "hermana1") | .reporte | fromjson' tools/proxy/logs/reportes.jsonl
+
+# Notas de voz
+ls tools/proxy/logs/notas/
+```
+
+El cuerpo se guarda como **cadena**, no como objeto: con `escape=json` nginx ya
+lo escapa, y entre comillas nada de lo que mande un cliente puede inyectar
+estructura en el log. De ahí el `fromjson`.
+
+Aquí sí se registra el cuerpo de la petición, y no contradice la regla de
+arriba: el cuerpo de `/report` **es** el reporte, no el párrafo de un libro.
+Que la app no meta texto del libro ahí lo garantiza su propio saneo, que tiene
+tests.
+
+Los reportes duran lo que dure la ronda, no catorce días: son el producto que se
+busca. **Las notas de voz se borran en cuanto se ha actuado sobre ellas**, que
+son la voz de una persona.
+
+**Cuánto tiempo:** rotación diaria y 14 días de retención para el log de acceso,
+con `rotate.sh` desde el cron del host:
 
 ```cron
 5 4 * * * /home/pedro/Repos/Personales/VoiceXMovil/tools/proxy/rotate.sh

@@ -24,8 +24,20 @@ class TtsServerConfig {
   const TtsServerConfig._();
 
   static const kokoroUrl = String.fromEnvironment('KOKORO_URL');
+
   static const piperUrl = String.fromEnvironment('PIPER_URL');
   static const token = String.fromEnvironment('TTS_TOKEN');
+
+  /// Base del proxy para los reportes: la URL de un motor sin su prefijo.
+  ///
+  /// Se deduce en vez de configurarse aparte para que no haya dos sitios donde
+  /// escribir el mismo host y equivocarse en uno.
+  static String get reportUrl {
+    final base = kokoroUrl.isNotEmpty ? kokoroUrl : piperUrl;
+    if (base.isEmpty) return '';
+    final cut = base.lastIndexOf('/');
+    return cut > base.indexOf('://') + 2 ? base.substring(0, cut) : base;
+  }
 
   /// Whether this build can talk to Kokoro at all.
   ///

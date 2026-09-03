@@ -11,6 +11,7 @@ import '../../config/settings.dart';
 import '../../epub/models.dart';
 import '../../epub/parser.dart';
 import '../../epub/text_align.dart';
+import '../../services/reporter.dart';
 import '../../storage/repositories.dart';
 import '../../tts/models.dart';
 import '../../tts/tts_factory.dart';
@@ -263,6 +264,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
         Connectivity().onConnectivityChanged.listen((_) {
       resetServerHealthCache();
       unawaited(maybePrefetchAhead());
+      // Los reportes encolados esperan exactamente a este momento: se generan
+      // cuando no hay servidor y salen cuando vuelve a haberlo.
+      unawaited(Reporter.flush());
     });
     return const ReaderState();
   }

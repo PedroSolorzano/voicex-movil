@@ -9,7 +9,7 @@ Future<Database> getDatabase() async {
   if (_db != null) return _db!;
   _db = await openDatabase(
     _pathOverride ?? join(await getDatabasesPath(), 'voicex.db'),
-    version: 6,
+    version: 7,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onConfigure: _onConfigure,
@@ -95,7 +95,24 @@ Future<void> _onCreate(Database db, int version) async {
       last_accessed  TEXT NOT NULL DEFAULT (datetime('now'))
     )
   ''');
+
+  await db.execute(_reportsTable);
 }
+
+/// Reports waiting to be delivered.
+///
+/// They queue on the device because the failures worth reporting are exactly
+/// the ones that happen when the server cannot be reached: sending on the spot
+/// would lose precisely the reports that matter.
+const _reportsTable = '''
+  CREATE TABLE reports (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    body        TEXT NOT NULL,
+    audio_path  TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    attempts    INTEGER NOT NULL DEFAULT 0
+  )
+''';
 
 Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
   if (oldVersion < 2) {
@@ -136,5 +153,8 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
         'ALTER TABLE books ADD COLUMN total_paragraphs INTEGER NOT NULL DEFAULT 0');
     await db.execute(
         'ALTER TABLE reading_progress ADD COLUMN global_index INTEGER NOT NULL DEFAULT 0');
+  }
+  if (oldVersion < 7) {
+    await db.execute(_reportsTable);
   }
 }
