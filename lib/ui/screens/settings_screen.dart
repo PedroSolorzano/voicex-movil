@@ -299,9 +299,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               label: 'Español',
               lang: 'es',
               settings: s,
-              onPick: (id) => _update(s.ttsProvider == 'kokoro'
-                  ? s.copyWith(kokoroVoiceEs: id)
-                  : s.copyWith(edgeVoiceEs: id)),
+              // Un switch por motor, no un "kokoro o lo demás": con Piper
+              // seleccionado, la voz elegida acababa guardada en los ajustes de
+              // Edge, y piperVoiceEs no se escribía desde ninguna parte de la
+              // interfaz. Cambiar la voz de Piper obligaba a editar el compose.
+              onPick: (id) => _update(switch (s.ttsProvider) {
+                'kokoro' => s.copyWith(kokoroVoiceEs: id),
+                'piper' => s.copyWith(piperVoiceEs: id),
+                _ => s.copyWith(edgeVoiceEs: id),
+              }),
               onPreview: _preview,
               previewing: _previewing,
             ),
@@ -310,9 +316,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               label: 'Inglés',
               lang: 'en',
               settings: s,
-              onPick: (id) => _update(s.ttsProvider == 'kokoro'
-                  ? s.copyWith(kokoroVoiceEn: id)
-                  : s.copyWith(edgeVoiceEn: id)),
+              onPick: (id) => _update(switch (s.ttsProvider) {
+                'kokoro' => s.copyWith(kokoroVoiceEn: id),
+                'piper' => s.copyWith(piperVoiceEn: id),
+                _ => s.copyWith(edgeVoiceEn: id),
+              }),
               onPreview: _preview,
               previewing: _previewing,
             ),
@@ -879,7 +887,8 @@ class _VoicePickerSheetState extends ConsumerState<_VoicePickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final async = ref.watch(voicesProvider(widget.settings));
+    final async =
+        ref.watch(voicesProvider(VoiceCatalogKey.of(widget.settings)));
 
     return DraggableScrollableSheet(
       initialChildSize: 0.75,

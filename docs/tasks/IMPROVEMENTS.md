@@ -171,14 +171,14 @@ servidor a internet.
 
 ## Calidad de código
 
-- [ ] `medio` 2026-09-03 — **Elegir una voz con Piper la guarda en Edge.** El
+- [x] `medio` 2026-09-03 — **Elegir una voz con Piper la guarda en Edge.** El
   `onPick` de la hoja de voces solo distingue `kokoro` de todo lo demás
   (`settings_screen.dart:302-304` y `:313-315`), así que con Piper seleccionado
   la voz elegida se escribe en `edgeVoiceEs`/`edgeVoiceEn`. `piperVoiceEs` y
   `piperVoiceEn` no se escriben desde ningún punto de la interfaz: para cambiar
   la voz de Piper hay que editar el compose y reconstruir. Solo afecta a la
   compilación propia, porque Piper no va al reparto.
-- [ ] `bajo` 2026-09-03 — **`voicesProvider` pide el catálogo de más.** Es un
+- [x] `bajo` 2026-09-03 — **`voicesProvider` pide el catálogo de más.** Es un
   `FutureProvider.family<List<Voice>, AppSettings>` (`voices_provider.dart:13`)
   y `AppSettings` no implementa `==`, así que la clave es la identidad del
   objeto: cada cambio de ajuste crea una entrada nueva y una petición nueva. Y
