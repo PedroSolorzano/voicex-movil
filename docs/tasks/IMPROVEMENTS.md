@@ -141,7 +141,7 @@ atendido.
   (`reader_screen.dart:539-552`) y ofrece pronunciar, diccionario y "otra app".
   No hay copiar una cita, ni compartirla, ni seleccionar una frase. Es el
   cimiento del subrayado: conviene hacerlo antes.
-- [ ] `medio` 2026-09-02 — **Más formatos: PDF, MOBI y compañía.** Hoy solo
+- [ ] `bajo` 2026-09-02 — **Más formatos: PDF, MOBI y compañía.** Hoy solo
   EPUB, y el filtro es duro en los dos caminos de entrada:
   `allowedExtensions: ['epub']` (`library_screen.dart:167`) y
   `if (!path.toLowerCase().endsWith('.epub')) return;`
@@ -152,6 +152,11 @@ atendido.
   Dart; **FB2** es XML directo; **PDF** es harina de otro costal —maquetado por
   coordenadas, sin párrafos lógicos— y romper un PDF en oraciones limpias para
   TTS es un proyecto en sí mismo, no una importación más.
+
+  Bajado a `bajo` el 2026-09-03 a petición explícita: no corre prisa, queda
+  anotado para no perderlo de vista. Si algún día entra, el orden sensato es
+  TXT primero —que valida la interfaz común con casi ningún esfuerzo— y PDF el
+  último, o nunca.
 - [ ] `medio` 2026-09-02 — **Buscar dentro del libro.** No existe. La única
   búsqueda es por título y autor en la biblioteca
   (`library_screen.dart:59-82`). Con el libro ya troceado en párrafos y
