@@ -60,36 +60,21 @@ La app nació para escuchar, y se nota: casi todo lo de aquí existe ya en
 cualquier lector de la competencia. Leer en silencio es hoy el flujo peor
 atendido.
 
-- [ ] `alto` 2026-09-03 — **El diccionario en inglés casi nunca responde.**
-  Solo el inglés; el español va bien. En pantalla aparece la excepción de Dart
-  en crudo: *"No se pudo consultar: TimeoutException after 0:00:08.000000:
-  Future not completed"*.
+- [x] `alto` 2026-09-03 — **El diccionario en inglés casi nunca respondía.**
+  El fallo no era de red: `api.dictionaryapi.dev` tardaba ~19,5 s en seis de
+  cada seis consultas y una devolvió 522, mientras la app le concedía 8 s. En
+  pantalla salía la excepción de Dart en crudo.
 
-  Medido el 2026-09-03, seis consultas a `api.dictionaryapi.dev`: dos
-  respondieron en 0,10 y 0,15 s, tres tardaron **19,4, 19,5 y 19,8 s**, y una
-  devolvió **522** (el origen no contesta a Cloudflare). Las mismas palabras
-  contra la Wikcionario española: 0,27 a 3,07 s, todas 200. O sea que el
-  servicio de inglés está sobrecargado y el fallo no es de la red del teléfono.
+  Resuelto yendo a la fuente: el inglés pasa a Wikcionario, el mismo endpoint de
+  extractos que ya usaba el español, pidiendo `exsectionformat=wiki` para que
+  las marcas `== English ==` y `=== Noun ===` digan qué sección es un idioma y
+  cuál una categoría, sin adivinarlo. Diez palabras medidas de nuevo: entre 201
+  y 380 ms, ninguna falla, e incluso `waterbag`, que dictionaryapi.dev no tenía.
 
-  La app le concede 8 s (`dictionary.dart:65`), así que el caso normal es que
-  expire. Subir el plazo lo taparía a medias -19 s esperando una definición no
-  es usable-, y hay tres cosas nuestras que lo empeoran, dos de ellas de la
-  misma familia que ya se arregló en otros sitios:
+  De paso, los tres agravantes: los fallos transitorios ya no se cachean (una
+  palabra que falla deja de fallar para siempre), la lectura del cuerpo tiene
+  plazo, y el mensaje de error dejó de ser el objeto de Dart.
 
-  - **El error se cachea.** `_cache[key] = entry` (`dictionary.dart:57`) guarda
-    también los fallos, sin distinguirlos: una palabra que falla una vez sigue
-    fallando el resto de la sesión aunque el servicio se recupere. Es el mismo
-    fallo que el TTL simétrico del sondeo de servidores, corregido en 0.7.0.
-  - **La lectura del cuerpo no tiene plazo** (`dictionary.dart:78` y `:111`),
-    igual que les pasaba a Kokoro y Piper antes de 0.7.0.
-  - **El texto de la excepción llega al usuario** (`dictionary.dart:86`). Un
-    `TimeoutException` con microsegundos no le dice nada a nadie.
-
-  La salida de fondo probablemente sea **dejar de depender de ese servicio**: la
-  ruta española ya usa el API de extractos de Wikcionario, que es rápido y
-  estable, y `en.wiktionary.org` sirve el mismo endpoint para palabras inglesas.
-  Reutilizar el camino que ya funciona quita de en medio a un tercero que hoy
-  tarda veinte segundos.
 - [ ] `alto` 2026-09-02 — **Ajustar el tamaño del texto sin salir del libro.**
   Los controles existen —tamaño 12-32, interlineado, márgenes, tipografía y
   fondo— pero viven en la pantalla global de Ajustes
