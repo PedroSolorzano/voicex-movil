@@ -59,32 +59,48 @@ escuchan en loopback, así que `100.x.y.z:8880` no responde a nadie.
 El teléfono necesita Tailscale instalado, logueado con la misma cuenta **y con
 la VPN encendida**.
 
-### `tailscale status` no prueba que el teléfono encamine
+### Ni "Connected" ni `tailscale ping` prueban que el teléfono encamine
 
-Comprobado en la práctica, y engaña: `tailscale status` decía
-`active; relay "mia"` y `tailscale ping` respondía en 83 ms, y aun así el
-teléfono no alcanzaba ni un puerto del servidor. Su interfaz estaba caída:
+Comprobado en la práctica, y engaña en cuatro sitios a la vez. La consola web
+decía **Connected** en las dos máquinas; la app del teléfono decía
+**Connected**; `tailscale status` daba `active; relay "mia"`; `tailscale ping`
+respondía en 83 ms; y hasta el handshake de WireGuard se renovaba. Con todo eso,
+el teléfono no alcanzaba **ni un solo puerto** del servidor.
 
-```
-37: tun0: <POINTOPOINT> mtu 1280 ... state DOWN
-    inet 100.78.120.70/32
-```
+La VPN estaba a medio establecer: Android la daba por conectada y declaraba la
+ruta, pero **el kernel no tenía ninguna ruta instalada hacia el túnel**.
 
-El proceso de Tailscale sigue hablando con el relevo —de ahí el ping y el
-"active"— mientras la VPN de Android está apagada. Con la interfaz caída,
-Android enruta las direcciones `100.x` por el WiFi normal, salen a internet y se
-pierden. El síntoma es un **timeout limpio**, no una conexión rechazada, que es
-justo lo que despista: parece el servidor y es el teléfono.
+Por qué cada señal miente:
 
-Para saberlo, pregúntale al teléfono y no al servidor:
+- **`tailscale ping` viaja por magicsock**, el canal de control, y ni siquiera
+  pasa por la interfaz. Responde aunque el camino de datos esté muerto. Es la
+  trampa más cara de las cuatro.
+- **"Connected" y el handshake** solo dicen que los dos nodos se conocen y
+  tienen sesión, no que el sistema operativo meta tráfico dentro.
+- **`ip addr show tun0` puede decir `DOWN`** en Android incluso cuando la VPN
+  funciona: el interfaz lo gestiona `VpnService` por descriptor, no por netlink.
+  No sirve como prueba en ninguno de los dos sentidos.
+
+Las dos comprobaciones que sí valen. En el **servidor**, los contadores del
+interfaz: si `RX` está en unos pocos paquetes mientras `TX` sube, no entra nada.
 
 ```bash
-adb shell ip -4 addr show tun0        # tiene que decir UP
-adb shell ip route get 100.91.42.26   # tiene que salir por tun0, no por wlan0
+ip -s link show tailscale0
 ```
 
-Si dice `via 192.168.x.1 dev wlan0`, la VPN está apagada por mucho que el panel
-de Tailscale diga lo contrario.
+Y en el **teléfono**, las rutas de verdad, no las declaradas:
+
+```bash
+adb shell ip route show table all | grep tun0
+```
+
+Si lo único que sale es `local 100.x.y.z dev tun0 ... scope host`, la VPN no ha
+instalado ninguna ruta y **nada va por el túnel**, diga lo que diga el panel. El
+síntoma en la app es un timeout limpio, no una conexión rechazada, que es justo
+lo que hace parecer que el problema está en el servidor.
+
+**Cómo se arregla:** apagar y encender Tailscale en el teléfono. Al reconectar
+vuelve a instalar las rutas.
 
 ## Parar
 
