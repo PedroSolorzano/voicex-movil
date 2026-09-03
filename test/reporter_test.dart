@@ -100,6 +100,21 @@ void main() {
       expect(cuerpo['diagnostico'], isA<List<dynamic>>());
     });
 
+    test('la nota de voz viaja como su nombre, nunca la ruta del teléfono',
+        () async {
+      await Reporter.recordFeedback(
+        tipo: 'bug',
+        texto: 'no suena el capítulo 3',
+        audioPath: '/data/user/0/com.example/cache/un-uuid.m4a',
+      );
+
+      final db = await getDatabase();
+      final cuerpo = jsonDecode(
+          (await db.query('reports')).single['body'] as String) as Map;
+
+      expect(cuerpo['nota'], 'un-uuid.m4a');
+    });
+
     test('la cola tiene tope, para que nada se acumule sin que nadie mire',
         () async {
       for (var i = 0; i < 55; i++) {

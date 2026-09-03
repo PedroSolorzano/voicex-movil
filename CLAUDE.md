@@ -41,6 +41,7 @@ flutter analyze && flutter test
 | `docs/context/TECHNICAL.md` | Especificación técnica |
 | `docs/tasks/IMPROVEMENTS.md` | Mejoras pendientes |
 | `docs/bugs/` | Investigaciones de bugs concretos |
+| `docs/bugs/REPORTES_TESTERS.md` | Reportes crudos de testers, sin triar (lo escribe `tools/reportes/procesar.py`, automático) |
 
 Al subir de versión: `versionName` sale de `pubspec.yaml` y hay que registrar el
 cambio en `RELEASES.md` y en la tabla de versiones del `README.md`.

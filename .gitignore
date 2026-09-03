@@ -61,6 +61,11 @@ docs/screenshot/
 tools/proxy/tokens.conf
 tools/proxy/logs/
 
+# Pipeline de reportes: venv local, estado del ledger y sus propios logs
+tools/reportes/.venv/
+tools/reportes/estado/
+tools/reportes/logs/
+
 # Configuración de compilación por probador: lleva el token dentro
 tools/release/*.json
 !tools/release/tester.example.json

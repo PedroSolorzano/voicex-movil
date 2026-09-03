@@ -113,6 +113,7 @@ class Reporter {
     await _enqueue({
       'tipo': tipo,
       'texto': sanitize(texto),
+      if (audioPath != null) 'nota': audioPath.split('/').last,
       ...contexto,
     }, audioPath: audioPath);
   }
