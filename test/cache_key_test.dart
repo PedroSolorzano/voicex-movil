@@ -40,12 +40,14 @@ void main() {
       expect(keyFor('piper'), isNot(keyFor('piper', forBook: english)));
     });
 
-    test('collides across languages when one voice serves both', () {
-      // Documents a gap rather than endorsing it: Kokoro defaults to af_bella
-      // for Spanish and English alike, and the language only reaches the
-      // server as `lang_code`. Same key, different audio — see the note in
-      // docs/tasks/IMPROVEMENTS.md.
-      expect(keyFor('kokoro'), keyFor('kokoro', forBook: english));
+    test('no colisiona aunque la misma voz sirva a los dos idiomas', () {
+      // Este test documentaba lo contrario, y era un fallo: Kokoro usa
+      // af_bella para español e inglés, y el idioma solo llegaba al servidor
+      // como `lang_code`. Misma clave, audio distinto, y sonaba el que se
+      // hubiera descargado primero.
+      expect(keyFor('kokoro'), isNot(keyFor('kokoro', forBook: english)));
+      expect(keyFor('kokoro'), 'kokoro-es-af_bella');
+      expect(keyFor('kokoro', forBook: english), 'kokoro-en-af_bella');
     });
 
     test('folds the Piper pace in: it is baked into the samples', () {

@@ -360,7 +360,39 @@ class AudioCacheRepo {
         "WHERE voice_id NOT LIKE 'edge-%' AND voice_id NOT LIKE 'kokoro-%' "
         "AND voice_id NOT LIKE 'piper-%'");
 
+    await _stampLanguage();
     await _dropDuplicateRows();
+  }
+
+  /// Mete el idioma del libro en las claves de Kokoro y Piper.
+  ///
+  /// Sin él, un libro en inglés y otro en español compartían audio cuando la
+  /// misma voz servía para ambos —el caso por defecto de Kokoro, que usa
+  /// `af_bella` en los dos—, y sonaba el que se hubiera descargado primero.
+  ///
+  /// El idioma sale de `books.language`, así que la migración se hace en SQL
+  /// contra la fila del libro. La alternativa era no migrar, y eso habría
+  /// huerfanizado todas las descargas hechas hasta hoy: la única cosa que esta
+  /// caché no puede permitirse.
+  ///
+  /// Idempotente: las claves que ya llevan idioma quedan fuera del WHERE.
+  Future<void> _stampLanguage() async {
+    final db = await _db;
+    for (final engine in ['kokoro', 'piper']) {
+      final prefix = '$engine-';
+      await db.execute(
+        "UPDATE audio_cache SET voice_id = '$prefix' || "
+        "  (SELECT CASE WHEN lower(b.language) LIKE 'es%' THEN 'es' ELSE 'en' END "
+        "   FROM books b WHERE b.id = audio_cache.book_id) "
+        "  || '-' || substr(voice_id, ${prefix.length + 1}) "
+        "WHERE voice_id LIKE '$prefix%' "
+        "  AND voice_id NOT LIKE '${prefix}es-%' "
+        "  AND voice_id NOT LIKE '${prefix}en-%' "
+        // Una fila sin libro no se puede etiquetar; la limpieza de duplicados
+        // y la purga se encargan de ella.
+        "  AND EXISTS (SELECT 1 FROM books b WHERE b.id = audio_cache.book_id)",
+      );
+    }
   }
 
   /// Deletes audio produced by an engine the app has since dropped.

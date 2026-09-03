@@ -41,7 +41,7 @@ y su arreglo. Aquí solo queda lo que no está hecho.
 
 ## TTS / Audio
 
-- [ ] `medio` 2026-08-30 — **La clave de caché de Kokoro no lleva el idioma.**
+- [x] `medio` 2026-08-30 — **La clave de caché de Kokoro no lleva el idioma.**
   `kokoroVoiceEs` y `kokoroVoiceEn` valen `af_bella` por defecto, así que un
   libro con el idioma cambiado de ES a EN reutiliza el audio ya cacheado
   aunque el `lang_code` enviado al servidor sea distinto — y con reglas

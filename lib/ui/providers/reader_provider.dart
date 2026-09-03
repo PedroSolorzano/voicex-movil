@@ -510,10 +510,20 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// Piper additionally folds in the pace, because `length_scale` is baked into
   /// the samples — changing it must invalidate what was downloaded.
   static String _cacheKeyFor(String engine, AppSettings settings, Book book) {
+    // Kokoro y Piper llevan el idioma en la clave; Edge no lo necesita porque
+    // el nombre de sus voces ya trae el locale (es-MX-DaliaNeural).
+    //
+    // Sin él, un libro en inglés y otro en español compartían audio cuando la
+    // misma voz servía para ambos, que es justo el caso por defecto de Kokoro:
+    // af_bella para los dos idiomas, y el idioma solo llega al servidor como
+    // `lang_code`. Misma clave, audio distinto, y el que sonaba era el que se
+    // hubiera descargado primero.
+    final lang = cacheLangTag(book.language);
     final raw = switch (engine) {
-      'piper' => 'piper-${settings.voiceForEngine('piper', book.language)}'
+      'piper' => 'piper-$lang-${settings.voiceForEngine('piper', book.language)}'
           '${piperPaceSuffix(settings.piperLengthScale)}',
-      'kokoro' => 'kokoro-${settings.voiceForEngine('kokoro', book.language)}',
+      'kokoro' =>
+        'kokoro-$lang-${settings.voiceForEngine('kokoro', book.language)}',
       _ => 'edge-${settings.voiceForEngine('edge', book.language)}',
     };
     return sanitizeCacheKey(raw);
@@ -525,6 +535,15 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
   /// Tail of a Piper cache key: the pace is baked into the samples, so audio
   /// downloaded at one `length_scale` cannot serve another.
+  /// Etiqueta de idioma de la clave de caché: dos letras y nada más.
+  ///
+  /// Se queda en 'es' o 'en' porque son los dos idiomas que la app resuelve, y
+  /// porque la migración de las filas antiguas tiene que poder reproducirla en
+  /// SQL sin recorrer la tabla desde Dart.
+  @visibleForTesting
+  static String cacheLangTag(String bookLanguage) =>
+      bookLanguage.toLowerCase().startsWith('es') ? 'es' : 'en';
+
   static String piperPaceSuffix(double lengthScale) =>
       sanitizeCacheKey('-${lengthScale.toStringAsFixed(2)}');
 

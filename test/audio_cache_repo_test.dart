@@ -235,6 +235,65 @@ void main() {
       expect(await repo.get(1, 0, 1, 'kokoro-af_bella', 'f96'), kept);
     });
 
+    test('mete el idioma del libro en las claves de Kokoro y Piper', () async {
+      // Sin esto, un libro en inglés y otro en español compartían audio cuando
+      // la misma voz servía para ambos. Migrar en vez de cambiar la clave a
+      // secas es lo que evita huerfanizar las descargas ya hechas: horas de
+      // síntesis que la app no puede permitirse perder.
+      final db = await getDatabase();
+      await db.insert('books', {
+        'id': 7,
+        'title': 'The Gunslinger',
+        'author': 'Stephen King',
+        'file_path': '/x.epub',
+        'language': 'en',
+      });
+      final ingles = await audioFile('ing.aac');
+      await db.insert('audio_cache', {
+        'book_id': 7,
+        'chapter_idx': 0,
+        'para_idx': 0,
+        'voice_id': 'kokoro-af_bella',
+        'speed_hash': 'f96',
+        'file_path': ingles,
+        'file_size_kb': 2,
+        'pinned': 1,
+      });
+
+      await repo.migrateCacheKeys();
+
+      expect(await repo.get(7, 0, 0, 'kokoro-en-af_bella', 'f96'), ingles);
+    });
+
+    test('la migración del idioma es idempotente', () async {
+      final db = await getDatabase();
+      await db.insert('books', {
+        'id': 8,
+        'title': 'El talismán',
+        'author': 'Stephen King',
+        'file_path': '/y.epub',
+        'language': 'es',
+      });
+      final es = await audioFile('esp.aac');
+      await db.insert('audio_cache', {
+        'book_id': 8,
+        'chapter_idx': 0,
+        'para_idx': 0,
+        'voice_id': 'kokoro-af_bella',
+        'speed_hash': 'f96',
+        'file_path': es,
+        'file_size_kb': 2,
+        'pinned': 1,
+      });
+
+      await repo.migrateCacheKeys();
+      await repo.migrateCacheKeys();
+      await repo.migrateCacheKeys();
+
+      // Correrla tres veces no puede dar kokoro-es-es-es-af_bella.
+      expect(await repo.get(8, 0, 0, 'kokoro-es-af_bella', 'f96'), es);
+    });
+
     test('is idempotent on a clean table', () async {
       final download = await audioFile('pinned.mp3');
       await repo.savePin(1, 0, 0, 'kokoro-af_bella', 'f96', download, 2);
