@@ -51,3 +51,7 @@ epub/
 # Claude Code (settings.local.json tiene rutas específicas de la máquina)
 .claude/settings.local.json
 muestras_voz/
+
+# Capturas de referencia (apps de la competencia, pruebas en el teléfono):
+# material de trabajo, no documentación del repo
+docs/screenshot/

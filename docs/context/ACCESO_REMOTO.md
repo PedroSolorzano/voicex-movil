@@ -45,7 +45,7 @@ parseo aunque el servidor esté perfecto. No es hipotético: es exactamente lo
 que hace hoy el plan gratuito de ngrok.
 
 **4. La clave de caché no incluye la dirección del servidor.** `_cacheKeyFor`
-([`reader_provider.dart:433-445`](../../lib/ui/providers/reader_provider.dart))
+([`reader_provider.dart:434-442`](../../lib/ui/providers/reader_provider.dart))
 se compone de motor, voz y ritmo. Es la buena noticia del asunto: **el audio
 descargado en casa se reutiliza tal cual desde fuera**, y cambiar de dirección,
 de túnel o de proveedor no invalida ni un párrafo de lo ya descargado.
@@ -272,7 +272,7 @@ un plan de 5 GB al mes da para unas 31 horas contando solo el audio.
 
 Y un matiz operativo: **la descarga por adelantado está atada al WiFi por
 diseño**. `maybePrefetchAhead`
-([`reader_provider.dart:1121-1148`](../../lib/ui/providers/reader_provider.dart))
+([`reader_provider.dart:1146-1173`](../../lib/ui/providers/reader_provider.dart))
 comprueba la conectividad antes de empezar y no arranca con datos móviles. El
 acceso remoto sirve para **escuchar sobre la marcha**, no para descargar
 capítulos desde la calle.
