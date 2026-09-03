@@ -47,6 +47,9 @@ dependencies:
   # Notas de voz en los reportes: escribir un párrafo en el teléfono es la
   # mejor forma de no recibir feedback de alguien no técnico.
   record: ^5.1.2
+  # Mantener la pantalla encendida leyendo en silencio. El WAKE_LOCK del
+  # manifest solo mantiene viva la CPU para el audio, no la pantalla.
+  wakelock_plus: ^1.5.2
 
 # `record` resuelve un record_linux 0.7.2 que implementa una interfaz anterior
 # a la que el propio paquete pide, y la compilación falla aunque la app sea solo

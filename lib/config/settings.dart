@@ -80,6 +80,13 @@ class AppSettings {
   String readerTheme;
   bool followAudioScroll;
 
+  /// Mantener la pantalla encendida mientras el libro está abierto.
+  ///
+  /// El `WAKE_LOCK` del manifest mantiene viva la CPU para que el audio siga
+  /// sonando con la pantalla apagada; no impide que la pantalla se apague.
+  /// Leyendo en silencio, sin tocar nada, se apagaba a los pocos segundos.
+  bool keepScreenOn;
+
   AppSettings({
     this.ttsProvider = 'edge',
     this.gender = 'female',
@@ -107,6 +114,7 @@ class AppSettings {
     this.readerFont = 'serif',
     this.readerTheme = 'sepia',
     this.followAudioScroll = true,
+    this.keepScreenOn = true,
   });
 
   /// Voice id for [lang] under the engine currently selected.
@@ -213,6 +221,7 @@ class AppSettings {
       readerFont: prefs.getString('readerFont') ?? 'serif',
       readerTheme: prefs.getString('readerTheme') ?? 'sepia',
       followAudioScroll: prefs.getBool('followAudioScroll') ?? true,
+      keepScreenOn: prefs.getBool('keepScreenOn') ?? true,
     );
   }
 
@@ -242,6 +251,7 @@ class AppSettings {
     await prefs.setString('readerFont', readerFont);
     await prefs.setString('readerTheme', readerTheme);
     await prefs.setBool('followAudioScroll', followAudioScroll);
+    await prefs.setBool('keepScreenOn', keepScreenOn);
   }
 
   AppSettings copyWith({
@@ -271,6 +281,7 @@ class AppSettings {
     String? readerFont,
     String? readerTheme,
     bool? followAudioScroll,
+    bool? keepScreenOn,
   }) =>
       AppSettings(
         ttsProvider: ttsProvider ?? this.ttsProvider,
@@ -299,5 +310,6 @@ class AppSettings {
         readerFont: readerFont ?? this.readerFont,
         readerTheme: readerTheme ?? this.readerTheme,
         followAudioScroll: followAudioScroll ?? this.followAudioScroll,
+        keepScreenOn: keepScreenOn ?? this.keepScreenOn,
       );
 }

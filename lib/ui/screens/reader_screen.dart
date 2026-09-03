@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart' as ja;
@@ -80,8 +81,20 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     });
   }
 
+  /// Último valor aplicado, para no llamar al sistema en cada build.
+  bool? _pantallaEncendida;
+
+  /// Mantiene la pantalla despierta mientras se lee, si el ajuste lo pide.
+  void _aplicarWakelock(bool activo) {
+    if (_pantallaEncendida == activo) return;
+    _pantallaEncendida = activo;
+    unawaited(WakelockPlus.toggle(enable: activo));
+  }
+
   @override
   void dispose() {
+    // Salir del lector devuelve el teléfono a su comportamiento normal.
+    unawaited(WakelockPlus.disable());
     _wordPlayer.dispose();
     _programmaticScrollTimer?.cancel();
     _scrollSettleTimer?.cancel();
@@ -160,6 +173,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final reader = ref.watch(readerProvider);
     final settings = ref.watch(settingsProvider).valueOrNull ?? AppSettings();
     final book = reader.book;
+
+    _aplicarWakelock(settings.keepScreenOn);
 
     final palette = ReaderPalette.of(
         settings.readerTheme, MediaQuery.platformBrightnessOf(context));
@@ -737,11 +752,10 @@ class _BottomBar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            LinearProgressIndicator(
-              value: progress,
-              minHeight: 2,
-              backgroundColor: palette.muted.withValues(alpha: 0.2),
-            ),
+            // Un control, no un indicador: hasta ahora moverse por el libro
+            // solo se podía por el índice de capítulos o párrafo a párrafo.
+            _ProgressSlider(
+                reader: reader, notifier: notifier, palette: palette),
             if (reader.isDownloading)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -891,6 +905,64 @@ class _BottomBar extends StatelessWidget {
     final minutes = (seconds % 3600) ~/ 60;
     if (hours > 0) return 'faltan ~$hours h $minutes min';
     return 'faltan ~$minutes min';
+  }
+}
+
+/// Barra de progreso arrastrable.
+///
+/// Mientras se arrastra manda el valor local, no el del estado: sin eso el
+/// pulgar da saltos, porque el estado solo cambia cuando se suelta.
+class _ProgressSlider extends StatefulWidget {
+  const _ProgressSlider({
+    required this.reader,
+    required this.notifier,
+    required this.palette,
+  });
+
+  final ReaderState reader;
+  final ReaderNotifier notifier;
+  final ReaderPalette palette;
+
+  @override
+  State<_ProgressSlider> createState() => _ProgressSliderState();
+}
+
+class _ProgressSliderState extends State<_ProgressSlider> {
+  double? _arrastrando;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = widget.reader.totalParagraphs;
+    if (total <= 1) {
+      return LinearProgressIndicator(
+        value: widget.reader.progressFraction,
+        minHeight: 2,
+        backgroundColor: widget.palette.muted.withValues(alpha: 0.2),
+      );
+    }
+
+    final valor =
+        _arrastrando ?? widget.reader.globalParagraph.toDouble();
+    return SliderTheme(
+      data: SliderThemeData(
+        trackHeight: 2,
+        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+        overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+        inactiveTrackColor: widget.palette.muted.withValues(alpha: 0.25),
+      ),
+      child: Slider(
+        value: valor.clamp(0, (total - 1).toDouble()),
+        max: (total - 1).toDouble(),
+        // El porcentaje, no el número de párrafo: nadie piensa en párrafos.
+        label: '${((valor / (total - 1)) * 100).round()} %',
+        divisions: total > 1 ? total - 1 : null,
+        onChanged: (v) => setState(() => _arrastrando = v),
+        onChangeEnd: (v) {
+          setState(() => _arrastrando = null);
+          widget.notifier.jumpToGlobalIndex(v.round());
+        },
+      ),
+    );
   }
 }
 

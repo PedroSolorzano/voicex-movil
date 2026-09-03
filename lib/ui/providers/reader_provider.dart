@@ -195,6 +195,21 @@ class ReaderState {
       isBusy || status == ReaderStatus.paused;
 
   /// Fraction of the book already consumed, counting paragraphs across chapters.
+  /// Párrafos del libro entero, y en cuál va la lectura. Los necesita la barra
+  /// de progreso para poder arrastrarse.
+  int get totalParagraphs =>
+      book?.chapters.fold<int>(0, (sum, c) => sum + c.paragraphs.length) ?? 0;
+
+  int get globalParagraph {
+    final b = book;
+    if (b == null) return 0;
+    var done = 0;
+    for (var c = 0; c < chapterIndex && c < b.chapters.length; c++) {
+      done += b.chapters[c].paragraphs.length;
+    }
+    return done + paragraphIndex;
+  }
+
   double get progressFraction {
     final b = book;
     if (b == null || b.chapters.isEmpty) return 0;
@@ -340,6 +355,25 @@ class ReaderNotifier extends Notifier<ReaderState> {
       total += book.chapters[c].paragraphs.length;
     }
     return total + state.paragraphIndex;
+  }
+
+  /// Moves to an absolute paragraph position in the book.
+  ///
+  /// The inverse of [_globalIndex]: walks the chapters accumulating lengths
+  /// until the index falls inside one. It is what makes the progress bar a
+  /// control instead of an indicator.
+  Future<void> jumpToGlobalIndex(int target) async {
+    final book = state.book;
+    if (book == null) return;
+    var remaining = target.clamp(0, _totalParagraphs(book) - 1);
+    for (var c = 0; c < book.chapters.length; c++) {
+      final length = book.chapters[c].paragraphs.length;
+      if (remaining < length) {
+        await navigateChapter(c, paragraph: remaining);
+        return;
+      }
+      remaining -= length;
+    }
   }
 
   /// Wires this reader to the long-lived audio service handler. The handler is
@@ -1072,11 +1106,18 @@ class ReaderNotifier extends Notifier<ReaderState> {
     await _bookmarkRepo.delete(id);
   }
 
+  /// Lleva la lectura a un marcador.
+  ///
+  /// **Sin arrancar el audio.** Antes llamaba a `play()` sin condición, así que
+  /// consultar un pasaje marcado mientras se leía en silencio ponía el TTS a
+  /// sonar de golpe. Si ya estaba sonando, sigue sonando desde el marcador, que
+  /// es lo que se espera.
   Future<void> jumpToBookmark(
       int chapterIndex, int paragraphIndex, int sentenceIndex) async {
+    final sonaba = state.isBusy;
     await navigateChapter(chapterIndex, paragraph: paragraphIndex);
     _pendingSentenceIdx = sentenceIndex;
-    await play();
+    if (sonaba) await play();
   }
 
   /// Downloads just the chapter being read. Kept as the manual button.

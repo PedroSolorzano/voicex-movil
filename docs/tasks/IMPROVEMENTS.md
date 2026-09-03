@@ -117,7 +117,7 @@ atendido.
   búsqueda es por título y autor en la biblioteca
   (`library_screen.dart:59-82`). Con el libro ya troceado en párrafos y
   oraciones en memoria, buscar y saltar al resultado es barato.
-- [ ] `medio` 2026-09-02 — **La barra de progreso no se puede arrastrar.** Es un
+- [x] `medio` 2026-09-02 — **La barra de progreso no se puede arrastrar.** Es un
   `LinearProgressIndicator` (`reader_screen.dart:740-744`), un indicador y no un
   control: para moverte por el libro solo queda el índice de capítulos o ir
   párrafo a párrafo. Falta arrastrar, o un "ir al %".
@@ -126,11 +126,11 @@ atendido.
   del EPUB se ignora entero (`parser.dart:131-186`), así que cursivas, negritas
   y versos desaparecen. Para escuchar da igual; leyendo, un libro con énfasis o
   ilustraciones se lee peor que en cualquier otro lector.
-- [ ] `bajo` 2026-09-02 — **La pantalla se apaga leyendo en silencio.** El
+- [x] `bajo` 2026-09-02 — **La pantalla se apaga leyendo en silencio.** El
   `WAKE_LOCK` del manifest (`AndroidManifest.xml:13`) mantiene viva la CPU para
   el audio, no la pantalla, y no hay ningún control de brillo ni bloqueo de
   orientación. Leer sin tocar la pantalla acaba a oscuras.
-- [ ] `bajo` 2026-09-02 — **Abrir un marcador arranca el audio.**
+- [x] `bajo` 2026-09-02 — **Abrir un marcador arranca el audio.**
   `jumpToBookmark` llama a `play()` incondicionalmente
   (`reader_provider.dart:1012-1017`): consultar un pasaje marcado mientras lees
   en silencio te pone a sonar el TTS de golpe.
@@ -170,6 +170,30 @@ servidor a internet.
 ---
 
 ## Calidad de código
+
+- [ ] `medio` 2026-09-03 — **Elegir una voz con Piper la guarda en Edge.** El
+  `onPick` de la hoja de voces solo distingue `kokoro` de todo lo demás
+  (`settings_screen.dart:302-304` y `:313-315`), así que con Piper seleccionado
+  la voz elegida se escribe en `edgeVoiceEs`/`edgeVoiceEn`. `piperVoiceEs` y
+  `piperVoiceEn` no se escriben desde ningún punto de la interfaz: para cambiar
+  la voz de Piper hay que editar el compose y reconstruir. Solo afecta a la
+  compilación propia, porque Piper no va al reparto.
+- [ ] `bajo` 2026-09-03 — **`voicesProvider` pide el catálogo de más.** Es un
+  `FutureProvider.family<List<Voice>, AppSettings>` (`voices_provider.dart:13`)
+  y `AppSettings` no implementa `==`, así que la clave es la identidad del
+  objeto: cada cambio de ajuste crea una entrada nueva y una petición nueva. Y
+  no es `autoDispose`, así que las viejas se retienen. Quitar el campo de
+  dirección en 0.7.0 mató el síntoma peor -una petición por pulsación de tecla-
+  pero no la causa. El arreglo es una clave de valor pequeña
+  (`engine`, `baseUrl`, `token`) con `==` propio, más `.autoDispose`;
+  implementar `==` en `AppSettings` entero no sirve, porque cambiar el tamaño de
+  letra volvería a invalidar el catálogo.
+- [ ] `bajo` 2026-09-03 — **Kokoro y Piper no cachean su catálogo de voces.**
+  Edge guarda el suyo siete días en SharedPreferences
+  (`edge_tts_provider.dart:376-403`); los otros dos preguntan al servidor cada
+  vez que se abre Ajustes, y por el túnel eso es un viaje de ida y vuelta que no
+  hace falta.
+
 
 - [ ] `bajo` 2026-08-30 — **Código muerto:** `AudioCacheRepo.debugKeys` no tiene
   ningún llamador. Es lo que quedó del diagnóstico que resolvió el bug de caché

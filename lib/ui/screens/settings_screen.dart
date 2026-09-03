@@ -554,6 +554,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
             ),
           ),
+          _Section(title: 'Pantalla', children: [
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Mantener la pantalla encendida'),
+              subtitle: const Text(
+                  'Leyendo en silencio la pantalla se apagaba sola a los pocos '
+                  'segundos. Solo mientras el libro está abierto.'),
+              value: s.keepScreenOn,
+              onChanged: (v) => _update(s.copyWith(keepScreenOn: v)),
+            ),
+          ]),
+
           _Section(title: 'Contar un problema', children: [
             Row(
               children: [
