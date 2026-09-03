@@ -61,6 +61,10 @@ docs/screenshot/
 tools/proxy/tokens.conf
 tools/proxy/logs/
 
+# Marca de "desde cuándo está encendido el Funnel": estado de esta máquina,
+# no del repo
+tools/proxy/estado/
+
 # Pipeline de reportes: venv local, estado del ledger y sus propios logs
 tools/reportes/.venv/
 tools/reportes/estado/

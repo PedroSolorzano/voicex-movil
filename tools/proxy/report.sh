@@ -19,6 +19,9 @@ FILTRO="${1:-}"
 
 command -v jq >/dev/null || { echo "Hace falta jq: sudo apt install jq"; exit 1; }
 
+"$(dirname "$0")/funnel.sh" status
+echo
+
 cat "$DIR"/access.jsonl "$DIR"/access-*.jsonl 2>/dev/null \
 | { [ -n "$FILTRO" ] && grep "\"ts\":\"$FILTRO" || cat; } \
 | jq -s -r '

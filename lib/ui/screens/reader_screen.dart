@@ -792,6 +792,14 @@ class _BottomBar extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   IconButton(
+                    icon: const _ChapterStepIcon(forward: false),
+                    tooltip: 'Capítulo anterior',
+                    color: palette.text,
+                    onPressed: reader.chapterIndex > 0
+                        ? notifier.previousChapter
+                        : null,
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.skip_previous),
                     tooltip: 'Párrafo anterior',
                     color: palette.text,
@@ -812,6 +820,15 @@ class _BottomBar extends StatelessWidget {
                     tooltip: 'Párrafo siguiente',
                     color: palette.text,
                     onPressed: notifier.nextParagraph,
+                  ),
+                  IconButton(
+                    icon: const _ChapterStepIcon(forward: true),
+                    tooltip: 'Capítulo siguiente',
+                    color: palette.text,
+                    onPressed: reader.chapterIndex <
+                            (reader.book?.chapters.length ?? 1) - 1
+                        ? notifier.nextChapter
+                        : null,
                   ),
                   _SpeedMenu(
                     current: settings.playbackSpeed,
@@ -973,6 +990,35 @@ class _ProgressSliderState extends State<_ProgressSlider> {
           setState(() => _arrastrando = null);
           widget.notifier.jumpToGlobalIndex(v.round());
         },
+      ),
+    );
+  }
+}
+
+/// Una página con un "+" o un "-", para que un salto de capítulo no se
+/// confunda a simple vista con `skip_previous`/`skip_next` (párrafo), que
+/// leen como controles de un reproductor de audio.
+class _ChapterStepIcon extends StatelessWidget {
+  final bool forward;
+  const _ChapterStepIcon({required this.forward});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = IconTheme.of(context).color;
+    return SizedBox(
+      width: 24,
+      height: 24,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(Icons.description_outlined, size: 22, color: color),
+          Positioned(
+            right: -3,
+            bottom: -3,
+            child: Icon(forward ? Icons.add_circle : Icons.remove_circle,
+                size: 13, color: color),
+          ),
+        ],
       ),
     );
   }

@@ -24,12 +24,13 @@ flutter analyze && flutter test
   de commit. (El repo de SENASA usa ASCII sin tildes. Este sí las lleva.)
 - **Los textos que ve el usuario van en español**, aunque estén dentro del código:
   mensajes de error, etiquetas de UI (`'Kokoro respondió ${resp.statusCode}'`).
-- Los mensajes de commit describen **el problema resuelto o el resultado**, no la
-  mecánica. En minúscula después del primer carácter, sin prefijos tipo
-  `feat:`/`fix:`. Opcionalmente con área delante:
-  - `Un audio vacío ya no se cachea y deja el párrafo mudo para siempre`
-  - `Piper: un modelo por idioma, porque sus voces no son multilingües`
-  - `README: resumen de versiones en vez de la tabla de tareas vacía`
+- Los mensajes de commit siguen **Conventional Commits**: `tipo(área opcional):
+  descripción`. La descripción sigue describiendo **el problema resuelto o el
+  resultado**, no la mecánica, en minúscula después de los dos puntos. Tipos
+  que se usan acá: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`.
+  - `fix: un audio vacío ya no se cachea y deja el párrafo mudo para siempre`
+  - `fix(piper): un modelo por idioma, porque sus voces no son multilingües`
+  - `docs(readme): resumen de versiones en vez de la tabla de tareas vacía`
 - La documentación explica **por qué**, con el archivo y la línea que lo respalda.
   Ver `docs/context/ACCESO_REMOTO.md` como referencia del tono.
 

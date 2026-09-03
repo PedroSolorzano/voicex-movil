@@ -9,6 +9,18 @@ y su arreglo. Aquí solo queda lo que no está hecho.
 
 ---
 
+## Sin triar (reportado por testers)
+
+Entradas que añade solo `tools/reportes/procesar.py`, automáticamente. No
+usan el formato de arriba a propósito: nadie -ni el tester, ni el script-
+puso una prioridad, y forzar una acá sería inventarla. Revisar, decidir
+prioridad y sección, reescribir con el formato estándar de arriba, y borrar
+de acá.
+
+- **2026-09-03 17:18** `pedro` — Mejora solicitada por mi — audio: “Quiero que quitemos la parte del piper, no me gusta ese modelo, vamos a buscar una alternativa, buscar una alternativa que tenga entrenamiento de voces en español, pero que sea mejor. Entonces necesitamos crear una tarea para buscar una alternativa buena que nos permita escuchar el TTS en español.” _(Las 48 leyes del poder, capítulo 0, Piper)_
+
+---
+
 ## Pendiente de decisión
 
 - [ ] `alto` 2026-08-30 — **Elegir motor de voz definitivo.** Hay 9 muestras del
@@ -51,6 +63,18 @@ y su arreglo. Aquí solo queda lo que no está hecho.
   `book.language` en la clave y migrar las filas existentes leyendo
   `books.language`; si no, se huerfanizan todas las descargas hechas hasta hoy.
   Documentado en `test/cache_key_test.dart`.
+- [ ] `medio` 2026-09-03 — **"Descargar este capítulo" no sabe por dónde vas
+  leyendo.** `downloadChapters(from, count)`
+  (`reader_provider.dart:1180`) sintetiza el capítulo completo desde su
+  párrafo 0; "Descargar → Este capítulo"
+  (`_DownloadScope.chapter`, `reader_screen.dart:361`) le pasa
+  `from = reader.chapterIndex` sin ningún desplazamiento. Si alguien lee en
+  silencio hasta la mitad de un capítulo y ahí decide pasar a escuchar,
+  descarga de nuevo lo que ya leyó. Arreglar significa que `downloadChapters`
+  acepte un párrafo inicial opcional, y que el botón de "este capítulo" lo
+  use con `reader.paragraphIndex` en vez de 0 -- las otras dos opciones
+  ("los próximos capítulos", "el resto del libro") siguen empezando en 0,
+  porque ahí no hay "por dónde vas" dentro del capítulo siguiente.
 
 ---
 

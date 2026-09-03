@@ -1044,6 +1044,30 @@ class ReaderNotifier extends Notifier<ReaderState> {
     if (wasPlaying) await play();
   }
 
+  /// Salta directamente al capítulo siguiente, sin pasar por sus párrafos uno
+  /// a uno. A diferencia de [nextParagraph], que solo cruza el límite al
+  /// llegar al último párrafo, este es el control que corresponde a un botón
+  /// dedicado -- el símil es el "siguiente pista" de un audiolibro, no un
+  /// paso de más de `nextParagraph`.
+  Future<void> nextChapter() async {
+    final wasPlaying = state.isBusy;
+    final total = state.book?.chapters.length ?? 1;
+    if (state.chapterIndex >= total - 1) return;
+    await navigateChapter(state.chapterIndex + 1, paragraph: 0);
+    if (wasPlaying) await play();
+  }
+
+  /// Salta al **inicio** del capítulo anterior. A diferencia de
+  /// [previousParagraph], que va al último párrafo del capítulo anterior
+  /// cuando ya está en el primero de este, "capítulo anterior" siempre
+  /// empieza desde el principio.
+  Future<void> previousChapter() async {
+    final wasPlaying = state.isBusy;
+    if (state.chapterIndex <= 0) return;
+    await navigateChapter(state.chapterIndex - 1, paragraph: 0);
+    if (wasPlaying) await play();
+  }
+
   Future<void> navigateChapter(int index, {int paragraph = 0}) async {
     _prefetchToken++;
     await _stopPlayback(endSession: false);
