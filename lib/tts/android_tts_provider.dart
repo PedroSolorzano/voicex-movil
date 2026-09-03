@@ -74,7 +74,12 @@ class AndroidTtsProvider implements TTSProvider {
     await _tts.setVolume(1.0);
     await _tts.setPitch(1.0);
 
-    await _tts.synthesizeToFile(text, filePath);
+    // isFullPath: true es obligatorio en Android 11+ (SDK_INT >= R): sin él,
+    // el plugin ignora filePath y escribe a través de MediaStore en Music/,
+    // en una URI propia que no coincide con lo que este código comprueba
+    // después -- el motor sintetiza bien, pero el archivo nunca aparece donde
+    // se lo espera y la síntesis se reporta como fallida.
+    await _tts.synthesizeToFile(text, filePath, true);
 
     final file = File(filePath);
     if (!await file.exists() || await file.length() == 0) {

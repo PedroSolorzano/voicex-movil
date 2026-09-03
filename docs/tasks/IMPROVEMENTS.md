@@ -9,18 +9,6 @@ y su arreglo. Aquí solo queda lo que no está hecho.
 
 ---
 
-## Sin triar (reportado por testers)
-
-Entradas que añade solo `tools/reportes/procesar.py`, automáticamente. No
-usan el formato de arriba a propósito: nadie -ni el tester, ni el script-
-puso una prioridad, y forzar una acá sería inventarla. Revisar, decidir
-prioridad y sección, reescribir con el formato estándar de arriba, y borrar
-de acá.
-
-- **2026-09-03 13:31** `pedro` — Error probando el modelo local de android o asung — audio: “Estaba probando el motor nativo, el de Android o Samsung y me da error, no me permite poder escuchar la voz que genera eso. Hay que revisar y agregar más pruebas para poder diagnosticar y corregar ese problema.” _(El talismán, capítulo 11, Teléfono)_
-
----
-
 ## Pendiente de decisión
 
 - [ ] `alto` 2026-08-30 — **Elegir motor de voz definitivo.** Hay 9 muestras del

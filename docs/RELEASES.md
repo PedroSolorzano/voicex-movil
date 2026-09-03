@@ -102,6 +102,22 @@ había forma de elegirlas porque el proveedor solo fijaba el idioma—. Y sobre 
 que la app se va a repartir a gente sin servidor propio: para ellos es **el único
 motor que sigue leyendo en el metro**.
 
+### El motor del teléfono no generaba audio en Android 11 o superior
+
+Dos testers lo reportaron el mismo día que se reintrodujo: "Teléfono" fallaba
+siempre con *"El motor de voz del teléfono no generó audio"*, en un Samsung
+Galaxy S21 Ultra (Android 12). El motor sí sintetizaba -el log de Android lo
+confirmaba- pero `synthesizeToFile()` (`lib/tts/android_tts_provider.dart:77`)
+no mandaba el parámetro `isFullPath`, que el plugin `flutter_tts` da por
+`false`. Desde Android 11, con `isFullPath` en `false` el plugin ignora la
+ruta que le pasamos y escribe el audio a través de `MediaStore`, en una URI
+propia dentro de `Music/`. La app entonces comprobaba si el archivo existía en
+la ruta que había pedido, no lo encontraba ahí -estaba en otro lado- y
+reportaba que el motor no había generado nada, cuando sí lo había hecho.
+
+Pasar `isFullPath: true` alcanza: el resto del código ya construye una ruta
+absoluta. Verificado en el mismo teléfono que lo reportó.
+
 ### Lectura
 
 - El **tamaño de letra se ajusta sin salir del libro**. Los controles existían
