@@ -115,6 +115,16 @@ tráfico entrante en la interfaz de Tailscale.
 usas otra, tendrás que alternar. Y el cliente queda corriendo en segundo plano,
 con el gasto de batería que eso supone —modesto, pero no nulo.
 
+**Estado actual: ya montado.** El cliente de la computadora corre en
+[`tools/tailscale`](../../tools/tailscale) (contenedor Docker, no instalación
+nativa, para no tocar el sistema operativo) con hostname `voicex-server`. En la
+consola de Tailscale (`login.tailscale.com/admin`) ya están activados
+**MagicDNS** y **HTTPS Certificates** (`admin/dns`), y el ACL declara el
+atributo `funnel` para este nodo (`admin/acls/file`, bloques `hosts` y
+`nodeAttrs`) — eso solo lo autoriza para el futuro, **Funnel sigue apagado**:
+correrlo (`tailscale funnel <puerto>`) es un paso aparte, deliberadamente no
+dado todavía.
+
 ---
 
 ## Cloudflare Tunnel

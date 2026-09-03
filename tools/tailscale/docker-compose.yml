@@ -1,0 +1,35 @@
+# Cliente Tailscale para VoiceX Móvil.
+#
+#   docker compose -f tools/tailscale/docker-compose.yml up -d
+#   docker exec voicex-tailscale tailscale up --hostname=voicex-server
+#
+# network_mode: host a propósito: así el contenedor crea la interfaz
+# tailscale0 directamente en la red del host, y Kokoro/Piper (que ya
+# escuchan en 0.0.0.0, ver tools/kokoro y tools/piper) quedan alcanzables
+# por la IP 100.x.y.z sin tocar sus compose ni sumar una red Docker propia.
+services:
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: voicex-tailscale
+    hostname: voicex-server
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      - TS_HOSTNAME=voicex-server
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=false
+      - TS_ACCEPT_DNS=true
+      # Por defecto containerboot reinicia el proceso si el login interactivo
+      # no se completa en 60 s, invalidando la URL de auth antes de que dé
+      # tiempo a abrirla y hacer el SSO. 5 min de margen para el primer login.
+      - TS_BOOT_TIMEOUT=300s
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+
+volumes:
+  tailscale-state:
