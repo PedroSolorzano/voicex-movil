@@ -9,6 +9,135 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## 0.7.0-preview.1 — 2026-09-03
+
+La versión que prepara la app para dársela a otras personas. Casi todo lo de
+aquí sale de esa frase: si alguien más va a usarla, el servidor no puede estar
+abierto, los fallos tienen que llegar solos, y lo que se rompe tiene que decir
+qué se rompió.
+
+### Kokoro y Piper dejan de estar abiertos a quien pase por la WiFi
+
+Ninguno de los dos sabe autenticar: la "API key" de Kokoro-FastAPI es la cadena
+literal `not-needed`, que existe solo porque el cliente de OpenAI obliga a
+mandar algo. Estaban publicados en `0.0.0.0`, alcanzables por cualquiera en la
+red de casa.
+
+Ahora escuchan **solo en loopback** y el único camino es un proxy nginx que
+valida un token por persona. La parte que hace que eso no sea decorativo es
+precisamente cerrar los puertos: un proxy con cerradura al lado de una ventana
+abierta no sirve de nada. Cuesta el acceso directo por WiFi, que era el único
+camino hasta ahora; a cambio queda uno solo que probar.
+
+Seis rutas exactas y ninguna más. Kokoro-FastAPI publica además `/docs`,
+`/redoc` y `/v1/models`, superficie que no tiene por qué existir de cara a
+internet.
+
+### La dirección del servidor sale de la interfaz
+
+Un campo de texto libre era razonable cuando el único usuario escribía una IP de
+su propia red. Deja de serlo en cuanto la app se le pasa a alguien más: se rompe
+con un dedo, sale en cualquier captura, y se pega en un grupo de mensajes sin
+querer. Ahora va compilada en el APK, un fichero por persona.
+
+Conviene decir qué es esto y qué no. **No es un control de seguridad**: sobre
+este mismo APK, `strings` encuentra el token dos veces y la dirección entera. Lo
+que protege la máquina de casa está en el proxy —revocación individual, límite
+de ritmo, lista blanca, backends en loopback— y no en esconder una cadena.
+
+### Un sondeo que distingue un servidor caído de una clave rechazada
+
+El sondeo estaba calibrado para una LAN: tres segundos, un intento, y cualquier
+fallo colapsado en un booleano cuyo motivo solo llegaba al log. Por un túnel eso
+se traduce en repliegues a Edge con el servidor perfectamente encendido.
+
+Ahora hay cuatro estados. El nuevo es el que más falta hacía: **clave rechazada**
+no es la computadora apagada, y la acción correcta no es esperar sino pedir una
+compilación nueva.
+
+El reintento es asimétrico a propósito. Un timeout es el caso ambiguo —puede ser
+la red— y se reintenta con más margen; una conexión rechazada no, porque el
+servidor no está y esperar ocho segundos más no lo va a traer. Y el TTL deja de
+ser simétrico: cachear treinta segundos un éxito ahorra un sondeo por párrafo,
+pero cachear los fallos significaba que un bache de red congelaba el repliegue
+medio minuto y arrastraba los párrafos siguientes.
+
+Medido después por la malla: un sondeo completo tarda ~0,84 s, así que el
+presupuesto de 5 s va seis veces sobrado y el reintento no hizo falta ni una vez
+en quince síntesis.
+
+### Reportes que sobreviven a no tener servidor
+
+Los fallos que más interesan ocurren justo cuando el servidor no está accesible,
+que es exactamente cuando un reporte no se puede enviar. Así que no se envían: se
+encolan en el teléfono y salen cuando el servidor vuelve.
+
+Y como el envío es automático, el saneo es la pieza que sostiene todo: una
+excepción de síntesis puede llegar con el párrafo que se estaba mandando dentro
+del mensaje, y eso es la lectura personal de alguien. Viaja el tipo de la
+excepción, la ruta y el estado; nunca el mensaje crudo.
+
+Los probadores pueden contar un problema escrito o **grabando una nota de voz**,
+que para alguien no técnico es mucho más cómodo que escribir un párrafo en el
+teléfono. El permiso de micrófono se pide al pulsar grabar, nunca al arrancar.
+
+### El diccionario en inglés no fallaba por la red
+
+Reportado como "suele decir error de conexión", y reproducible fuera de la app:
+seis consultas a `api.dictionaryapi.dev` dieron dos respuestas rápidas, tres de
+más de diecinueve segundos y un 522. Con ocho segundos de plazo, expirar era el
+caso normal.
+
+Ahora va a Wikcionario, el mismo endpoint que ya usaba el español. Diez palabras
+medidas de nuevo: entre 201 y 380 ms, ninguna falla, e incluso `waterbag`, que
+dictionaryapi.dev no tenía. Era un intermediario lento delante de estos mismos
+datos.
+
+### Vuelve el motor del teléfono
+
+Se retiró en 0.6.0 con argumentos que siguen siendo ciertos: no marca palabras y
+escribe WAV. Dos cosas cambiaron. La valoración de la voz —la retirada juzgaba la
+genérica de Google, y un Samsung trae las suyas, bastante mejores; hasta ahora no
+había forma de elegirlas porque el proveedor solo fijaba el idioma—. Y sobre todo
+que la app se va a repartir a gente sin servidor propio: para ellos es **el único
+motor que sigue leyendo en el metro**.
+
+### Lectura
+
+- El **tamaño de letra se ajusta sin salir del libro**. Los controles existían
+  desde 0.3.0 pero vivían en la pantalla global de Ajustes, entre el motor de voz
+  y la caché: había que abandonar la lectura, mover un deslizador a ciegas y
+  volver a ver cómo quedó. Ahora es una hoja a media pantalla con el texto
+  visible detrás.
+- La **barra de progreso se arrastra**. Era un indicador; para moverse por el
+  libro solo quedaba el índice o ir párrafo a párrafo.
+- **La pantalla ya no se apaga leyendo en silencio.** El `WAKE_LOCK` que había
+  mantiene viva la CPU para el audio, que es lo contrario de lo que hace falta
+  al leer sin escuchar.
+- **Abrir un marcador ya no arranca el TTS.**
+
+### Debajo del capó
+
+- **Kokoro pasa a AAC**: 94 kbps frente a los 130 del MP3, un 28 % menos por la
+  red y sin perder calidad. Opus, el candidato obvio, salía *peor* (140 kbps) y
+  además viaja en Ogg, que no se concatena por tramas. El tag de formato de la
+  caché **no se toca**: bumpearlo habría huerfanizado todas las descargas ya
+  hechas para retirar ficheros que se siguen reproduciendo bien.
+- **Un libro en inglés y otro en español dejan de compartir audio.** Kokoro usa
+  `af_bella` para los dos idiomas y el idioma nunca entraba en la clave. Migrado
+  leyendo `books.language`, para no huerfanizar nada.
+- **Los cuerpos de respuesta tienen plazo.** Una conexión que se degradaba tras
+  las cabeceras colgaba indefinidamente, sin llegar siquiera a producir un error.
+- **El prefetch deja de preguntar "¿es WiFi?" y pregunta "¿me cobran por esto?".**
+  Android deja que una VPN se adueñe del transporte reportado, así que instalar
+  Tailscale habría apagado la descarga adelantada estando en el WiFi de casa.
+- Elegir una voz con Piper la guardaba en los ajustes de Edge, y `piperVoiceEs`
+  no se escribía desde ninguna parte de la interfaz.
+- `voicesProvider` pedía el catálogo entero con cada cambio de cualquier ajuste.
+- De 86 tests a 131.
+
+---
+
 ## 0.6.0-preview.1 — 2026-09-02
 
 ### Fuera el TTS del teléfono

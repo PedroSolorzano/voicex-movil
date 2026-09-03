@@ -265,6 +265,15 @@ sustituyen antes de insertar.
 | `fontSize` · `lineHeight` · `margin` · `readerFont` · `readerTheme` | 18 · 1.7 · 24 · serif · sepia | Ajustes del lector |
 | `followAudioScroll` | `true` | El texto sigue al audio |
 
+### Configuración en tiempo de compilación
+
+La dirección de los servidores propios y el token **no se escriben en Ajustes**:
+van en el binario, con `--dart-define-from-file` y un fichero por probador (ver
+[`tools/release/README.md`](../../tools/release/README.md)). `TtsServerConfig` es
+el único sitio que los lee, y `availableEngines` decide qué motores puede
+ofrecer cada compilación: Edge y el del teléfono siempre, Kokoro y Piper solo si
+traen dirección.
+
 `voiceForEngine(engine, lang)` resuelve la voz de un motor concreto;
 `voiceFor(lang)` es el atajo para el seleccionado. La distinción importa en el
 repliegue: usar el atajo manda a Edge una voz que no existe en su catálogo.
@@ -299,11 +308,12 @@ el audio suene con normalidad.
 
 | Aspecto | Decisión |
 |---------|----------|
-| Claves API | Ninguna — Edge usa el token público del navegador |
-| Permisos | `INTERNET`, `FOREGROUND_SERVICE`, scoped storage |
-| Servidores propios | HTTP plano en red local, sin autenticación: no exponer fuera de la LAN |
-| Datos del usuario | Los EPUB y el audio nunca salen del dispositivo |
-| Analytics / telemetría | Ninguna |
+| Claves API | Edge usa el token público del navegador. Los motores propios van detrás de un proxy que exige `Authorization: Bearer`, con **un token por probador** compilado en su APK |
+| Permisos | `INTERNET`, `FOREGROUND_SERVICE`, scoped storage, y `RECORD_AUDIO` solo para las notas de voz de los reportes, pedido al pulsar grabar |
+| Servidores propios | Kokoro y Piper **solo escuchan en loopback**; el único camino es el proxy (`tools/proxy`), que valida token, limita el ritmo y publica seis rutas exactas |
+| Datos del usuario | Los EPUB nunca salen del dispositivo. El texto de un párrafo sí viaja al servidor propio para sintetizarlo, y **no se registra en ninguna parte**: el log guarda su longitud, nunca su contenido |
+| Telemetría | Log de acceso en el proxy propio -alias, ruta, código, duración, bytes, caracteres-, 14 días. Reportes de error automáticos, saneados para que una excepción no arrastre texto del libro. Nada sale hacia terceros |
+| Lo que el APK no puede esconder | La dirección y el token son extraíbles con `strings` sobre el binario. El token es un **identificador revocable**, no un secreto; lo que protege la máquina es la revocación individual, el límite de ritmo y apagar el túnel |
 
 ---
 
@@ -321,6 +331,11 @@ el audio suene con normalidad.
 | `audio_cache_repo_test.dart` | Caché y descargas sobre SQLite real (`sqflite_common_ffi`) |
 | `cache_key_test.dart` | Construcción y saneo de la clave de caché |
 | `settings_engine_test.dart` | Motor guardado por una versión que ofrecía más |
+| `dictionary_en_test.dart` | Extracto de Wikcionario en inglés |
+| `tts_endpoint_test.dart` | Normalización de la dirección y cabeceras |
+| `server_health_test.dart` | Sondeo, estados y reintento, contra un servidor en loopback |
+| `metered_connection_test.dart` | Qué conexión cuenta como medida |
+| `reporter_test.dart` | Saneo de los reportes y cola local |
 
 `lib/ui/` no tiene cobertura. Anotado en
 [IMPROVEMENTS.md](../tasks/IMPROVEMENTS.md).

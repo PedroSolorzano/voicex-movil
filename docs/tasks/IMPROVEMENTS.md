@@ -141,6 +141,37 @@ atendido.
   (`reader_screen.dart:539-552`) y ofrece pronunciar, diccionario y "otra app".
   No hay copiar una cita, ni compartirla, ni seleccionar una frase. Es el
   cimiento del subrayado: conviene hacerlo antes.
+- [ ] `medio` 2026-09-03 — **La app solo habla español.** Toda la interfaz está
+  en castellano y escrita a mano en los widgets: no hay `flutter_localizations`,
+  ni ficheros ARB, ni `AppLocalizations`. Cambiar de idioma hoy significa editar
+  el código.
+
+  **Lo que hay que investigar antes de decidir**, porque el coste está repartido
+  y no todo es traducir:
+
+  - **La interfaz**: unas cuantas docenas de cadenas sueltas por las pantallas.
+    Es el trabajo mecánico y el más barato; `flutter_localizations` con ARB es
+    el camino estándar.
+  - **Los mensajes de error, que son la mitad del valor.** `_friendlyError`
+    (`reader_provider.dart`), los cuatro estados del sondeo y los del
+    diccionario están redactados para explicar, no solo para nombrar. Traducir
+    eso conservando el tono cuesta más que traducir botones.
+  - **El diccionario ya es bilingüe** y no cambia: elige fuente según el idioma
+    del *libro*, que es independiente del idioma de la app.
+  - **Las voces por defecto** (`voiceMap`) están fijadas a español y a inglés.
+    Un tercer idioma de interfaz no implica un tercer idioma de lectura, pero
+    conviene decidir si se atan o no.
+  - **El parser del Wikcionario español** (`parseSpanishExtract`) reconoce
+    categorías gramaticales por nombre en castellano. Solo importa si algún día
+    se lee en un idioma más.
+  - **Lo que NO hay que traducir**: los comentarios del código y esta
+    documentación. Son para quien mantiene, y cambiarlos no aporta.
+
+  Lo razonable es empezar por **inglés**, que es el otro idioma que la app ya
+  lee, y ver cuánto duele antes de prometer más. Y hacerlo **antes** de que la
+  interfaz crezca: cada pantalla nueva escrita a mano es deuda que se paga
+  después.
+
 - [ ] `bajo` 2026-09-02 — **Más formatos: PDF, MOBI y compañía.** Hoy solo
   EPUB, y el filtro es duro en los dos caminos de entrada:
   `allowedExtensions: ['epub']` (`library_screen.dart:167`) y

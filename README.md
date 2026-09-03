@@ -45,6 +45,7 @@ responden, la app cae a Edge automáticamente y lo dice en pantalla.
 
 | Versión | Lo que trajo |
 |---|---|
+| **0.7.0** | La versión que prepara la app para dársela a otras personas. Kokoro y Piper dejan de estar abiertos a quien pase por la WiFi: escuchan solo en loopback, detrás de un proxy con un token por probador. La dirección sale de Ajustes y va compilada. Los fallos se reportan solos, encolados si el servidor no está, y se puede contar un problema por escrito o con una nota de voz. El diccionario en inglés deja de expirar. Vuelve el motor del teléfono, el único que lee sin red ni servidor. La letra se ajusta sin salir del libro |
 | **0.6.0** | Fuera el TTS del teléfono: no marcaba palabras, sonaba a robot al lado de las voces neuronales y su WAV llenaba la caché. Un móvil que lo tuviera puesto vuelve a Edge solo, y su audio se borra en el arranque. Oír una palabra suelta con Kokoro o Piper vuelve a funcionar |
 | **0.5.2** | Las descargas se borraban solas a los cinco días, el repliegue a Edge pedía una voz que Edge no tiene, y un párrafo ya descargado se volvía a sintetizar. Los repositorios pasan a tener tests contra SQLite real |
 | **0.5.1** | Un párrafo cuyo audio salía vacío se guardaba en caché igual y quedaba mudo para siempre: en inglés con Edge no sonaba nada. Ahora ningún motor entrega audio vacío, la caché descarta lo que no se puede reproducir y el error se explica en pantalla |
