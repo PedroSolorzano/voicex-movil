@@ -133,7 +133,12 @@ La opción recomendada, Tailscale, **no necesita nada de esto**: es red privada,
 no URL pública. Lo de aquí solo hace falta el día que se elija exponer el
 servidor a internet.
 
-- [ ] `medio` 2026-09-02 — **El health check de 3 s es demasiado estricto.**
+- [ ] `bajo` 2026-09-03 — **Confirmar los plazos con Funnel, no solo con la
+  tailnet.** Medido ya por la malla y con relevo DERP: un sondeo completo tarda
+  ~0,84 s desde el teléfono, así que el presupuesto de 5 s va seis veces
+  sobrado y el reintento no llegó a hacer falta ni una vez en quince síntesis.
+  Falta repetirlo por Funnel, que mete TLS y un salto más.
+- [x] `medio` 2026-09-02 — **El health check de 3 s es demasiado estricto.**
   `kokoro_tts_provider.dart:94-98` y `piper_tts_provider.dart:54-58` dan tres
   segundos al saludo y cachean el resultado 30 s. La síntesis va holgada (180 s
   y 120 s), así que el cuello de botella es el saludo, no el trabajo. Una red
@@ -141,20 +146,11 @@ servidor a internet.
   repliega a Edge en silencio**, indistinguible de un servidor caído. Un
   reintento o un plazo mayor. Es el único de esta sección que vale la pena
   aunque nunca se salga de Tailscale.
-- [ ] `bajo` 2026-09-02 — **Campo de token en Ajustes**, junto a la dirección
-  del servidor. Sin él, ninguna opción con autenticación real es viable.
-- [ ] `bajo` 2026-09-02 — **Que los providers manden ese token como cabecera**
-  (`Authorization`, `CF-Access-Client-Id`, o la que pida el proveedor elegido)
-  en la síntesis, el health check y el listado de voces. Hoy solo mandan
-  `Content-Type` (`kokoro_tts_provider.dart:159`, `piper_tts_provider.dart:105`),
-  y ninguno de los dos servidores exige nada: la "API key" de Kokoro-FastAPI es
-  la cadena literal `not-needed`. Cualquier URL pública deja la CPU de casa a
-  disposición de quien la encuentre.
-- [ ] `bajo` 2026-09-02 — **Medir el consumo real de Kokoro.** La tabla de datos
-  móviles da ~29 MB por hora de escucha suponiendo 64 kbps, pero el bitrate del
-  encoder no está documentado: a 128 kbps serían ~58 MB. Piper sí está medido y
-  es aritmética, no estimación: WAV sin comprimir, ~159 MB/hora. Los dos `curl`
-  para medirlo están al final de `ACCESO_REMOTO.md`.
+- [x] `bajo` 2026-09-02 — **Un token que los providers mandan como cabecera**
+  en la síntesis, el sondeo y el listado de voces. Resuelto de otra forma que la
+  prevista: no hay campo en Ajustes, porque el token no lo escribe el usuario
+  sino que va compilado por probador (`TtsServerConfig`), y quien lo valida es
+  el proxy de `tools/proxy`, ya que ni Kokoro ni Piper saben hacerlo.
 
 ---
 
