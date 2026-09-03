@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'server_config.dart';
+
 /// Fallback voices used when the live Edge catalogue is unavailable or the user
 /// has not picked a specific voice. Kept deliberately small — the full list
 /// (300+ voices) comes from EdgeTtsProvider.listVoices().
@@ -141,9 +143,16 @@ class AppSettings {
         _ => '',
       };
 
-  /// Whether the selected engine depends on a machine on the local network.
+  /// Whether the selected engine depends on a machine of the user's own.
   bool get usesSelfHostedServer =>
       ttsProvider == 'kokoro' || ttsProvider == 'piper';
+
+  /// Credential for the proxy that fronts the self-hosted engines.
+  ///
+  /// Baked in at build time, never typed: see [TtsServerConfig] for why it is a
+  /// revocable identifier rather than a secret. Empty on a build that reaches
+  /// its server directly on the LAN, where there is no proxy to authenticate to.
+  String get serverToken => TtsServerConfig.token;
 
   /// Brings a stored engine name back to one the app still has.
   ///

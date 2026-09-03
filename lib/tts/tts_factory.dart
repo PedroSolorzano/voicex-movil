@@ -12,10 +12,10 @@ TTSProvider getProvider(AppSettings settings, {String lang = 'es'}) {
   switch (settings.ttsProvider) {
     case 'kokoro':
       return KokoroTtsProvider(settings.kokoroBaseUrl,
-          langCode: kokoroLangCode(lang));
+          langCode: kokoroLangCode(lang), token: settings.serverToken);
     case 'piper':
       return PiperTtsProvider(settings.piperBaseUrl,
-          lengthScale: settings.piperLengthScale);
+          lengthScale: settings.piperLengthScale, token: settings.serverToken);
     case 'edge':
     default:
       return EdgeTtsProvider();

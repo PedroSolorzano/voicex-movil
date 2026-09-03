@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import 'models.dart';
+import 'server_health.dart';
+import 'tts_endpoint.dart';
 import 'tts_provider.dart';
 
 const _uuid = Uuid();
@@ -13,8 +15,6 @@ const _uuid = Uuid();
 /// request would still tie up the connection, so paragraphs are split like the
 /// other engines.
 const _maxChunkChars = 1800;
-
-const _healthTtl = Duration(seconds: 30);
 
 /// Talks to a Piper HTTP server (`python -m piper.http_server`) on the local
 /// network.
@@ -33,42 +33,27 @@ class PiperTtsProvider implements TTSProvider {
   /// particular reads fast at its default pace.
   final double lengthScale;
 
+  /// Bearer credential for the proxy that fronts the server. Empty when the
+  /// server is reached directly.
+  final String token;
+
   final HttpClient _client = HttpClient();
 
-  PiperTtsProvider(String baseUrl, {this.lengthScale = 1.0})
-      : baseUrl = baseUrl.endsWith('/')
-            ? baseUrl.substring(0, baseUrl.length - 1)
-            : baseUrl {
-    _client.connectionTimeout = const Duration(seconds: 5);
+  PiperTtsProvider(String baseUrl, {this.lengthScale = 1.0, this.token = ''})
+      : baseUrl = normalizeBaseUrl(baseUrl) {
+    _client.connectionTimeout = TtsTimeouts.connect;
+    _client.idleTimeout = TtsTimeouts.idle;
   }
 
-  static final Map<String, ({DateTime at, bool ok})> _healthCache = {};
+  /// Full verdict on the server. `/info` is the cheapest endpoint it has;
+  /// there is no `/health`.
+  static Future<ServerHealth> healthOf(String baseUrl, {String token = ''}) =>
+      probeServer(buildUri(baseUrl, '/info'), token: token, engine: 'piper');
 
-  static Future<bool> isReachable(String baseUrl) async {
-    final cached = _healthCache[baseUrl];
-    if (cached != null && DateTime.now().difference(cached.at) < _healthTtl) {
-      return cached.ok;
-    }
+  static Future<bool> isReachable(String baseUrl, {String token = ''}) async =>
+      (await healthOf(baseUrl, token: token)).isUsable;
 
-    var ok = false;
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
-    try {
-      // /info is the server's cheapest endpoint; there is no /health.
-      final req = await client.getUrl(Uri.parse('$baseUrl/info'));
-      final resp = await req.close().timeout(const Duration(seconds: 3));
-      ok = resp.statusCode == 200;
-      await resp.drain<void>();
-    } catch (e) {
-      dev.log('[Piper] $baseUrl unreachable: $e');
-    } finally {
-      client.close(force: true);
-    }
-
-    _healthCache[baseUrl] = (at: DateTime.now(), ok: ok);
-    return ok;
-  }
-
-  static void resetHealthCache() => _healthCache.clear();
+  static void resetHealthCache() => resetServerHealthCache();
 
   @override
   Future<TTSResult> synthesize({
@@ -100,9 +85,10 @@ class PiperTtsProvider implements TTSProvider {
   }
 
   Future<List<int>> _synthesizeChunk(String text, String voice) async {
-    final uri = Uri.parse('$baseUrl/synthesize');
+    final uri = buildUri(baseUrl, '/synthesize');
     final req = await _client.postUrl(uri);
     req.headers.contentType = ContentType.json;
+    applyRequestHeaders(req, token: token, engine: 'piper', chars: text.length);
     req.write(jsonEncode({
       'text': text,
       // Empty means "whatever model the server was started with".
@@ -110,17 +96,13 @@ class PiperTtsProvider implements TTSProvider {
       'length_scale': lengthScale,
     }));
 
-    final resp = await req.close().timeout(const Duration(seconds: 120));
+    final resp = await req.close().timeout(TtsTimeouts.synthesisPiper);
     if (resp.statusCode != 200) {
       await resp.drain<void>();
       throw HttpException('Piper respondió ${resp.statusCode}', uri: uri);
     }
 
-    final bytes = <int>[];
-    await for (final part in resp) {
-      bytes.addAll(part);
-    }
-    return bytes;
+    return readBodyBytes(resp);
   }
 
   /// Joins WAV chunks by keeping the first header and appending only the sample
@@ -182,13 +164,14 @@ class PiperTtsProvider implements TTSProvider {
   @override
   Future<List<Voice>> listVoices() async {
     try {
-      final req = await _client.getUrl(Uri.parse('$baseUrl/voices'));
-      final resp = await req.close().timeout(const Duration(seconds: 10));
+      final req = await _client.getUrl(buildUri(baseUrl, '/voices'));
+      applyRequestHeaders(req, token: token, engine: 'piper');
+      final resp = await req.close().timeout(TtsTimeouts.catalogue);
       if (resp.statusCode != 200) {
         await resp.drain<void>();
         return const [];
       }
-      final body = await resp.transform(utf8.decoder).join();
+      final body = await readBodyString(resp, timeout: TtsTimeouts.catalogue);
       final map = jsonDecode(body) as Map<String, dynamic>;
 
       return map.entries.map((e) {

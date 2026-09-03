@@ -17,6 +17,7 @@ import '../../tts/tts_factory.dart';
 import '../../tts/tts_provider.dart';
 import '../../tts/kokoro_tts_provider.dart';
 import '../../tts/piper_tts_provider.dart';
+import '../../tts/server_health.dart';
 import 'settings_provider.dart';
 
 enum ReaderStatus { idle, synthesizing, playing, paused, error }
@@ -32,6 +33,27 @@ const _cacheFormatTag = 'f96';
 
 /// How often progress is persisted while audio is playing.
 const _progressSaveInterval = Duration(seconds: 5);
+
+/// Whether a connection is one the user pays for by the megabyte.
+///
+/// Phrased as a deny list rather than "is it WiFi", which is what it used to
+/// be. On Android a VPN takes over the reported transport, so a phone running
+/// one can answer `[vpn]` and nothing else — and the old test then switched off
+/// prefetching while sitting on the home WiFi, purely as a side effect of
+/// having installed a VPN client. The deny list is also the honest reading of
+/// what the setting promises on screen: "nunca usa datos móviles".
+///
+/// **Known gap, deliberately left open:** a VPN over mobile data can likewise
+/// report `[vpn]` alone and hide the metered transport underneath, so this can
+/// let a prefetch through on a metered link. Closing it properly means asking
+/// Android for `NET_CAPABILITY_NOT_METERED` over a platform channel. Until
+/// then, the exposure is bounded — prefetch only runs with a self-hosted server
+/// configured.
+@visibleForTesting
+bool isLikelyMetered(List<ConnectivityResult> connection) =>
+    connection.contains(ConnectivityResult.mobile) ||
+    connection.contains(ConnectivityResult.none) ||
+    connection.isEmpty;
 
 class ReaderState {
   final Book? book;
@@ -221,9 +243,21 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
   DateTime _lastProgressSave = DateTime.fromMillisecondsSinceEpoch(0);
 
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+
   @override
   ReaderState build() {
     ref.onDispose(cleanup);
+    // Nothing used to invalidate the health verdict when the network changed:
+    // resetHealthCache had a single caller, the button in Ajustes. So walking
+    // out of the house, or back into coverage, dragged a stale verdict along
+    // until it aged out. A change of network is the one moment where the old
+    // answer is guaranteed to be worthless.
+    _connectivitySub =
+        Connectivity().onConnectivityChanged.listen((_) {
+      resetServerHealthCache();
+      unawaited(maybePrefetchAhead());
+    });
     return const ReaderState();
   }
 
@@ -471,12 +505,15 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
     if (settings.usesSelfHostedServer) {
       final url = settings.selfHostedUrl;
-      final reachable = url.trim().isNotEmpty &&
-          (kind == 'kokoro'
-              ? await KokoroTtsProvider.isReachable(url)
-              : await PiperTtsProvider.isReachable(url));
-      if (!reachable) {
-        dev.log('[Reader] $kind unreachable → falling back to Edge');
+      _lastHealth = url.trim().isEmpty
+          ? ServerHealth.unreachable
+          : (kind == 'kokoro'
+              ? await KokoroTtsProvider.healthOf(url,
+                  token: settings.serverToken)
+              : await PiperTtsProvider.healthOf(url,
+                  token: settings.serverToken));
+      if (!_lastHealth.isUsable) {
+        dev.log('[Reader] $kind ${_lastHealth.name} → falling back to Edge');
         kind = 'edge';
       }
     }
@@ -491,18 +528,34 @@ class ReaderNotifier extends Notifier<ReaderState> {
     }
 
     _activeEngineKind = kind;
+    // The label used to be written only on the happy path of play(), so a whole
+    // chapter could download through Edge with the bar still claiming Kokoro.
+    // Every caller of _provider goes through here, so this is the one place
+    // that always knows.
+    if (state.book != null && _engineLabel(settings) != state.engineLabel) {
+      state = state.copyWith(engineLabel: _engineLabel(settings));
+    }
     return _ttsProvider!;
   }
 
   String _activeEngineKind = 'edge';
 
+  /// Why the self-hosted engine was last set aside, if it was.
+  ServerHealth _lastHealth = ServerHealth.ok;
+
   /// Label for the status bar: names the engine, and says so explicitly when it
   /// is not the one configured.
+  ///
+  /// A rejected key gets its own wording. For a tester it is the only signal
+  /// that the problem is their build and not the developer's machine being off,
+  /// and the two need different actions.
   String _engineLabel(AppSettings settings) {
     final label = providerLabel(_activeEngineKind);
-    return _activeEngineKind == settings.ttsProvider
-        ? label
-        : '$label (${providerLabel(settings.ttsProvider)} no disponible)';
+    if (_activeEngineKind == settings.ttsProvider) return label;
+    final reason = _lastHealth == ServerHealth.unauthorized
+        ? 'clave rechazada'
+        : '${providerLabel(settings.ttsProvider)} no disponible';
+    return '$label ($reason)';
   }
 
   /// Returns the on-disk audio for [para], synthesizing and caching it on a miss.
@@ -1151,18 +1204,22 @@ class ReaderNotifier extends Notifier<ReaderState> {
     // Only worth doing for a home server; Edge already streams on demand and
     // its audio is cached paragraph by paragraph as it plays.
     if (!settings.usesSelfHostedServer ||
-        settings.selfHostedUrl.trim().isEmpty) {
+        (settings.ttsProvider == 'kokoro'
+            ? !settings.hasKokoroServer
+            : !settings.hasPiperServer)) {
       return;
     }
 
     final connection = await Connectivity().checkConnectivity();
-    if (!connection.contains(ConnectivityResult.wifi)) {
-      dev.log('[Reader] Prefetch skipped: not on WiFi');
+    if (isLikelyMetered(connection)) {
+      dev.log('[Reader] Prefetch skipped: metered connection');
       return;
     }
     final reachable = settings.ttsProvider == 'kokoro'
-        ? await KokoroTtsProvider.isReachable(settings.selfHostedUrl)
-        : await PiperTtsProvider.isReachable(settings.selfHostedUrl);
+        ? await KokoroTtsProvider.isReachable(settings.selfHostedUrl,
+            token: settings.serverToken)
+        : await PiperTtsProvider.isReachable(settings.selfHostedUrl,
+            token: settings.serverToken);
     if (!reachable) {
       dev.log('[Reader] Prefetch skipped: server unreachable');
       return;
@@ -1202,6 +1259,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
   void cleanup() {
     // Leaving the book must not lose the last few seconds of progress.
     unawaited(_saveProgress(offsetMs: audioHandler.elapsedMs));
+    unawaited(_connectivitySub?.cancel());
+    _connectivitySub = null;
     _listening = false;
     _loadedChapter = -1;
     _loadedParagraph = -1;

@@ -9,6 +9,7 @@ import '../../storage/repositories.dart';
 import '../../tts/tts_factory.dart';
 import '../../tts/kokoro_tts_provider.dart';
 import '../../tts/piper_tts_provider.dart';
+import '../../tts/server_health.dart';
 import '../providers/reader_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/voices_provider.dart';
@@ -83,23 +84,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
 
     final isPiper = _settings.ttsProvider == 'piper';
-    if (isPiper) {
-      PiperTtsProvider.resetHealthCache();
-    } else {
-      KokoroTtsProvider.resetHealthCache();
-    }
-    final ok = isPiper
-        ? await PiperTtsProvider.isReachable(url)
-        : await KokoroTtsProvider.isReachable(url);
+    resetServerHealthCache();
+    final health = isPiper
+        ? await PiperTtsProvider.healthOf(url, token: _settings.serverToken)
+        : await KokoroTtsProvider.healthOf(url, token: _settings.serverToken);
     if (!mounted) return;
 
     setState(() {
       _testingServer = false;
-      _serverOk = ok;
-      _serverStatus = ok
-          ? 'Servidor accesible.'
-          : 'No responde. Comprueba que el contenedor esté arriba y que el '
-              'teléfono esté en la misma red.';
+      _serverOk = health.isUsable;
+      // Each state gets its own sentence because each one needs a different
+      // action. Telling somebody to check their network when the server
+      // rejected their key sends them chasing the wrong thing.
+      _serverStatus = switch (health) {
+        ServerHealth.ok => 'Servidor accesible.',
+        ServerHealth.unauthorized =>
+          'El servidor rechazó la clave de esta versión de la app. Avisa a '
+              'quien te la pasó: necesitas una compilación nueva.',
+        ServerHealth.error =>
+          'El servidor respondió, pero con un error. Está arriba y algo va '
+              'mal dentro.',
+        ServerHealth.unreachable =>
+          'No responde. O está apagado, o la red no llega hasta él.',
+      };
     });
   }
 

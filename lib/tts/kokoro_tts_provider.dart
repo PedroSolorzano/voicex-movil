@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import 'models.dart';
+import 'server_health.dart';
+import 'tts_endpoint.dart';
 import 'tts_provider.dart';
 
 const _uuid = Uuid();
@@ -14,9 +16,6 @@ const _uuid = Uuid();
 /// past the timeout. Matches the Edge provider's limit; servers before v0.8
 /// return timings in a response header, and this also keeps that header sane.
 const _maxChunkChars = 1800;
-
-/// Cached reachability, so a dead server is not probed on every paragraph.
-const _healthTtl = Duration(seconds: 30);
 
 /// Talks to a self-hosted Kokoro-FastAPI instance over the local network.
 ///
@@ -68,48 +67,31 @@ class KokoroTtsProvider implements TTSProvider {
   /// 'f' French, 'i' Italian, 'p' Brazilian Portuguese, 'j' Japanese, 'z' Chinese.
   final String langCode;
 
+  /// Bearer credential for the proxy that fronts the server. Empty when the
+  /// server is reached directly, which is still how it works on the LAN.
+  final String token;
+
   final HttpClient _client = HttpClient();
 
-  KokoroTtsProvider(String baseUrl, {this.langCode = 'a'})
-      : baseUrl = baseUrl.endsWith('/')
-            ? baseUrl.substring(0, baseUrl.length - 1)
-            : baseUrl {
+  KokoroTtsProvider(String baseUrl, {this.langCode = 'a', this.token = ''})
+      : baseUrl = normalizeBaseUrl(baseUrl) {
     // Synthesis is CPU-bound on the server: ~5x realtime was measured, so a
     // long paragraph legitimately takes several seconds.
-    _client.connectionTimeout = const Duration(seconds: 5);
+    _client.connectionTimeout = TtsTimeouts.connect;
+    _client.idleTimeout = TtsTimeouts.idle;
   }
 
-  static final Map<String, ({DateTime at, bool ok})> _healthCache = {};
+  /// Full verdict on the server: reachable, refusing the token, or broken.
+  static Future<ServerHealth> healthOf(String baseUrl, {String token = ''}) =>
+      probeServer(buildUri(baseUrl, '/health'),
+          token: token, engine: 'kokoro');
 
-  /// Whether the server answers. Result is cached briefly so that a chapter
-  /// download does not probe once per paragraph.
-  static Future<bool> isReachable(String baseUrl) async {
-    final key = baseUrl;
-    final cached = _healthCache[key];
-    if (cached != null && DateTime.now().difference(cached.at) < _healthTtl) {
-      return cached.ok;
-    }
-
-    var ok = false;
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
-    try {
-      final uri = Uri.parse('$baseUrl/health');
-      final req = await client.getUrl(uri).timeout(const Duration(seconds: 3));
-      final resp = await req.close().timeout(const Duration(seconds: 3));
-      ok = resp.statusCode == 200;
-      await resp.drain<void>();
-    } catch (e) {
-      dev.log('[Kokoro] $baseUrl unreachable: $e');
-    } finally {
-      client.close(force: true);
-    }
-
-    _healthCache[key] = (at: DateTime.now(), ok: ok);
-    return ok;
-  }
+  /// Whether the server answers, for callers that only need a yes or no.
+  static Future<bool> isReachable(String baseUrl, {String token = ''}) async =>
+      (await healthOf(baseUrl, token: token)).isUsable;
 
   /// Forgets cached health, so a retry probes the server immediately.
-  static void resetHealthCache() => _healthCache.clear();
+  static void resetHealthCache() => resetServerHealthCache();
 
   @override
   Future<TTSResult> synthesize({
@@ -154,9 +136,11 @@ class KokoroTtsProvider implements TTSProvider {
 
   Future<({List<int> audio, List<WordTimestamp> timestamps})> _synthesizeChunk(
       String text, String voice) async {
-    final uri = Uri.parse('$baseUrl/dev/captioned_speech');
+    final uri = buildUri(baseUrl, '/dev/captioned_speech');
     final req = await _client.postUrl(uri);
     req.headers.contentType = ContentType.json;
+    applyRequestHeaders(req,
+        token: token, engine: 'kokoro', chars: text.length);
     req.write(jsonEncode({
       'model': 'kokoro',
       'input': text,
@@ -172,7 +156,7 @@ class KokoroTtsProvider implements TTSProvider {
       'return_timestamps': true,
     }));
 
-    final resp = await req.close().timeout(const Duration(seconds: 180));
+    final resp = await req.close().timeout(TtsTimeouts.synthesisKokoro);
     if (resp.statusCode != 200) {
       await resp.drain<void>();
       throw HttpException('Kokoro respondió ${resp.statusCode}', uri: uri);
@@ -184,7 +168,7 @@ class KokoroTtsProvider implements TTSProvider {
     if (isJson) {
       // v0.8+: {"audio": base64, "audio_format": "mp3", "timestamps": [...]}.
       // Carrying the timings in the body removes the header size ceiling.
-      final body = await resp.transform(utf8.decoder).join();
+      final body = await readBodyString(resp);
       final json = jsonDecode(body) as Map<String, dynamic>;
       return (
         audio: base64Decode(json['audio'] as String? ?? ''),
@@ -193,10 +177,7 @@ class KokoroTtsProvider implements TTSProvider {
     }
 
     // Older servers: raw audio in the body, timings in a header.
-    final audio = <int>[];
-    await for (final part in resp) {
-      audio.addAll(part);
-    }
+    final audio = await readBodyBytes(resp);
     final header = resp.headers.value('x-word-timestamps');
     return (
       audio: audio,
@@ -245,14 +226,15 @@ class KokoroTtsProvider implements TTSProvider {
   @override
   Future<List<Voice>> listVoices() async {
     try {
-      final uri = Uri.parse('$baseUrl/v1/audio/voices');
+      final uri = buildUri(baseUrl, '/v1/audio/voices');
       final req = await _client.getUrl(uri);
-      final resp = await req.close().timeout(const Duration(seconds: 10));
+      applyRequestHeaders(req, token: token, engine: 'kokoro');
+      final resp = await req.close().timeout(TtsTimeouts.catalogue);
       if (resp.statusCode != 200) {
         await resp.drain<void>();
         return const [];
       }
-      final body = await resp.transform(utf8.decoder).join();
+      final body = await readBodyString(resp, timeout: TtsTimeouts.catalogue);
       final ids = (jsonDecode(body)['voices'] as List?) ?? const [];
 
       return ids
