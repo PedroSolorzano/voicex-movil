@@ -85,6 +85,45 @@ atendido.
   lector con esos mismos ajustes, viendo el texto cambiar detrás. Y un
   pellizco para el tamaño: hoy no hay ningún gesto de escala en `lib/`, solo
   `onTap` y `onLongPressStart`.
+- [ ] `alto` 2026-09-03 — **Paginar en vez de desplazar.** Kindle y Play Books
+  pasan página; esta app tiene scroll continuo por capítulo
+  (`reader_screen.dart:249-286`, un `ScrollablePositionedList`), que es lo
+  normal en una app web y raro en un lector. Pasar página da tres cosas de
+  golpe: saber cuánto falta para acabar el capítulo de un vistazo, una unidad
+  de lectura estable a la que volver, y que el pulgar no arrastre de más al
+  reposicionar. No es un cambio de widget sino de modelo: hay que medir el
+  texto contra el alto disponible con el tamaño y el interlineado actuales, y
+  rehacerlo al cambiarlos. Es la diferencia estructural más grande frente a la
+  competencia, y por eso encabeza la lista.
+- [ ] `medio` 2026-09-03 — **Decir cuánto falta en tiempo, no en porcentaje.**
+  «Te quedan 14 minutos en este capítulo» es la cifra que Kindle acertó a
+  poner y que la gente usa para decidir si sigue. La app ya tiene la mitad
+  hecha: estima el tiempo de escucha restante (`reader_screen.dart:876-894`, a
+  14 caracteres por segundo). Falta la estimación de **lectura** en silencio,
+  que necesita medir la velocidad real de cada persona en vez de suponerla, y
+  mostrarla por capítulo además de por libro.
+- [ ] `medio` 2026-09-03 — **Brillo y temperatura desde el propio lector.** Un
+  gesto vertical en el borde izquierdo, como Kindle. Hoy no hay ningún control
+  de brillo (`reader_screen.dart` solo consulta `platformBrightnessOf` para
+  elegir paleta), así que leer de noche obliga a salir a los ajustes del
+  sistema. El modo cálido —bajar el azul al anochecer— es lo que más se agradece
+  y no existe en ninguna de las tres paletas actuales.
+- [ ] `bajo` 2026-09-03 — **Volver atrás después de un salto.** Al tocar una nota
+  al pie, una entrada del índice o un marcador, Kindle deja un botón para
+  regresar exactamente a donde estabas. Aquí un salto es definitivo: hay que
+  recordar el capítulo y buscarlo a mano. Basta con una pila de una posición y
+  un botón flotante que aparezca solo después de saltar.
+- [ ] `bajo` 2026-09-03 — **Recordar la posición entre dispositivos.** Es lo que
+  hace que Kindle se sienta un servicio y no una app. Hoy todo es SQLite local
+  (`database.dart:11`) y no hay sincronización de ninguna clase. Con el proxy ya
+  montado y un token por persona, el esqueleto existe; lo que falta es decidir
+  si esto quiere ser un servicio, con lo que eso arrastra.
+- [ ] `bajo` 2026-09-03 — **Cerrar el ciclo del diccionario.** Play Books guarda
+  las palabras que consultas y las convierte en una lista para repasar. La app
+  ya resuelve la definición (`services/dictionary.dart`) y la tira; guardarla
+  costaría una tabla. Tiene sentido sobre todo leyendo en inglés, que es cuando
+  se consulta de verdad.
+
 - [ ] `alto` 2026-09-02 — **Subrayar y anotar.** No existe nada persistente que
   elija el usuario: lo único resaltado es la oración o la palabra que suena, y
   se borra al parar. Los marcadores guardan solo una posición
