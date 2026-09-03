@@ -524,6 +524,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
           '${piperPaceSuffix(settings.piperLengthScale)}',
       'kokoro' =>
         'kokoro-$lang-${settings.voiceForEngine('kokoro', book.language)}',
+      // La voz del teléfono entra en la clave porque cambiarla cambia el audio,
+      // y el idioma porque una voz puede servir a los dos.
+      'android' =>
+        'android-$lang-${settings.voiceForEngine('android', book.language)}',
       _ => 'edge-${settings.voiceForEngine('edge', book.language)}',
     };
     return sanitizeCacheKey(raw);
@@ -1259,6 +1263,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
       switch (settings.ttsProvider) {
         'piper' => 2.0,
         'kokoro' => 5.0,
+        'android' => 1.5, // en el propio teléfono, sin red de por medio
         _ => 3.0, // Edge, dominated by the network
       };
 

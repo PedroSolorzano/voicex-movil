@@ -28,6 +28,8 @@ dependencies:
   # TTS / WebSocket
   web_socket_channel: ^3.0.1
   http: ^1.2.2
+  # Motor de voz del propio teléfono: el único que lee sin red ni servidor.
+  flutter_tts: ^4.0.2
 
   # EPUB
   epubx: ^4.0.0

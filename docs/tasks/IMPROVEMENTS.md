@@ -18,7 +18,7 @@ y su arreglo. Aquí solo queda lo que no está hecho.
   Medido: Kokoro da timestamps por palabra
   (cabecera `x-word-timestamps`), va a ~5x tiempo real en CPU, y solo tiene 3
   voces en español frente a las 11 de Edge.
-- [ ] `medio` 2026-09-02 — **Reconsiderar el TTS nativo del teléfono.** Se
+- [x] `medio` 2026-09-02 — **Reconsiderar el TTS nativo del teléfono.** Se
   retiró en 0.6.0 por no marcar palabras, sonar peor y llenar la caché con WAV.
   Un lector de la competencia lo usa con la voz de fabricante del propio Samsung
   y ofrece control de tono, que ningún motor actual expone. Es además la única

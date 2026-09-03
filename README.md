@@ -8,13 +8,14 @@ Versión Android de [VoiceX](https://github.com/Preston-IA/voicex).
 
 ## Qué hace
 
-**Tres motores de voz**, elegibles por libro:
+**Cuatro motores de voz**, elegibles por libro:
 
 | Motor | Dónde corre | Notas |
 |---|---|---|
 | **Edge** | Nube (Microsoft) | 300+ voces, tiempos por palabra. Funciona en cualquier red |
 | **Kokoro** | Servidor propio | Mejor calidad de voz, con tiempos por palabra |
 | **Piper** | Servidor propio | Voces entrenadas por idioma. El más rápido |
+| **Teléfono** | El propio móvil | El único sin red ni servidor. No marca palabras |
 
 Kokoro y Piper corren en tu computadora ([`tools/`](tools/)); cuando no
 responden, la app cae a Edge automáticamente y lo dice en pantalla.
@@ -111,7 +112,7 @@ commits.
 VoiceXMovil/
 ├── lib/
 │   ├── config/          # AppSettings (SharedPreferences)
-│   ├── tts/             # Edge, Kokoro y Piper (Strategy + Factory)
+│   ├── tts/             # Edge, Kokoro, Piper y el del sistema (Strategy + Factory)
 │   ├── epub/            # Parser EPUB, modelos y alineado texto-audio
 │   ├── audio/           # Handler de audio_service con MediaSession
 │   ├── services/        # Diccionario

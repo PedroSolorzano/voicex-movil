@@ -170,6 +170,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ('edge', 'Edge', Icons.cloud_outlined),
                   ('kokoro', 'Kokoro', Icons.home_outlined),
                   ('piper', 'Piper', Icons.record_voice_over_outlined),
+                  ('android', 'Teléfono', Icons.phone_android),
                 ].where((e) => TtsServerConfig.availableEngines.contains(e.$1)))
                   ChoiceChip(
                     avatar: Icon(engine.$3, size: 18),
@@ -192,6 +193,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   'Voces entrenadas en cada idioma, en esa misma computadora. Muy '
                       'rápido, pero no marca las palabras: el resaltado se calcula '
                       'por oración de forma aproximada.',
+                'android' =>
+                  'El motor de voz del propio teléfono. El único que lee sin '
+                      'internet y sin servidor, así que es el que sigue '
+                      'funcionando en el metro. No marca las palabras: el '
+                      'resaltado se calcula por oración de forma aproximada.',
                 _ =>
                   'Voces neuronales de Microsoft. Requiere internet; el audio se '
                       'guarda en caché para volver a escucharlo sin conexión.',
@@ -306,6 +312,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onPick: (id) => _update(switch (s.ttsProvider) {
                 'kokoro' => s.copyWith(kokoroVoiceEs: id),
                 'piper' => s.copyWith(piperVoiceEs: id),
+                'android' => s.copyWith(androidVoiceEs: id),
                 _ => s.copyWith(edgeVoiceEs: id),
               }),
               onPreview: _preview,
@@ -319,6 +326,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onPick: (id) => _update(switch (s.ttsProvider) {
                 'kokoro' => s.copyWith(kokoroVoiceEn: id),
                 'piper' => s.copyWith(piperVoiceEn: id),
+                'android' => s.copyWith(androidVoiceEn: id),
                 _ => s.copyWith(edgeVoiceEn: id),
               }),
               onPreview: _preview,

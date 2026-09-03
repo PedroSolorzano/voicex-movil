@@ -10,11 +10,17 @@ const voiceMap = {
     'es': {'female': 'es-MX-DaliaNeural', 'male': 'es-MX-JorgeNeural'},
     'en': {'female': 'en-US-JennyNeural', 'male': 'en-US-GuyNeural'},
   },
+  // Sin voz elegida, el motor del teléfono se conforma con el idioma y usa la
+  // que tenga por defecto.
+  'android': {
+    'es': {'female': 'es-ES', 'male': 'es-ES'},
+    'en': {'female': 'en-US', 'male': 'en-US'},
+  },
 };
 
 /// Engines the app can build. Anything else found in stored settings comes from
 /// a version that offered more of them, and has to be brought back here.
-const ttsEngines = ['edge', 'kokoro', 'piper'];
+const ttsEngines = ['edge', 'kokoro', 'piper', 'android'];
 
 String resolveVoice(String provider, String lang, String gender) {
   return voiceMap[provider]?[lang]?[gender] ??
@@ -80,6 +86,14 @@ class AppSettings {
   String readerTheme;
   bool followAudioScroll;
 
+  /// Voz concreta del motor del teléfono, por idioma.
+  ///
+  /// Vacío significa "la que el sistema tenga por defecto para ese idioma". Un
+  /// Samsung trae las suyas propias, que son bastante mejores que la genérica
+  /// de Google, y sin esto no había forma de elegirlas.
+  String androidVoiceEs;
+  String androidVoiceEn;
+
   /// Mantener la pantalla encendida mientras el libro está abierto.
   ///
   /// El `WAKE_LOCK` del manifest mantiene viva la CPU para que el audio siga
@@ -114,6 +128,8 @@ class AppSettings {
     this.readerFont = 'serif',
     this.readerTheme = 'sepia',
     this.followAudioScroll = true,
+    this.androidVoiceEs = '',
+    this.androidVoiceEn = '',
     this.keepScreenOn = true,
   });
 
@@ -132,6 +148,9 @@ class AppSettings {
         return v.isNotEmpty ? v : 'af_bella';
       case 'piper':
         return lang == 'es' ? piperVoiceEs : piperVoiceEn;
+      case 'android':
+        final v = lang == 'es' ? androidVoiceEs : androidVoiceEn;
+        if (v.isNotEmpty) return v;
       case 'edge':
         final explicit = lang == 'es' ? edgeVoiceEs : edgeVoiceEn;
         if (explicit.isNotEmpty) return explicit;
@@ -221,6 +240,8 @@ class AppSettings {
       readerFont: prefs.getString('readerFont') ?? 'serif',
       readerTheme: prefs.getString('readerTheme') ?? 'sepia',
       followAudioScroll: prefs.getBool('followAudioScroll') ?? true,
+      androidVoiceEs: prefs.getString('androidVoiceEs') ?? '',
+      androidVoiceEn: prefs.getString('androidVoiceEn') ?? '',
       keepScreenOn: prefs.getBool('keepScreenOn') ?? true,
     );
   }
@@ -251,6 +272,8 @@ class AppSettings {
     await prefs.setString('readerFont', readerFont);
     await prefs.setString('readerTheme', readerTheme);
     await prefs.setBool('followAudioScroll', followAudioScroll);
+    await prefs.setString('androidVoiceEs', androidVoiceEs);
+    await prefs.setString('androidVoiceEn', androidVoiceEn);
     await prefs.setBool('keepScreenOn', keepScreenOn);
   }
 
@@ -281,6 +304,8 @@ class AppSettings {
     String? readerFont,
     String? readerTheme,
     bool? followAudioScroll,
+    String? androidVoiceEs,
+    String? androidVoiceEn,
     bool? keepScreenOn,
   }) =>
       AppSettings(
@@ -310,6 +335,8 @@ class AppSettings {
         readerFont: readerFont ?? this.readerFont,
         readerTheme: readerTheme ?? this.readerTheme,
         followAudioScroll: followAudioScroll ?? this.followAudioScroll,
+        androidVoiceEs: androidVoiceEs ?? this.androidVoiceEs,
+        androidVoiceEn: androidVoiceEn ?? this.androidVoiceEn,
         keepScreenOn: keepScreenOn ?? this.keepScreenOn,
       );
 }

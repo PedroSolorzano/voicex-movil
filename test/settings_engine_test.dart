@@ -3,10 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voicex_movil/config/server_config.dart';
 import 'package:voicex_movil/config/settings.dart';
 
-/// A stored engine name outlives the engine twice over: once when one is
-/// retired for good (Android TTS, in 0.6.0), and once per build, because from
-/// 0.7.0 the self-hosted engines exist only where their address was compiled
-/// in. `load()` has to bring the name back to something this build can use, or
+/// A stored engine name can outlive the engine: because one was retired, or —
+/// desde 0.7.0— porque los motores de servidor solo existen en la compilación
+/// que traiga su dirección. `load()` has to bring the name back to something this build can use, or
 /// the reader boots naming an engine that is not there — poisoning the cache
 /// key and the status bar, and sending the probe after a machine it will never
 /// find, even though the factory quietly hands back Edge.
@@ -31,7 +30,11 @@ void main() {
     });
 
     test('brings a retired engine back to Edge', () {
-      expect(AppSettings.resolveEngine('android'), 'edge');
+      // El TTS de Android volvió en 0.7.0, así que ya no sirve de ejemplo. El
+      // caso que protege sigue siendo el mismo: un nombre guardado por una
+      // versión que ofrecía algo que ésta no tiene.
+      expect(AppSettings.resolveEngine('festival'), 'edge');
+      expect(AppSettings.resolveEngine('android-v2'), 'edge');
     });
 
     test('falls back to Edge for an absent or unknown value', () {
@@ -43,10 +46,12 @@ void main() {
 
   group('un motor que esta compilación no trae', () {
     // Los tests corren sin --dart-define, así que esta compilación no tiene
-    // servidor: solo Edge existe. Es exactamente la situación del APK de un
-    // probador al que no se le compiló Kokoro.
-    test('los motores disponibles se reducen a Edge', () {
-      expect(TtsServerConfig.availableEngines, ['edge']);
+    // servidor. Es exactamente la situación del APK de un probador al que no
+    // se le compiló Kokoro.
+    test('sin servidor quedan los dos motores que no lo necesitan', () {
+      // Edge necesita internet y nada más; el del teléfono ni siquiera eso.
+      // Kokoro y Piper dependen de que la compilación traiga su dirección.
+      expect(TtsServerConfig.availableEngines, ['edge', 'android']);
       expect(TtsServerConfig.hasKokoro, isFalse);
     });
 
@@ -80,14 +85,17 @@ void main() {
   });
 
   group('load', () {
-    test('a phone left on Android TTS comes back on Edge', () async {
+    test('un teléfono con el motor del sistema seleccionado lo conserva',
+        () async {
+      // Lo contrario de lo que afirmaba en 0.6.0: entonces 'android' era un
+      // motor retirado y había que devolverlo a Edge. Vuelve en 0.7.0 porque es
+      // el único que lee sin red ni servidor.
       SharedPreferences.setMockInitialValues({'ttsProvider': 'android'});
 
       final settings = await AppSettings.load();
 
-      expect(settings.ttsProvider, 'edge');
-      // usesSelfHostedServer drives the server probe; a stale name must not
-      // send the reader looking for a machine on the network.
+      expect(settings.ttsProvider, 'android');
+      // No es un motor de servidor: no debe disparar ningún sondeo.
       expect(settings.usesSelfHostedServer, isFalse);
     });
 

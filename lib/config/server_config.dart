@@ -50,9 +50,15 @@ class TtsServerConfig {
   /// Engines this build is able to offer, in the order they appear in Ajustes.
   ///
   /// Edge is always there: it needs no server and no configuration.
+  /// Engines this build is able to offer, in the order they appear in Ajustes.
+  ///
+  /// Edge y el motor del teléfono están siempre: el primero necesita internet y
+  /// nada más, el segundo ni siquiera eso. Kokoro y Piper dependen de que la
+  /// compilación traiga su dirección.
   static List<String> get availableEngines => [
         'edge',
         if (hasKokoro) 'kokoro',
         if (hasPiper) 'piper',
+        'android',
       ];
 }

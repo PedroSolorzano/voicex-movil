@@ -4,7 +4,7 @@
 
 Lector EPUB con TTS neuronal para Android, distribuido como APK. Nació como
 réplica de [VoiceX Desktop](https://github.com/PedroSolorzano/voicex)
-(Python/tkinter) y hoy lo supera: tres motores de voz, descarga para escucha
+(Python/tkinter) y hoy lo supera: cuatro motores de voz, descarga para escucha
 sin conexión, controles en la pantalla de bloqueo y modo lectura estilo Kindle.
 
 - **Plataforma:** Android 7.0+ (API 24)
@@ -23,7 +23,7 @@ pieza es como es está en [RELEASES.md](../RELEASES.md).
 | UI | Flutter + Material 3 |
 | Estado | Riverpod 2.x |
 | Navegación | GoRouter |
-| Motores TTS | Edge (WebSocket propio en Dart), Kokoro y Piper (HTTP) |
+| Motores TTS | Edge (WebSocket propio en Dart), Kokoro y Piper (HTTP), motor del sistema (`flutter_tts`) |
 | Reproducción | just_audio + audio_service (MediaSession) |
 | EPUB | epubx + html |
 | Base de datos | sqflite (SQLite) |
@@ -87,12 +87,14 @@ con la ruta del audio y la lista de `WordTimestamp`.
 | **Edge** | WebSocket a `speech.platform.bing.com` | MP3 24 kHz 96 kbps | Por palabra (`WordBoundary`) |
 | **Kokoro** | HTTP a servidor propio (`/dev/captioned_speech`) | AAC-LC 24 kHz ~94 kbps | Por palabra (`x-word-timestamps`) |
 | **Piper** | HTTP a servidor propio (`/synthesize`) | WAV 22,05 kHz | Ninguno |
+| **Teléfono** | `flutter_tts`, motor del sistema | WAV | Ninguno |
 
-Ninguno de los tres funciona sin red: Edge necesita internet, Kokoro y Piper la
-red local. Escuchar sin conexión se resuelve descargando por adelantado, no con
-un motor local. El TTS del propio teléfono (`flutter_tts`) existió hasta 0.5.2 y
-se retiró en 0.6.0: no marcaba palabras, sonaba a robot frente a las voces
-neuronales y su WAV llenaba la caché.
+**Solo el del teléfono funciona sin red.** Edge necesita internet; Kokoro y
+Piper, una máquina encendida al otro lado. Se retiró en 0.6.0 por no marcar
+palabras y llenar la caché con WAV, y volvió en 0.7.0 al repartir la app a gente
+sin servidor propio: para ellos es el único que sigue leyendo en el metro, y las
+voces de fabricante de un Samsung son bastante mejores que la genérica que
+motivó la retirada. Sus pegas siguen ahí y están asumidas.
 
 Sin timestamps, `text_align.dart` reparte el tiempo entre oraciones de forma
 aproximada y el resaltado baja de palabra a oración.
@@ -244,7 +246,7 @@ sustituyen antes de insertar.
 
 | Campo | Default | Notas |
 |---|---|---|
-| `ttsProvider` | `edge` | `edge` · `kokoro` · `piper`. `AppSettings.resolveEngine()` devuelve a `edge` cualquier otro valor guardado por una versión anterior |
+| `ttsProvider` | `edge` | `edge` · `kokoro` · `piper` · `android`. `AppSettings.resolveEngine()` devuelve a `edge` cualquier otro valor guardado por una versión anterior |
 | `gender` | `female` | Solo para derivar la voz de Edge si no hay una explícita |
 | `edgeVoiceEs` / `edgeVoiceEn` | `''` | Vacío = derivar de `gender` con `voiceMap` |
 | `kokoroBaseUrl` | `''` | p. ej. `http://192.168.1.50:8880` |
