@@ -223,6 +223,18 @@ La opción recomendada, Tailscale, **no necesita nada de esto**: es red privada,
 no URL pública. Lo de aquí solo hace falta el día que se elija exponer el
 servidor a internet.
 
+- [ ] `medio` 2026-09-03 — **Probar la cola de reportes sin servidor.** Es la
+  pieza que justifica que exista la cola y la única de la fase 5 que no se ha
+  verificado en el teléfono. Lo demás sí quedó comprobado el 2026-09-03 con la
+  build 60: permiso pedido solo al pulsar grabar, nota de voz de 81 kB entregada
+  como M4A válido, y el reporte escrito llegando con libro, capítulo, párrafo,
+  motor y las dos últimas líneas de diagnóstico.
+
+  Falta el caso que importa: generar un fallo con el proxy parado, comprobar que
+  el reporte se queda en la tabla `reports`, levantar el proxy y ver que sale
+  solo sin tocar nada. Hay tests unitarios que cubren el encolado y el tope,
+  pero no el ciclo completo contra el servidor real.
+
 - [ ] `bajo` 2026-09-03 — **Confirmar los plazos con Funnel, no solo con la
   tailnet.** Medido ya por la malla y con relevo DERP: un sondeo completo tarda
   ~0,84 s desde el teléfono, así que el presupuesto de 5 s va seis veces
