@@ -9,18 +9,6 @@ y su arreglo. Aquí solo queda lo que no está hecho.
 
 ---
 
-## Sin triar (reportado por testers)
-
-Entradas que añade solo `tools/reportes/procesar.py`, automáticamente. No
-usan el formato de arriba a propósito: nadie -ni el tester, ni el script-
-puso una prioridad, y forzar una acá sería inventarla. Revisar, decidir
-prioridad y sección, reescribir con el formato estándar de arriba, y borrar
-de acá.
-
-- **2026-09-03 17:18** `pedro` — Mejora solicitada por mi — audio: “Quiero que quitemos la parte del piper, no me gusta ese modelo, vamos a buscar una alternativa, buscar una alternativa que tenga entrenamiento de voces en español, pero que sea mejor. Entonces necesitamos crear una tarea para buscar una alternativa buena que nos permita escuchar el TTS en español.” _(Las 48 leyes del poder, capítulo 0, Piper)_
-
----
-
 ## Pendiente de decisión
 
 - [ ] `alto` 2026-08-30 — **Elegir motor de voz definitivo.** Hay 9 muestras del
@@ -63,6 +51,21 @@ de acá.
   `book.language` en la clave y migrar las filas existentes leyendo
   `books.language`; si no, se huerfanizan todas las descargas hechas hasta hoy.
   Documentado en `test/cache_key_test.dart`.
+- [ ] `medio` 2026-09-03 — **Reemplazar Piper por algo que suene en español.**
+  Reportado desde la app: *"no me gusta ese modelo, buscar una alternativa que
+  tenga entrenamiento de voces en español, pero que sea mejor"*. La comparativa
+  está hecha en [`docs/context/TTS_ESPANOL.md`](../context/TTS_ESPANOL.md): en
+  la laptop con la RTX 4050 entra **Chatterbox Multilingual** (MIT, el mejor
+  puntuado en español, endpoints compatibles con OpenAI, salida en mp3/opus); en
+  el servidor, sin GPU, quedan Pocket TTS (MIT, servidor propio, clona voz),
+  Audio8 (Apache 2.0) y Supertonic 3 (pesos OpenRAIL-M). El documento trae el
+  procedimiento de prueba con el párrafo incrustado, para generar las muestras y
+  decidir escuchando. **Antes de probar ninguno**, falta
+  descartar lo barato: la voz de Piper está compilada en la imagen y es
+  argentina (`es_AR-daniela-high` en `tools/piper/docker-compose.yml`), mientras
+  el resto de la app usa mexicano; existe `es_MX-claude-high`. Prioridad media y
+  no alta porque Piper no va en las compilaciones de los probadores -solo Kokoro
+  y Edge-, así que hoy esto solo afecta la compilación propia.
 - [ ] `medio` 2026-09-03 — **"Descargar este capítulo" no sabe por dónde vas
   leyendo.** `downloadChapters(from, count)`
   (`reader_provider.dart:1180`) sintetiza el capítulo completo desde su
