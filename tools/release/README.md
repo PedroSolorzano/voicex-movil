@@ -17,6 +17,33 @@ Sin `--dart-define-from-file`, la compilación no trae servidor: solo Edge, y lo
 chips de Kokoro y Piper no aparecen. Es el modo correcto para probar la app sin
 depender de nada.
 
+## Al subir la versión, compila limpio
+
+`flutter build apk` **no regenera el manifiesto** cuando lo único que cambió es
+la versión: Gradle no vigila `android/local.properties` como entrada de tarea.
+El resultado es traicionero, porque el fichero sale con el nombre nuevo mientras
+el APK lleva dentro el `versionName` viejo — comprobado: un APK llamado
+`voicex-0.7.0-...apk` que se instalaba y decía ser 0.6.0.
+
+Así que después de tocar `version:` en `pubspec.yaml`:
+
+```bash
+flutter clean
+flutter build apk --release --dart-define-from-file=tools/release/amigo.json
+```
+
+Y confirma siempre lo que hay dentro, no lo que dice el nombre:
+
+```bash
+aapt dump badging build/app/outputs/flutter-apk/app-release.apk | head -1
+adb shell dumpsys package com.pedrosolorzano.voicex_movil | grep versionName
+```
+
+Importa más de lo que parece con varios probadores: el `versionName` es lo que
+la app estampa en cada petición (`X-Voicex-Client`) y lo que aparece en el log
+del proxy. Con él mal, los informes atribuyen el fallo a la compilación
+equivocada.
+
 ## Lo que un APK no puede esconder
 
 Un valor compilado con `String.fromEnvironment` es una cadena literal dentro del
