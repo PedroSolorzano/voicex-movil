@@ -75,3 +75,6 @@ tools/reportes/logs/
 # Configuración de compilación por probador: lleva el token dentro
 tools/release/*.json
 !tools/release/tester.example.json
+# Excepción: solo CHATTERBOX_URL, sin proxy ni token -- la tailnet es la
+# barrera de seguridad, no la dirección (ver tools/release/README.md).
+!tools/release/chatterbox.json

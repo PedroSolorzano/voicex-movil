@@ -151,6 +151,15 @@ token, porque este nodo no se reparte a probadores. Como con Kokoro/Piper: no
 alcanza con que la consola diga "Connected", hay que confirmar tráfico real
 (`curl` desde el teléfono al puerto 8004).
 
+**Confirmado funcionando**: con Tailscale nativo, la laptop entra como nodo
+`g14` en `100.102.250.94`, y `curl http://100.102.250.94:8004/api/model-info`
+responde 200 con el modelo cargado. La dirección vive en
+[`tools/release/chatterbox.json`](../../tools/release/chatterbox.json) como
+`CHATTERBOX_URL` — a diferencia de `KOKORO_URL`/`PIPER_URL`, ese archivo **sí
+está trackeado en git**: sin proxy y sin token no hay nada que revocar, y la
+tailnet ya es la barrera de seguridad. Si la IP cambia (reinicio de
+Tailscale, reinstalación), hay que actualizar ese archivo y recompilar.
+
 Esta laptop es un nodo **intermitente**, no un servidor 24/7: cuando está
 apagada o dormida, el sondeo de salud de la app (`ChatterboxTtsProvider.healthOf`)
 falla y el repliegue a Edge es automático y silencioso, igual que con

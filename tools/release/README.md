@@ -17,6 +17,30 @@ Sin `--dart-define-from-file`, la compilación no trae servidor: solo Edge, y lo
 chips de Kokoro y Piper no aparecen. Es el modo correcto para probar la app sin
 depender de nada.
 
+**Un motor que no aparece en Ajustes casi siempre es esto**: `TtsServerConfig`
+solo ofrece el motor cuya URL llegó vacía al build. Antes de compilar, revisá
+qué variables lleva el `.json` que vas a usar contra las que llevaba el build
+anterior — un archivo incompleto no avisa, simplemente el motor desaparece en
+silencio.
+
+## Sumar Chatterbox a una compilación
+
+`CHATTERBOX_URL` vive en [`chatterbox.json`](chatterbox.json), **trackeado en
+git** a diferencia de los `.json` por probador: no lleva proxy ni token, así
+que no hay nada que revocar (ver
+[`docs/context/ACCESO_REMOTO.md`](../../docs/context/ACCESO_REMOTO.md),
+segundo nodo de la tailnet). `--dart-define-from-file` acepta repetirse, así
+que se combina con tu archivo personal en el mismo build:
+
+```bash
+flutter build apk --release \
+  --dart-define-from-file=tools/release/amigo.json \
+  --dart-define-from-file=tools/release/chatterbox.json
+```
+
+Si la laptop cambia de IP de tailnet, actualizar `chatterbox.json` y
+recompilar.
+
 ## Al subir la versión, compila limpio
 
 `flutter build apk` **no regenera el manifiesto** cuando lo único que cambió es
