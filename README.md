@@ -86,12 +86,15 @@ flutter run
 Solo si quieres usar Kokoro o Piper. La app funciona sin ellos con Edge.
 
 ```bash
-docker compose -f tools/kokoro/docker-compose.yml up -d   # puerto 8880
-docker compose -f tools/piper/docker-compose.yml up -d    # puerto 5000
+docker compose -f tools/kokoro/docker-compose.yml up -d   # puerto 8880, solo loopback
+docker compose -f tools/piper/docker-compose.yml up -d    # puerto 5000, solo loopback
 ```
 
-Luego, en **Ajustes → Motor de voz**, apunta a `http://<IP-de-tu-PC>:8880`.
-Cada carpeta tiene su propio README con los detalles.
+La dirección **no se escribe en Ajustes**: va compilada en el APK. Compila con
+`--dart-define-from-file` apuntando a un `.json` con `KOKORO_URL`/`PIPER_URL`
+(ver [`tools/release/README.md`](tools/release/README.md)); sin eso, esos
+chips ni aparecen en Ajustes → Motor de voz. Cada carpeta tiene su propio
+README con los detalles.
 
 ---
 

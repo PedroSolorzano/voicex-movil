@@ -4,9 +4,11 @@
 #   docker exec voicex-tailscale tailscale up --hostname=voicex-server
 #
 # network_mode: host a propósito: así el contenedor crea la interfaz
-# tailscale0 directamente en la red del host, y Kokoro/Piper (que ya
-# escuchan en 0.0.0.0, ver tools/kokoro y tools/piper) quedan alcanzables
-# por la IP 100.x.y.z sin tocar sus compose ni sumar una red Docker propia.
+# tailscale0 directamente en la red del host, y el proxy (que escucha en
+# 0.0.0.0:8080, ver tools/proxy) queda alcanzable por la IP 100.x.y.z sin
+# sumar una red Docker propia. Kokoro/Piper siguen en loopback (ver sus
+# compose): por la tailnet se llega a ellos igual que por la WiFi, pasando
+# por el proxy y su token.
 services:
   tailscale:
     image: tailscale/tailscale:latest

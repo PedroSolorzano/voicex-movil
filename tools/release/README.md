@@ -23,6 +23,25 @@ qué variables lleva el `.json` que vas a usar contra las que llevaba el build
 anterior — un archivo incompleto no avisa, simplemente el motor desaparece en
 silencio.
 
+## Sumar Kokoro a una compilación
+
+`KOKORO_URL` vive en [`kokoro.json`](kokoro.json), **trackeado en git** a
+diferencia de los `.json` por probador: la dirección del proxy es la misma
+para cualquier compilación tuya, lo único que cambia por persona es
+`TTS_TOKEN`. `--dart-define-from-file` acepta repetirse:
+
+```bash
+flutter build apk --release \
+  --dart-define-from-file=tools/release/amigo.json \
+  --dart-define-from-file=tools/release/kokoro.json
+```
+
+Si el proxy cambia de dirección de tailnet, actualizar `kokoro.json` y
+recompilar. `PIPER_URL` queda fuera de este archivo a propósito: Piper
+devuelve WAV sin comprimir (~159 MB/hora) y no siempre conviene mandárselo a
+un probador, así que sigue viviendo en el `.json` personal de quien sí lo
+quiera.
+
 ## Sumar Chatterbox a una compilación
 
 `CHATTERBOX_URL` vive en [`chatterbox.json`](chatterbox.json), **trackeado en

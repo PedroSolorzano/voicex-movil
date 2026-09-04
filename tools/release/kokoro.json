@@ -1,0 +1,5 @@
+{
+  "_comentario": "Misma dirección para cualquier compilación tuya (laptop o desktop): apunta al proxy, no al servidor directo. A diferencia del token, la dirección no es secreta -es visible igual en cualquier APK ya distribuido, ver tools/release/README.md, 'Lo que un APK no puede esconder'-, así que va trackeada en git. El token que la habilita sigue en tu .json personal, gitignorado.",
+
+  "KOKORO_URL": "http://100.91.42.26:8080/kokoro"
+}

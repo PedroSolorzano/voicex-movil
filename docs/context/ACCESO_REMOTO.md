@@ -99,16 +99,25 @@ router — que es justo donde se estrella el port forwarding clásico.
    tailscale ip -4
    ```
 
-3. En la app: **Ajustes → Motor de voz → Kokoro**, y escribir
-   `http://100.x.y.z:8880` (o `http://<nombre-del-pc>.<tailnet>.ts.net:8880` con
-   MagicDNS). Para Piper, el mismo host con el puerto `5000`.
-4. Pulsar **Probar conexión** para confirmar que responde.
+3. La dirección **no se escribe en Ajustes**: desde la 0.7.0 va compilada
+   (ver [`tools/release/README.md`](../../tools/release/README.md)).
+   `KOKORO_URL` apunta al **proxy**, no al servidor directo —por ejemplo
+   `http://100.x.y.z:8080/kokoro` (o `http://<nombre-del-pc>.<tailnet>.ts.net:8080/kokoro`
+   con MagicDNS)— y vive en [`tools/release/kokoro.json`](../../tools/release/kokoro.json),
+   trackeado en git porque esa dirección es igual para cualquier compilación;
+   lo que no se comparte es `TTS_TOKEN`, que se queda en el `.json` personal
+   de cada quien junto con `PIPER_URL` si también lo quiere.
+4. Compilar con ese archivo y, ya instalado el APK, pulsar **Probar conexión**
+   en Ajustes → Motor de voz para confirmar que responde.
 
-**No hay que tocar los compose.** Ya escuchan en `0.0.0.0`
-([`tools/kokoro/docker-compose.yml:15`](../../tools/kokoro/docker-compose.yml),
-[`tools/piper/docker-compose.yml:21`](../../tools/piper/docker-compose.yml)),
-así que la interfaz de Tailscale queda cubierta junto con la del WiFi. Si aun
-así no responde, el sospechoso es el firewall de Windows: hay que permitir el
+**Kokoro y Piper siguen en loopback** a propósito
+([`tools/kokoro/docker-compose.yml:17`](../../tools/kokoro/docker-compose.yml),
+[`tools/piper/docker-compose.yml:23`](../../tools/piper/docker-compose.yml)):
+ninguno de los dos sabe autenticar, así que lo único alcanzable desde la
+interfaz de Tailscale (o la WiFi) es el proxy, que sí escucha en `0.0.0.0` y
+exige el token de cada probador
+([`tools/proxy/nginx.conf:136-140`](../../tools/proxy/nginx.conf)). Si aun así
+no responde, el sospechoso es el firewall de Windows: hay que permitir el
 tráfico entrante en la interfaz de Tailscale.
 
 **Ojo con dos cosas.** Android admite **una sola VPN activa a la vez**: si ya
