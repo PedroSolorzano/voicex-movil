@@ -66,6 +66,20 @@ y su arreglo. Aquí solo queda lo que no está hecho.
   el resto de la app usa mexicano; existe `es_MX-claude-high`. Prioridad media y
   no alta porque Piper no va en las compilaciones de los probadores -solo Kokoro
   y Edge-, así que hoy esto solo afecta la compilación propia.
+- [ ] `alto` 2026-09-03 — **La previsualización de voz del motor Teléfono se
+  cuelga para siempre tras el primer fallo del motor nativo.** Reportado por
+  un tester: *"no me funcionan los previos de las voces, solo me funcionó
+  como 10 veces y después dejaron de funcionar"*
+  (`docs/bugs/REPORTES_TESTERS.md`, 2026-09-03 21:40). Investigado en
+  [`docs/bugs/ANDROID_TTS_PREVIEW.md`](../bugs/ANDROID_TTS_PREVIEW.md): el
+  plugin `flutter_tts` no resuelve el `Future` de `synthesizeToFile` cuando el
+  motor nativo reporta error (solo lo hace en `onDone`), así que el `await` en
+  `_preview()` (`settings_screen.dart:786`) cuelga sin excepción y deja
+  `_previewing` fijo -- el guardián de reentrada de la línea 774 vuelve mudo
+  cualquier botón de previsualizar de ahí en más. Arreglo probable: un
+  `.timeout(...)` alrededor de esa síntesis para que el cuelgue caiga por el
+  mismo `catch` que ya maneja los demás fallos. Sin reproducir en banco
+  todavía, solo rastreado por código.
 - [ ] `medio` 2026-09-03 — **"Descargar este capítulo" no sabe por dónde vas
   leyendo.** `downloadChapters(from, count)`
   (`reader_provider.dart:1180`) sintetiza el capítulo completo desde su
