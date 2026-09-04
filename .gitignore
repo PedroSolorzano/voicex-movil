@@ -41,8 +41,10 @@ ios/Runner/Assets.xcassets/AppIcon.appiconset/
 .DS_Store
 Thumbs.db
 
-# Test EPUBs (libros de prueba, no van al repo)
-epub/
+# Test EPUBs (libros de prueba, no van al repo). Anclado a la raíz: sin la
+# barra inicial también ignoraba lib/epub/, y lib/epub/text_align.dart nunca
+# llegó a comitearse -- un clon nuevo del repo no compilaba.
+/epub/
 
 # Caché de audio generada por la app (no del repo)
 *.mp3
