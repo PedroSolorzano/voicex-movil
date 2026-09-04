@@ -177,30 +177,120 @@ clonar el repo en otra máquina no lo trae:
 
 ### En la laptop, para Chatterbox
 
+Ya probado en la laptop con la RTX 4050 (septiembre 2026). La vía que
+funciona en Windows con GPU es Docker, no el `pip install` manual: este
+último pide **Python 3.10** (3.11+ no tiene wheels precompiladas), mientras
+que la imagen Docker se lleva ese problema puesto. El repo trae un
+`docker-compose-cuNNN.yml` por versión de CUDA; el que corresponde al driver
+de cada máquina se ve con `nvidia-smi` (esta laptop: driver 581.80, CUDA
+13.0 → `docker-compose-cu130.yml`).
+
 ```bash
-git clone https://github.com/PedroSolorzano/voicex-movil.git && cd voicex-movil
-
-# Servidor con endpoints OpenAI-compatibles. Ojo con el modelo:
-# el Multilingual (0.5B) es el que habla español, no el Turbo.
 git clone https://github.com/devnen/Chatterbox-TTS-Server
-cd Chatterbox-TTS-Server && pip install -r requirements.txt
-# configurar el modelo multilingüe y arrancar según su README
+cd Chatterbox-TTS-Server
+```
 
-curl -s -X POST http://localhost:8004/v1/audio/speech \
+Dos archivos hay que tocar antes de levantarlo:
+
+- **`config.yaml`**: `model.repo_id` viene en `chatterbox-turbo` (inglés) por
+  defecto — cambiarlo a `chatterbox-multilingual`. De paso,
+  `generation_defaults.language` viene en `en`; ponerlo en `es` como default
+  (se puede igual pisar por request).
+- **`.env`** (no lo trae el repo, hay que crearlo — el compose lo referencia
+  con `env_file: .env`): `HF_TOKEN=` (vacío alcanza, los modelos de
+  Chatterbox son públicos) y `TTS_BF16=on` (~40 % más rápido en GPUs
+  bf16-capaces, que incluye la serie RTX 30/40).
+
+```bash
+docker compose -f docker-compose-cu130.yml up -d --build
+```
+
+**El endpoint que hay que pedirle no es `/v1/audio/speech`.** Ese, el
+OpenAI-compatible, solo devuelve `wav` u `opus` y no tiene forma de fijar el
+idioma — con el modelo multilingüe eso es una moneda al aire entre español e
+inglés. El que sirve es el endpoint propio, `/tts`, que sí acepta
+`output_format: mp3` y `language: es`:
+
+```bash
+curl -s -X POST http://localhost:8004/tts \
   -H "Content-Type: application/json" \
-  -d "{\"input\":\"$(cat ../muestras_voz/parrafo.txt)\",
-       \"voice\":\"<voz o muestra clonada>\",\"response_format\":\"mp3\"}" \
+  -d "{\"text\":\"$(cat ../muestras_voz/parrafo.txt)\",
+       \"language\":\"es\",\"output_format\":\"mp3\",
+       \"voice_mode\":\"predefined\",\"predefined_voice_id\":\"Emily.wav\"}" \
   -o ../muestras_voz/ES-Chatterbox-multilingual.mp3
 ```
+
+(`Emily.wav` es una de las voces predefinidas que trae el repo en `voices/`;
+son solo el timbre de referencia para el clonado zero-shot, cualquiera sirve
+de punto de partida — el idioma lo decide el campo `language`, no la voz.)
 
 Mientras corre, anotar con `nvidia-smi`: **VRAM máxima usada** (¿entra en los
 6 GB con un párrafo?) y **cuántos segundos tardó**.
 
-### En el servidor, para comparar contra lo que ya hay
+**Resultados medidos en esta laptop** (RTX 4050, `chatterbox-multilingual`,
+`TTS_BF16=on`, voz `Emily.wav`, sin clonado):
 
-Los comandos de Kokoro y Piper están en `muestras_voz/LEEME.md`. Y si se prueba
-la voz mexicana de Piper, hay que reconstruir la imagen con los args nuevos
-antes de generar.
+| Métrica | Valor |
+|---|---|
+| VRAM pico | ~3,6–3,8 GB (holgado dentro de los 6 GB — confirma lo que el doc asumía sobre sintetizar párrafo por párrafo) |
+| Tiempo de síntesis | ~55 s para un párrafo cuyo audio dura ~25 s — **más lento que tiempo real** (factor ~2,2x), a diferencia de Kokoro y Piper, que van varias veces más rápido que tiempo real |
+| Duración del audio | 24,8–25,1 s (español correcto; la referencia de mala pronunciación inglesa serían ~17 s) |
+| Peso | ~14,3 MB/hora en mp3 — menos que Kokoro (~42 MB/h) y muy por debajo de Piper (~159 MB/h) |
+
+El costo de este motor no es la VRAM ni el peso —los dos le sobran— sino el
+**tiempo**: 55 s de espera por párrafo descarta generar sobre la marcha
+mientras se escucha, y confirma que si este motor gana, la única opción
+razonable de las tres que propone este documento es la (1): generar por
+adelantado con la laptop prendida, nunca en vivo.
+
+### Para comparar contra lo que ya hay
+
+No hace falta tocar `voicex-server`: Kokoro y Piper corren en CPU, así que
+para la comparación alcanza con levantarlos también en la máquina de la
+prueba con lo que ya trae el repo:
+
+```bash
+docker compose -f tools/kokoro/docker-compose.yml up -d
+docker compose -f tools/piper/docker-compose.yml up -d --build
+```
+
+Kokoro necesita el `lang_code` explícito (ver comentario en
+[`kokoro_tts_provider.dart`](../../lib/tts/kokoro_tts_provider.dart)) o
+también le sale la pronunciación inglesa:
+
+```bash
+curl -s -X POST http://localhost:8880/dev/captioned_speech \
+  -H "Content-Type: application/json" \
+  -d "{\"model\":\"kokoro\",\"input\":\"$(cat ../muestras_voz/parrafo.txt)\",
+       \"voice\":\"ef_dora\",\"response_format\":\"aac\",\"speed\":1.0,
+       \"lang_code\":\"e\",\"stream\":false,\"return_timestamps\":false}" \
+  | python -c "import json,sys,base64; open('../muestras_voz/ES-Kokoro-ef_dora.aac','wb').write(base64.b64decode(json.load(sys.stdin)['audio']))"
+
+curl -s -X POST http://localhost:5000/synthesize \
+  -H "Content-Type: application/json" \
+  -d "{\"text\":\"$(cat ../muestras_voz/parrafo.txt)\",\"voice\":\"\"}" \
+  -o ../muestras_voz/ES-Piper-es_AR-daniela.wav
+```
+
+Si se prueba la voz mexicana de Piper, no hace falta pisar el
+`docker-compose.yml` versionado (eso cambiaría la voz por defecto de toda la
+app): alcanza con un build puntual con otro `--build-arg` y otro puerto,
+tirar el contenedor al terminar.
+
+**Resultados medidos en esta laptop:**
+
+| Motor / voz | Síntesis | Audio | Peso |
+|---|---|---|---|
+| Kokoro `ef_dora` | ~11 s | ~23,6 s | ~42 MB/h |
+| Piper `es_AR-daniela-high` (la actual) | ~7 s | 18,5 s | ~159 MB/h |
+| Piper `es_MX-claude-high` | ~3 s | 26,6 s | ~159 MB/h |
+
+`es_AR-daniela` lee rápido —18,5 s no es un fallo de idioma, es su ritmo
+natural, ya conocido (`tools/piper/README.md`)—. La duración de `es_MX-claude`
+sí queda dentro de la referencia de ~26 s, pero esa voz **ya se había
+descartado antes** por errores de lectura
+([`tools/piper/README.md`](../../tools/piper/README.md)): esta muestra nueva
+es para volver a confirmarlo escuchando, no para partir de cero.
 
 ### Qué anotar de cada candidato
 
