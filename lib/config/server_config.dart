@@ -28,6 +28,10 @@ class TtsServerConfig {
   static const piperUrl = String.fromEnvironment('PIPER_URL');
   static const token = String.fromEnvironment('TTS_TOKEN');
 
+  /// Chatterbox vive en una laptop personal con GPU, alcanzada directo por
+  /// Tailscale — no detrás del proxy, así que no lleva token.
+  static const chatterboxUrl = String.fromEnvironment('CHATTERBOX_URL');
+
   /// Base del proxy para los reportes: la URL de un motor sin su prefijo.
   ///
   /// Se deduce en vez de configurarse aparte para que no haya dos sitios donde
@@ -46,6 +50,7 @@ class TtsServerConfig {
   /// where a bare URL and no proxy is still a valid setup.
   static bool get hasKokoro => kokoroUrl.isNotEmpty;
   static bool get hasPiper => piperUrl.isNotEmpty;
+  static bool get hasChatterbox => chatterboxUrl.isNotEmpty;
 
   /// Engines this build is able to offer, in the order they appear in Ajustes.
   ///
@@ -59,6 +64,7 @@ class TtsServerConfig {
         'edge',
         if (hasKokoro) 'kokoro',
         if (hasPiper) 'piper',
+        if (hasChatterbox) 'chatterbox',
         'android',
       ];
 }

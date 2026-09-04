@@ -16,6 +16,7 @@ import '../../storage/repositories.dart';
 import '../../tts/models.dart';
 import '../../tts/tts_factory.dart';
 import '../../tts/tts_provider.dart';
+import '../../tts/chatterbox_tts_provider.dart';
 import '../../tts/kokoro_tts_provider.dart';
 import '../../tts/piper_tts_provider.dart';
 import '../../tts/server_health.dart';
@@ -531,6 +532,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
           '${piperPaceSuffix(settings.piperLengthScale)}',
       'kokoro' =>
         'kokoro-$lang-${settings.voiceForEngine('kokoro', book.language)}',
+      // Sin idioma en la clave: este motor solo sirve español (ver
+      // ChatterboxTtsProvider), así que no hay ambigüedad que resolver.
+      'chatterbox' =>
+        'chatterbox-${settings.voiceForEngine('chatterbox', book.language)}',
       // La voz del teléfono entra en la clave porque cambiarla cambia el audio,
       // y el idioma porque una voz puede servir a los dos.
       'android' =>
@@ -580,18 +585,29 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// ([downloadChapters]), which must each own their instance: see the note
   /// on [_ttsProvider] for why sharing one caused downloads and playback to
   /// dispose each other's connection mid-request.
-  Future<String> _resolveEngineKind(AppSettings settings) async {
+  Future<String> _resolveEngineKind(AppSettings settings, String lang) async {
     var kind = settings.ttsProvider;
+
+    // Chatterbox solo sirve español: sus dos voces son clones pensados para
+    // eso, y el modelo no se probó (ni se confía) para inglés. Ni se hace el
+    // health check -- directo a Edge, igual que un servidor no configurado.
+    if (kind == 'chatterbox' && !lang.toLowerCase().startsWith('es')) {
+      return 'edge';
+    }
 
     if (settings.usesSelfHostedServer) {
       final url = settings.selfHostedUrl;
       _lastHealth = url.trim().isEmpty
           ? ServerHealth.unreachable
-          : (kind == 'kokoro'
-              ? await KokoroTtsProvider.healthOf(url,
-                  token: settings.serverToken)
-              : await PiperTtsProvider.healthOf(url,
-                  token: settings.serverToken));
+          : switch (kind) {
+              'kokoro' => await KokoroTtsProvider.healthOf(url,
+                  token: settings.serverToken),
+              'piper' => await PiperTtsProvider.healthOf(url,
+                  token: settings.serverToken),
+              'chatterbox' => await ChatterboxTtsProvider.healthOf(url,
+                  token: settings.serverToken),
+              _ => ServerHealth.ok,
+            };
       if (!_lastHealth.isUsable) {
         dev.log('[Reader] $kind ${_lastHealth.name} → falling back to Edge');
         kind = 'edge';
@@ -601,7 +617,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
   }
 
   Future<TTSProvider> _provider(AppSettings settings, String lang) async {
-    final kind = await _resolveEngineKind(settings);
+    final kind = await _resolveEngineKind(settings, lang);
     final key = '$kind/$lang';
     if (_ttsProvider == null || _ttsProviderKind != key) {
       final old = _ttsProvider;
@@ -1210,7 +1226,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
     // see the note on `_ttsProvider`. A download keeps the engine it started
     // with even if the person changes engine in Ajustes while it runs; only
     // the server dropping out mid-download falls it back to Edge below.
-    var dlKind = await _resolveEngineKind(settings);
+    var dlKind = await _resolveEngineKind(settings, book.language);
     var dlProvider =
         getProvider(settings.copyWith(ttsProvider: dlKind), lang: book.language);
     // Resolve the engine up front: a download must be stored under whatever
@@ -1253,7 +1269,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
           // never gets regenerated because the row looks correct. Only the
           // *kind* is re-checked here; the settings snapshot stays the one
           // taken when the download started (see above).
-          final nuevoKind = await _resolveEngineKind(settings);
+          final nuevoKind = await _resolveEngineKind(settings, book.language);
           if (nuevoKind != dlKind) {
             unawaited(dlProvider.dispose());
             dlKind = nuevoKind;
@@ -1322,6 +1338,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
       switch (settings.ttsProvider) {
         'piper' => 2.0,
         'kokoro' => 5.0,
+        // Autoregresivo en GPU: ~55-75 s medidos para un párrafo de ~25 s de
+        // audio, más lento que tiempo real -- no confundir con Kokoro/Piper.
+        'chatterbox' => 65.0,
         'android' => 1.5, // en el propio teléfono, sin red de por medio
         _ => 3.0, // Edge, dominated by the network
       };
@@ -1336,11 +1355,17 @@ class ReaderNotifier extends Notifier<ReaderState> {
     if (book == null || !settings.prefetchOnWifi || state.isDownloading) return;
 
     // Only worth doing for a home server; Edge already streams on demand and
-    // its audio is cached paragraph by paragraph as it plays.
-    if (!settings.usesSelfHostedServer ||
-        (settings.ttsProvider == 'kokoro'
-            ? !settings.hasKokoroServer
-            : !settings.hasPiperServer)) {
+    // its audio is cached paragraph by paragraph as it plays. Chatterbox solo
+    // vale la pena si el libro está en español -- mismo criterio que
+    // _resolveEngineKind.
+    final hasServer = switch (settings.ttsProvider) {
+      'kokoro' => settings.hasKokoroServer,
+      'piper' => settings.hasPiperServer,
+      'chatterbox' => settings.hasChatterboxServer &&
+          book.language.toLowerCase().startsWith('es'),
+      _ => false,
+    };
+    if (!settings.usesSelfHostedServer || !hasServer) {
       return;
     }
 
@@ -1349,11 +1374,16 @@ class ReaderNotifier extends Notifier<ReaderState> {
       dev.log('[Reader] Prefetch skipped: metered connection');
       return;
     }
-    final reachable = settings.ttsProvider == 'kokoro'
-        ? await KokoroTtsProvider.isReachable(settings.selfHostedUrl,
-            token: settings.serverToken)
-        : await PiperTtsProvider.isReachable(settings.selfHostedUrl,
-            token: settings.serverToken);
+    final reachable = switch (settings.ttsProvider) {
+      'kokoro' => await KokoroTtsProvider.isReachable(settings.selfHostedUrl,
+          token: settings.serverToken),
+      'piper' => await PiperTtsProvider.isReachable(settings.selfHostedUrl,
+          token: settings.serverToken),
+      'chatterbox' => await ChatterboxTtsProvider.isReachable(
+          settings.selfHostedUrl,
+          token: settings.serverToken),
+      _ => false,
+    };
     if (!reachable) {
       dev.log('[Reader] Prefetch skipped: server unreachable');
       return;

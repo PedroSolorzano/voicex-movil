@@ -127,6 +127,37 @@ dado todavía.
 
 ---
 
+## Segundo nodo: la laptop con GPU (Chatterbox)
+
+`voicex-server` no tiene GPU (Radeon Vega, fuera de la matriz de soporte de
+ROCm — ver [`TTS_ESPANOL.md`](TTS_ESPANOL.md)), así que Chatterbox no puede
+vivir ahí. Corre en una laptop personal (RTX 4050) que entra a la misma
+tailnet como un nodo aparte.
+
+**Diferencia clave con Kokoro/Piper: acá el contenedor Docker de Tailscale no
+sirve.** En Docker Desktop para Windows, `network_mode: host` ata la interfaz
+`tailscale0` a la VM interna de WSL2, no a la red real de Windows —
+verificado: el propio Windows no podía alcanzar la IP de tailnet que ese
+contenedor se asignó (`curl` daba timeout), así que mucho menos el teléfono.
+En esta máquina el cliente tiene que ser la **app nativa de Tailscale para
+Windows** (tailscale.com/download), logueada con la misma cuenta.
+
+Una vez con Tailscale nativo corriendo, el contenedor de Chatterbox
+(`docker-compose-cu130.yml` en el clon de
+[devnen/Chatterbox-TTS-Server](https://github.com/devnen/Chatterbox-TTS-Server),
+fuera de este repo) ya publica el puerto 8004 en todas las interfaces, así que
+queda alcanzable directo por la IP de tailnet de la laptop — sin proxy y sin
+token, porque este nodo no se reparte a probadores. Como con Kokoro/Piper: no
+alcanza con que la consola diga "Connected", hay que confirmar tráfico real
+(`curl` desde el teléfono al puerto 8004).
+
+Esta laptop es un nodo **intermitente**, no un servidor 24/7: cuando está
+apagada o dormida, el sondeo de salud de la app (`ChatterboxTtsProvider.healthOf`)
+falla y el repliegue a Edge es automático y silencioso, igual que con
+Kokoro/Piper.
+
+---
+
 ## Cloudflare Tunnel
 
 Sin dominio propio solo cabe el **túnel rápido**, que no pide ni cuenta:

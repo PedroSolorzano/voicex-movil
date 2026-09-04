@@ -9,6 +9,7 @@ import '../../config/server_config.dart';
 import '../../config/settings.dart';
 import '../../storage/repositories.dart';
 import '../../tts/tts_factory.dart';
+import '../../tts/chatterbox_tts_provider.dart';
 import '../../tts/kokoro_tts_provider.dart';
 import '../../tts/piper_tts_provider.dart';
 import '../../tts/server_health.dart';
@@ -79,11 +80,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _serverStatus = null;
     });
 
-    final isPiper = _settings.ttsProvider == 'piper';
     resetServerHealthCache();
-    final health = isPiper
-        ? await PiperTtsProvider.healthOf(url, token: _settings.serverToken)
-        : await KokoroTtsProvider.healthOf(url, token: _settings.serverToken);
+    final health = switch (_settings.ttsProvider) {
+      'piper' =>
+        await PiperTtsProvider.healthOf(url, token: _settings.serverToken),
+      'chatterbox' => await ChatterboxTtsProvider.healthOf(url,
+          token: _settings.serverToken),
+      _ =>
+        await KokoroTtsProvider.healthOf(url, token: _settings.serverToken),
+    };
     if (!mounted) return;
 
     setState(() {
@@ -170,6 +175,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ('edge', 'Edge', Icons.cloud_outlined),
                   ('kokoro', 'Kokoro', Icons.home_outlined),
                   ('piper', 'Piper', Icons.record_voice_over_outlined),
+                  ('chatterbox', 'Chatterbox', Icons.graphic_eq),
                   ('android', 'Teléfono', Icons.phone_android),
                 ].where((e) => TtsServerConfig.availableEngines.contains(e.$1)))
                   ChoiceChip(
@@ -193,6 +199,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   'Voces entrenadas en cada idioma, en esa misma computadora. Muy '
                       'rápido, pero no marca las palabras: el resaltado se calcula '
                       'por oración de forma aproximada.',
+                'chatterbox' =>
+                  'Voz clonada, generada en una laptop personal con GPU. Solo '
+                      'para libros en español, y solo mientras esa laptop esté '
+                      'encendida: si no responde, la app usa Edge automáticamente. '
+                      'Más lento que los demás motores propios, y no marca las '
+                      'palabras.',
                 'android' =>
                   'El motor de voz del propio teléfono. El único que lee sin '
                       'internet y sin servidor, así que es el que sigue '
@@ -312,26 +324,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onPick: (id) => _update(switch (s.ttsProvider) {
                 'kokoro' => s.copyWith(kokoroVoiceEs: id),
                 'piper' => s.copyWith(piperVoiceEs: id),
+                'chatterbox' => s.copyWith(chatterboxVoiceEs: id),
                 'android' => s.copyWith(androidVoiceEs: id),
                 _ => s.copyWith(edgeVoiceEs: id),
               }),
               onPreview: _preview,
               previewing: _previewing,
             ),
-            const SizedBox(height: 8),
-            _VoiceTile(
-              label: 'Inglés',
-              lang: 'en',
-              settings: s,
-              onPick: (id) => _update(switch (s.ttsProvider) {
-                'kokoro' => s.copyWith(kokoroVoiceEn: id),
-                'piper' => s.copyWith(piperVoiceEn: id),
-                'android' => s.copyWith(androidVoiceEn: id),
-                _ => s.copyWith(edgeVoiceEn: id),
-              }),
-              onPreview: _preview,
-              previewing: _previewing,
-            ),
+            // Sin fila de inglés para Chatterbox: no ofrece ese idioma (ver
+            // ChatterboxTtsProvider), y mostrarla dejaría un selector cuyo
+            // onPick no tendría dónde guardar nada.
+            if (s.ttsProvider != 'chatterbox') ...[
+              const SizedBox(height: 8),
+              _VoiceTile(
+                label: 'Inglés',
+                lang: 'en',
+                settings: s,
+                onPick: (id) => _update(switch (s.ttsProvider) {
+                  'kokoro' => s.copyWith(kokoroVoiceEn: id),
+                  'piper' => s.copyWith(piperVoiceEn: id),
+                  'android' => s.copyWith(androidVoiceEn: id),
+                  _ => s.copyWith(edgeVoiceEn: id),
+                }),
+                onPreview: _preview,
+                previewing: _previewing,
+              ),
+            ],
             if (s.ttsProvider == 'edge') ...[
               const SizedBox(height: 8),
               Row(children: [

@@ -51,21 +51,32 @@ y su arreglo. Aquí solo queda lo que no está hecho.
   `book.language` en la clave y migrar las filas existentes leyendo
   `books.language`; si no, se huerfanizan todas las descargas hechas hasta hoy.
   Documentado en `test/cache_key_test.dart`.
-- [ ] `medio` 2026-09-03 — **Reemplazar Piper por algo que suene en español.**
-  Reportado desde la app: *"no me gusta ese modelo, buscar una alternativa que
-  tenga entrenamiento de voces en español, pero que sea mejor"*. La comparativa
-  está hecha en [`docs/context/TTS_ESPANOL.md`](../context/TTS_ESPANOL.md): en
-  la laptop con la RTX 4050 entra **Chatterbox Multilingual** (MIT, el mejor
-  puntuado en español, endpoints compatibles con OpenAI, salida en mp3/opus); en
-  el servidor, sin GPU, quedan Pocket TTS (MIT, servidor propio, clona voz),
-  Audio8 (Apache 2.0) y Supertonic 3 (pesos OpenRAIL-M). El documento trae el
-  procedimiento de prueba con el párrafo incrustado, para generar las muestras y
-  decidir escuchando. **Antes de probar ninguno**, falta
-  descartar lo barato: la voz de Piper está compilada en la imagen y es
-  argentina (`es_AR-daniela-high` en `tools/piper/docker-compose.yml`), mientras
-  el resto de la app usa mexicano; existe `es_MX-claude-high`. Prioridad media y
-  no alta porque Piper no va en las compilaciones de los probadores -solo Kokoro
-  y Edge-, así que hoy esto solo afecta la compilación propia.
+- [ ] `medio` 2026-09-03 — **Reemplazar Piper por algo que suene en español —
+  veredicto: Chatterbox Multilingual, integración en curso.** Reportado desde
+  la app: *"no me gusta ese modelo, buscar una alternativa que tenga
+  entrenamiento de voces en español, pero que sea mejor"*. Probado en la
+  laptop con la RTX 4050 contra Kokoro y Piper
+  ([`docs/context/TTS_ESPANOL.md`](../context/TTS_ESPANOL.md)): ganó
+  **Chatterbox Multilingual clonando una voz** — la predefinida en inglés
+  arrastraba el idioma de la síntesis a pesar de pedir `language: es`, pero con
+  una referencia en español (probado con la voz de Piper `es_MX-claude-high` y
+  con una grabación propia) el resultado es correcto. Dos voces clonadas
+  elegidas: `piper-mx-clon.wav` y `voz-propia.mp3`.
+  - Contras medidos: ~55-75 s de síntesis por párrafo de ~25 s de audio (más
+    lento que tiempo real, a diferencia de Kokoro/Piper), y solo sirve para
+    español — el modelo no da marcas por palabra, igual que Piper.
+  - Requiere GPU, así que no reemplaza a Kokoro/Piper en `voicex-server` (sin
+    GPU): corre en una laptop personal, como segundo nodo intermitente de la
+    tailnet (se apaga con la laptop, la app cae a Edge en silencio).
+  - `ChatterboxTtsProvider` ya integrado en `lib/tts/`, con su caso en
+    `tts_factory.dart`, `settings.dart` y `reader_provider.dart`. Falta:
+    Tailscale nativo en la laptop (el contenedor Docker con `network_mode:
+    host` no expone una interfaz real en Docker Desktop para Windows — ver
+    intento fallido en el historial de esta tarea) y compilar con
+    `CHATTERBOX_URL` para probar de punta a punta.
+  - La voz `es_MX-claude-high` de Piper directamente (sin Chatterbox) se
+    volvió a confirmar con errores de lectura (`tools/piper/README.md`): no es
+    la solución barata que este ítem sugería probar primero.
 - [ ] `alto` 2026-09-03 — **La previsualización de voz del motor Teléfono se
   cuelga para siempre tras el primer fallo del motor nativo.** Reportado por
   un tester: *"no me funcionan los previos de las voces, solo me funcionó

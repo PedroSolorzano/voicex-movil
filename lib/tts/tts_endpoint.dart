@@ -33,6 +33,11 @@ class TtsTimeouts {
   static const synthesisKokoro = Duration(seconds: 180);
   static const synthesisPiper = Duration(seconds: 120);
 
+  /// Chatterbox corre en GPU pero es autoregresivo: ~55-75 s medidos para un
+  /// párrafo de ~25 s de audio (más lento que tiempo real). Generoso a
+  /// propósito para no cortar un párrafo largo a mitad de síntesis.
+  static const synthesisChatterbox = Duration(seconds: 240);
+
   /// Reading the response body once the headers arrived.
   ///
   /// Without this the read has no ceiling at all: a connection that degrades

@@ -1,6 +1,7 @@
 import '../config/settings.dart';
 import 'tts_provider.dart';
 import 'android_tts_provider.dart';
+import 'chatterbox_tts_provider.dart';
 import 'edge_tts_provider.dart';
 import 'kokoro_tts_provider.dart';
 import 'piper_tts_provider.dart';
@@ -20,6 +21,9 @@ TTSProvider getProvider(AppSettings settings, {String lang = 'es'}) {
     case 'piper':
       return PiperTtsProvider(settings.piperBaseUrl,
           lengthScale: settings.piperLengthScale, token: settings.serverToken);
+    case 'chatterbox':
+      // Servidor directo por Tailscale, sin proxy: sin token.
+      return ChatterboxTtsProvider(settings.chatterboxBaseUrl);
     case 'edge':
     default:
       return EdgeTtsProvider();
@@ -31,6 +35,7 @@ TTSProvider getProvider(AppSettings settings, {String lang = 'es'}) {
 String providerLabel(String kind) => switch (kind) {
       'kokoro' => 'Kokoro',
       'piper' => 'Piper',
+      'chatterbox' => 'Chatterbox',
       'android' => 'Teléfono',
       _ => 'Edge',
     };
