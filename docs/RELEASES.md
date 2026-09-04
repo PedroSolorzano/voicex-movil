@@ -171,6 +171,30 @@ partir de ese momento a la reproducción en vivo.
 - `voicesProvider` pedía el catálogo entero con cada cambio de cualquier ajuste.
 - De 86 tests a 131.
 
+### Chatterbox se suma como motor, y compilarlo hizo desaparecer a Kokoro sin avisar
+
+Cuarto motor TTS, pensado solo para español: clona una voz con GPU en una
+laptop personal que entra a la tailnet como nodo aparte, sin proxy ni token
+porque no se reparte a probadores (`lib/tts/chatterbox_tts_provider.dart`).
+Reutiliza el mismo patrón de Kokoro y Piper — motor + voz + ritmo en la clave
+de caché, repliegue silencioso a Edge si la laptop está apagada.
+
+Compilar el primer APK con esto reveló un bug de proceso: `TtsServerConfig
+.availableEngines` (`lib/config/server_config.dart:63-69`) decide qué motores
+ofrecer solo por la variable que llegó no vacía **al compilar**, nunca contra
+el estado real del servidor. Ese build se armó con `CHATTERBOX_URL` suelto en
+vez de combinarlo con el `.json` que ya traía `KOKORO_URL`/`PIPER_URL`, y el
+resultado fue un APK que solo ofrecía Edge, Chatterbox y Teléfono en Ajustes
+→ Motor de voz — con Kokoro corriendo sano de fondo todo el tiempo, sin que
+nada lo dijera.
+
+`KOKORO_URL` pasa ahora a `tools/release/kokoro.json`, trackeado en git igual
+que `chatterbox.json`: es la misma dirección para cualquier compilación
+propia (laptop o desktop), así que no había motivo para que viviera solo en
+el `.json` gitignorado de una máquina. Lo único que sigue sin compartirse es
+el token, que se queda en el `.json` personal de cada quien
+(`tools/release/README.md`).
+
 ---
 
 ## 0.6.0-preview.1 — 2026-09-02
