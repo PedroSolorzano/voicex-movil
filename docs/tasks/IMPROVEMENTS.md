@@ -305,6 +305,16 @@ servidor a internet.
   prevista: no hay campo en Ajustes, porque el token no lo escribe el usuario
   sino que va compilado por probador (`TtsServerConfig`), y quien lo valida es
   el proxy de `tools/proxy`, ya que ni Kokoro ni Piper saben hacerlo.
+- [ ] `bajo` 2026-09-05 — **Repensar Tailscale (y trackear las URLs en git) si
+  el repo deja de ser privado.** `KOKORO_URL` y `CHATTERBOX_URL` van
+  comiteadas (`tools/release/kokoro.json`, `tools/release/chatterbox.json`)
+  porque hoy el repo no se comparte con nadie; `TTS_TOKEN` justamente por eso
+  se quedó fuera de git y viaja por USB entre las dos PCs propias (ver
+  `tools/release/README.md`, "Configurar una segunda PC propia"). Si el repo
+  se abriera algún día, o el proyecto escalara más allá de hobby, tocaría
+  reconsiderar ambas cosas por algo con autenticación real (Cloudflare
+  Access, ver `docs/context/ACCESO_REMOTO.md`). Poco probable: es un proyecto
+  de hobby, no algo pensado para monetizar.
 
 ---
 

@@ -369,6 +369,16 @@ Dos rutas alternativas, por si las circunstancias cambian:
 - **Oracle Cloud Always Free**, el día que la computadora deje de poder quedarse
   encendida. Con Hugging Face Spaces como respaldo si no hay capacidad ARM.
 
+Todo esto —trackear `KOKORO_URL`/`CHATTERBOX_URL` en git, y no tratar el token
+como secreto— da por sentado que **este repositorio se queda privado**. Es la
+razón por la que `TTS_TOKEN`, en cambio, nunca se comitea (ver
+[`tools/release/README.md`](../../tools/release/README.md), "Configurar una
+segunda PC propia"): git no olvida, y una vez en el historial no hay forma
+barata de sacarlo. Si este repo se abriera algún día, o el proyecto escalara
+más allá de hobby, tocaría reconsiderar tanto eso como la elección de
+Tailscale por algo con autenticación real —Cloudflare Access, de esta misma
+lista— en vez de confiar en que el servidor nunca sale de la red privada.
+
 ---
 
 ## Lo que quedaría pendiente en la app

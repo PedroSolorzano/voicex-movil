@@ -60,6 +60,44 @@ flutter build apk --release \
 Si la laptop cambia de IP de tailnet, actualizar `chatterbox.json` y
 recompilar.
 
+## Configurar una segunda PC propia
+
+Esto es para vos mismo en una segunda máquina, no para un probador nuevo: el
+mismo `TTS_TOKEN`, la misma firma, otro disco. El objetivo es compilar ahí un
+APK igual de completo al de la primera PC sin tener que mandarse nada en cada
+build.
+
+**Lo que ya llega solo con `git pull`:** `kokoro.json` y `chatterbox.json`
+(las URLs, sin token) — no hay que tocarlos.
+
+**Lo que hay que llevar aparte, una sola vez, por USB** (nunca por git: ver
+"Lo que un APK no puede esconder" y "El keystore" más abajo para el porqué de
+cada uno):
+
+| Archivo | Va en | Por qué no está en git |
+|---|---|---|
+| `voicex.keystore` | `android/app/` | Firma del APK; perderlo es no poder actualizar nunca más ningún APK ya instalado. |
+| `key.properties` | `android/` | Contraseñas de esa firma. |
+| `pedro.json` (o el `.json` personal que uses) | `tools/release/` | Lleva `TTS_TOKEN` y, si querés Piper, `PIPER_URL`. Es lo que falta hoy si Kokoro no aparece configurable en la segunda PC. |
+
+**Lo que NO se copia:** `android/local.properties`. Lo regenera Flutter solo
+en el primer build, y trae el `sdk.dir` de *esa* máquina — copiar el de la
+otra PC apunta a una ruta que no existe ahí y rompe el build.
+
+Con los tres archivos en su sitio, compilar es el mismo comando de siempre:
+
+```bash
+flutter build apk --release \
+  --dart-define-from-file=tools/release/pedro.json \
+  --dart-define-from-file=tools/release/kokoro.json
+```
+
+Y confirmar como en cualquier build (ver "Al subir la versión, compila
+limpio"): instalar el APK y probar conexión en Ajustes → Motor de voz para
+Kokoro y Piper. Hecho este traspaso una vez, compilar en cualquiera de las dos
+PCs no vuelve a pedir mandarse nada: cada `git pull` trae lo público, y lo
+privado ya quedó instalado en ambas.
+
 ## Al subir la versión, compila limpio
 
 `flutter build apk` **no regenera el manifiesto** cuando lo único que cambió es
