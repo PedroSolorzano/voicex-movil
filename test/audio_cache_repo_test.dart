@@ -303,6 +303,35 @@ void main() {
 
       expect(await repo.get(1, 0, 0, 'kokoro-af_bella', 'f96'), download);
     });
+
+    test('leaves a Chatterbox download alone instead of relabelling it Edge',
+        () async {
+      // Chatterbox came after the catch-all "no known prefix -> Edge" rule.
+      // Without an exclusion for it, every restart quietly turned
+      // 'chatterbox-voz_propia' into 'edge-chatterbox-voz_propia' -- a key
+      // playback never looks up, so the download sat on disk unreachable.
+      final download = await audioFile('pinned.wav');
+      await repo.savePin(1, 0, 0, 'chatterbox-voz_propia', 'f96', download, 2);
+
+      await repo.migrateCacheKeys();
+
+      expect(await repo.get(1, 0, 0, 'chatterbox-voz_propia', 'f96'), download);
+    });
+
+    test('repairs a Chatterbox download mislabelled by the old migration',
+        () async {
+      // Simulates a row already corrupted by a build that ran the buggy
+      // catch-all rule: the key must come back to 'chatterbox-...' so the
+      // download the user already paid the synthesis time for is reachable
+      // again, without forcing a re-download.
+      final download = await audioFile('pinned.wav');
+      await insertRow(download,
+          pinned: true, voiceId: 'edge-chatterbox-voz_propia');
+
+      await repo.migrateCacheKeys();
+
+      expect(await repo.get(1, 0, 0, 'chatterbox-voz_propia', 'f96'), download);
+    });
   });
 
   group('countPinnedByKey', () {

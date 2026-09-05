@@ -913,6 +913,9 @@ class _BottomBar extends StatelessWidget {
     if (reader.downloadFailed > 0) {
       parts.add('${reader.downloadFailed} fallidos');
     }
+    if (reader.downloadEngineNotice.isNotEmpty) {
+      parts.add(reader.downloadEngineNotice);
+    }
     return parts.join('  ·  ');
   }
 

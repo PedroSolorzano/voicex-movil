@@ -101,6 +101,11 @@ class ReaderState {
   /// Seconds per paragraph observed so far, for the time estimate.
   final double downloadSecondsPerParagraph;
 
+  /// Set while a download is quietly finishing with a different engine than
+  /// the one selected -- the self-hosted server dropped out mid-download.
+  /// Empty when the download is using the engine the reader actually chose.
+  final String downloadEngineNotice;
+
   const ReaderState({
     this.book,
     this.chapterIndex = 0,
@@ -122,6 +127,7 @@ class ReaderState {
     this.downloadTotal = 0,
     this.downloadFailed = 0,
     this.downloadSecondsPerParagraph = 0,
+    this.downloadEngineNotice = '',
   });
 
   ReaderState copyWith({
@@ -146,6 +152,7 @@ class ReaderState {
     int? downloadTotal,
     int? downloadFailed,
     double? downloadSecondsPerParagraph,
+    String? downloadEngineNotice,
   }) =>
       ReaderState(
         book: book ?? this.book,
@@ -169,6 +176,8 @@ class ReaderState {
         downloadFailed: downloadFailed ?? this.downloadFailed,
         downloadSecondsPerParagraph:
             downloadSecondsPerParagraph ?? this.downloadSecondsPerParagraph,
+        downloadEngineNotice:
+            downloadEngineNotice ?? this.downloadEngineNotice,
       );
 
   /// Estimated seconds left in the current download.
@@ -677,7 +686,18 @@ class ReaderNotifier extends Notifier<ReaderState> {
     // behind — made switching engines do nothing: any paragraph already heard
     // with Edge kept playing Edge's audio no matter what was selected.
     final chosen = await lookup(_cacheKeyVoice(settings, book));
-    if (chosen != null) return chosen;
+    if (chosen != null) {
+      // A hit under the reader's own engine proves it is in use for this
+      // paragraph, whatever a past health check found. Without this, a label
+      // like "Edge (Chatterbox no disponible)" from one failed lookup could
+      // sit on screen through any number of later paragraphs served — like
+      // this one — straight from cache, with no synthesis call to refresh it.
+      _activeEngineKind = settings.ttsProvider;
+      if (_engineLabel(settings) != state.engineLabel) {
+        state = state.copyWith(engineLabel: _engineLabel(settings));
+      }
+      return chosen;
+    }
 
     await _cacheRepo.evictLruUntilFit(300, settings.cacheMaxMb);
     final provider = await _provider(settings, book.language);
@@ -1201,6 +1221,15 @@ class ReaderNotifier extends Notifier<ReaderState> {
   }
 
   /// Downloads just the chapter being read. Kept as the manual button.
+  /// Empty when the download is producing audio with the engine the reader
+  /// chose; otherwise names what actually answered, so falling back to Edge
+  /// mid-download is visible instead of only discoverable afterwards in
+  /// Ajustes → Almacenamiento.
+  String _downloadEngineNotice(String dlKind, AppSettings settings) =>
+      dlKind == settings.ttsProvider
+          ? ''
+          : 'con ${providerLabel(dlKind)} (${providerLabel(settings.ttsProvider)} no disponible)';
+
   Future<void> downloadChapter() => downloadChapters(state.chapterIndex, 1);
 
   /// Synthesizes [count] chapters starting at [from] and pins them in
@@ -1246,6 +1275,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
       downloadTotal: totalParagraphs,
       downloadFailed: 0,
       downloadSecondsPerParagraph: estimatedSecondsPerParagraph(settings),
+      downloadEngineNotice: _downloadEngineNotice(dlKind, settings),
     );
 
     final startedAt = DateTime.now();
@@ -1275,6 +1305,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
             dlKind = nuevoKind;
             dlProvider = getProvider(settings.copyWith(ttsProvider: dlKind),
                 lang: book.language);
+            state = state.copyWith(
+                downloadEngineNotice: _downloadEngineNotice(dlKind, settings));
           }
           final voice = _cacheKeyFor(dlKind, settings, book);
           final result = await dlProvider.synthesize(

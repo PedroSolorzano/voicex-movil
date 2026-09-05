@@ -355,10 +355,24 @@ class AudioCacheRepo {
         "WHERE voice_id LIKE 'edge-%' "
         "AND substr(voice_id, 6) GLOB '[abefhijpz][mf]_*'");
     // Whatever is left with no engine prefix predates the split and came from Edge.
+    // Chatterbox and android are excluded: they already carry their own prefix
+    // (android's retired rows are gone by now, via _dropRetiredEngineRows above),
+    // so folding them in here silently relabelled every Chatterbox download as
+    // Edge on the next app restart -- the key stopped matching what playback
+    // computes, and the download became unreachable without ever failing loudly.
     await db.execute(
         "UPDATE audio_cache SET voice_id = 'edge-' || voice_id "
         "WHERE voice_id NOT LIKE 'edge-%' AND voice_id NOT LIKE 'kokoro-%' "
-        "AND voice_id NOT LIKE 'piper-%'");
+        "AND voice_id NOT LIKE 'piper-%' AND voice_id NOT LIKE 'chatterbox-%' "
+        "AND voice_id NOT LIKE 'android-%'");
+
+    // Repairs rows already mislabelled by the catch-all rule above before it
+    // learned about Chatterbox: their key gained a spurious 'edge-' prefix,
+    // which made every one of those downloads unreachable even though the
+    // file was still sitting on disk.
+    await db.execute(
+        "UPDATE audio_cache SET voice_id = substr(voice_id, 6) "
+        "WHERE voice_id LIKE 'edge-chatterbox-%'");
 
     await _stampLanguage();
     await _dropDuplicateRows();
