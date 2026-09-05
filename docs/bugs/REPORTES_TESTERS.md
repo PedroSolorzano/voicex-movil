@@ -61,3 +61,33 @@ referencia esta entrada, no al revés.
 
 ---
 
+## 2026-09-05 20:32 — bug — pedro
+
+**Contexto:** La Odisea, capítulo 0, Chatterbox
+
+> Cuando descargo audios en la seccion de descargas no me Parece chatterbox hay que revisar esa parte.
+
+**Diagnóstico:**
+- 14:31:35  /api/model-info  unreachable  8007ms (intento 2)
+- 14:31:26  /api/model-info  unreachable  5007ms
+- 14:31:14  /api/model-info  unreachable  8004ms (intento 2)
+- 14:31:05  /api/model-info  unreachable  5008ms
+- 14:29:53  /api/model-info  ok  327ms
+
+---
+
+## 2026-09-05 20:34 — bug — pedro
+
+**Contexto:** La Odisea, capítulo 0, Chatterbox
+
+> Esta fallando las descargas a chatterbox
+
+**Diagnóstico:**
+- 14:31:35  /api/model-info  unreachable  8007ms (intento 2)
+- 14:31:26  /api/model-info  unreachable  5007ms
+- 14:31:14  /api/model-info  unreachable  8004ms (intento 2)
+- 14:31:05  /api/model-info  unreachable  5008ms
+- 14:29:53  /api/model-info  ok  327ms
+
+---
+
