@@ -9,6 +9,55 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## 0.7.1-preview.1 — 2026-09-05
+
+Un tester bajó un capítulo entero con Chatterbox, lo escuchó, y al día
+siguiente la app lo daba por perdido y volvía a Edge. Reproducirlo en su
+teléfono en vivo (`adb`, con la laptop de Chatterbox apagada y prendida a
+propósito) descartó las dos hipótesis obvias — pantalla que se apaga durante
+la descarga, servidor caído en el momento de escuchar — y encontró la real: la
+descarga sobrevivía perfecta hasta el primer reinicio de la app.
+
+### Un reinicio bastaba para perder cualquier descarga de Chatterbox
+
+`migrateCacheKeys()` (`lib/storage/repositories.dart:331`) corre en cada
+arranque (`main.dart:30`) y tiene una regla de cierre: toda clave de caché sin
+prefijo de motor conocido "es de antes del split y viene de Edge". Se escribió
+antes de que Chatterbox existiera y nadie la actualizó cuando se sumó — la
+condición no la excluía.
+
+Resultado: cada arranque le anteponía `edge-` a `chatterbox-voz_propia`,
+convirtiéndola en `edge-chatterbox-voz_propia`. La reproducción sigue
+calculando `chatterbox-voz_propia` para buscar el audio; esa clave mutada no
+la vuelve a encontrar nunca. El archivo seguía intacto en
+`getApplicationDocumentsDirectory()` — no era un caché que la app hubiera
+limpiado, era un huérfano invisible — y en Ajustes → Almacenamiento el párrafo
+pasaba a contarse como Edge, porque el motor de esa pantalla se lee del
+prefijo de la clave.
+
+La regla ahora excluye `chatterbox-%` (y `android-%`, ya cubierto antes por
+`_dropRetiredEngineRows` pero mejor explícito). Se agrega además una
+reparación de una sola vez que revierte cualquier fila que ya haya quedado
+mal etiquetada por una versión anterior, para no forzar una resíntesis de
+horas por un bug que ya no está.
+
+### Dos huecos de visibilidad que salieron a la luz reproduciendo el bug
+
+Una descarga cuyo servidor se cae a mitad de camino termina en Edge sin decir
+nada en pantalla — solo se nota después, contando párrafos en Ajustes. Ahora
+la barra de descarga (`lib/ui/screens/reader_screen.dart`) suma un aviso del
+tipo "con Edge (Chatterbox no disponible)" en cuanto el motor real difiere del
+elegido.
+
+Y el rótulo de motor de la pantalla de lectura solo se actualizaba dentro de
+`_provider()`, que solo corre cuando hay que sintetizar algo nuevo
+(`reader_provider.dart:635`). Un párrafo servido desde caché nunca pasaba por
+ahí, así que "Edge (Chatterbox no disponible)" podía quedar pegado en pantalla
+mucho después de que el servidor volviera. Un acierto de caché bajo el motor
+elegido ahora refresca el rótulo también.
+
+---
+
 ## 0.7.0-preview.1 — 2026-09-03
 
 La versión que prepara la app para dársela a otras personas. Casi todo lo de
