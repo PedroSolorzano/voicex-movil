@@ -9,6 +9,56 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## 0.7.2-preview.1 — 2026-09-05
+
+Dos correcciones que salen del mismo incidente, investigado cruzando el
+diagnóstico del teléfono contra el log del contenedor de Chatterbox.
+
+### Un servidor ocupado no es un servidor caído
+
+Reportado como "está fallando las descargas a Chatterbox" leyendo La Odisea.
+El log del servidor descarta la hipótesis que había quedado escrita en
+`docs/bugs/CHATTERBOX_DESCARGAS.md` —la laptop reconectándose en la tailnet—:
+el contenedor nunca se reinició (`RestartCount: 0`, uptime continuo). Lo que
+pasó es que Chatterbox tiene **un solo worker**, y mientras la GPU genera
+audio no puede contestar ninguna otra petición, ni siquiera su propio
+endpoint de salud. Un párrafo cuyo chunk 2 de 11 tardó 70 s dejó los cuatro
+health-checks siguientes cayendo exactamente dentro de esa ventana.
+
+Peor: el trabajo entero superó los 240 s del cliente, así que la app abandonó
+ese párrafo mientras el servidor lo seguía cocinando —nada le avisa que la
+conexión se cortó—, y eso tumbó en cascada los sondeos de los párrafos
+siguientes de la misma descarga, cada uno quemando 13 s en fallar por la
+misma razón.
+
+Ahora, al agotarse el presupuesto de síntesis, la app asume que el servidor
+sigue ocupado un rato (`TtsTimeouts.busyCooldown`) y deja de sondearlo: le da
+aire para terminar en vez de tocarle la puerta cada 13 s, y el resto de la
+descarga cae a Edge de inmediato en vez de arrastrar un timeout por párrafo.
+
+### El techo de espera se calibra con la máquina que toca
+
+Los 240 s por defecto salen de medir ~55-75 s por párrafo. En una GPU justa
+un párrafo tarda varias veces eso, y rendirse antes de tiempo produce el peor
+desperdicio posible: **el servidor termina el audio y el cliente ya lo tiró a
+la basura**. En el incidente medido, una generación de 4 m 37 s se perdió por
+abandonarla a los 4 m.
+
+Durante una descarga el presupuesto pasa a ser cinco veces el promedio real
+de esa máquina (`TtsTimeouts.adaptiveSynthesis`), medido solo sobre párrafos
+de Chatterbox exitosos —los tiempos de Edge son un orden de magnitud menores
+y dejarían el techo corto justo cuando el servidor propio vuelve—. El suelo
+son los 240 s de siempre, así que esto solo puede volver la app más paciente;
+el tope son 20 minutos.
+
+La lectura en vivo conserva el presupuesto fijo a propósito: esperar minutos
+por un párrafo mientras alguien escucha no sirve de nada, ahí el repliegue
+rápido a Edge es lo correcto. Es la primera vez que descarga y reproducción
+tienen presupuestos distintos, y el motivo es ese: la paciencia útil no es la
+misma cuando dejás el capítulo bajando que cuando estás escuchando.
+
+---
+
 ## 0.7.1-preview.1 — 2026-09-05
 
 Un tester bajó un capítulo entero con Chatterbox, lo escuchó, y al día
