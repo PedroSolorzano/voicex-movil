@@ -146,6 +146,29 @@ y su arreglo. Aquí solo queda lo que no está hecho.
   `.timeout(...)` alrededor de esa síntesis para que el cuelgue caiga por el
   mismo `catch` que ya maneja los demás fallos. Sin reproducir en banco
   todavía, solo rastreado por código.
+- [ ] `alto` 2026-09-06 — **`resetServerHealthCache` borra `_busyUntil` junto
+  con el caché de red, y sigue pasando con F5.** Detectado en la recaída del
+  2026-09-06 de `docs/bugs/CHATTERBOX_DESCARGAS.md` (dos reportes desde la
+  app sobre descargas de *La Odisea* que volvían a fallar tras el primer
+  arreglo). `_busyUntil` (`server_health.dart:41`) es lo que la app sabe del
+  *servidor* — que sigue ocupado terminando una síntesis que el cliente
+  abandonó por timeout (`markServerBusy`, ahora usado por
+  `f5_tts_provider.dart:99`, antes por Chatterbox) — y `resetServerHealthCache`
+  (`server_health.dart:44-47`) lo limpia igual que el caché de *conexión*, sin
+  distinguir uno de otro. Dos llamadores ajenos a la descarga lo disparan sin
+  condición: el botón "Probar conexión" (`settings_screen.dart:83`) y cada
+  evento de `Connectivity().onConnectivityChanged`
+  (`reader_provider.dart:298`, que Android puede emitir varias veces por
+  transición de red). Un tester frustrado con una descarga probando la
+  conexión, o un simple cambio de red a mitad de descarga, reabre la ventana
+  contra un servidor que sigue ocupado y encadena el mismo patrón de
+  `unreachable` en los párrafos siguientes. La migración a F5 no lo evita
+  porque reusa el mismo mecanismo de `busyUntil`. Ajuste propuesto en el bug:
+  separar el reset de `server_health.dart:44-47` para que
+  `resetServerHealthCache` no toque `_busyUntil`, o exponer un reset aparte
+  para los dos call sites de arriba; de paso, darle a `maybePrefetchAhead`
+  (`reader_provider.dart:1416`) una guardia de reentrada propia, en vez de
+  depender solo de `state.isDownloading`.
 - [ ] `medio` 2026-09-03 — **"Descargar este capítulo" no sabe por dónde vas
   leyendo.** `downloadChapters(from, count)`
   (`reader_provider.dart:1180`) sintetiza el capítulo completo desde su
