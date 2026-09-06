@@ -114,3 +114,59 @@ no un bloque de texto desmedido.
   ya se arregló aparte: la barra de descarga ahora muestra un aviso explícito
   cuando el motor real difiere del elegido (`downloadEngineNotice`, commit
   `9e759d2`).
+
+## Recurrencia tras el fix (2026-09-06)
+
+El fix de arriba no evitó una recaída: dos reportes nuevos del mismo tester,
+mismo libro (`docs/bugs/REPORTES_TESTERS.md`, 2026-09-06 01:33 y 01:44) —
+*"volvió a fallar la descarga"* y *"me sale descarga incompleta, un párrafo
+fallido... el fix que mandamos necesitamos afinarlo un poco más"*.
+
+**El primer `unreachable` de esta recaída no lo pudo haber disparado el fix.**
+El reporte de 01:33 tiene un `ok` a las 19:28:44 y el siguiente `unreachable`
+a las 19:31:50 — solo 3m6s después, menos que el piso de 240s de
+`TtsTimeouts.adaptiveSynthesis`. El `synthesize` de ese párrafo todavía no
+podía haber agotado su propio timeout, así que `markServerBusy`
+(`chatterbox_tts_provider.dart:93-97`) no se había disparado por ese camino
+todavía. El `unreachable` viene de otro llamador:
+
+- **`resetServerHealthCache()` (`server_health.dart:44-47`) borra
+  `_busyUntil` junto con el caché de veredictos de red.** La función no
+  distingue "lo que sé del servidor" (que sigue ocupado) de "lo que sé de mi
+  propia conexión" (que cambió de red). Dos llamadores ajenos a la descarga
+  la invocan sin condición:
+  - `settings_screen.dart:83` — el botón "Probar conexión" en Ajustes. Un
+    tester frustrado con una descarga fallando entra ahí a probar, y reabre
+    la ventana que el fix acababa de cerrar contra un servidor que sigue
+    ocupado.
+  - `reader_provider.dart:298` — cada evento de
+    `Connectivity().onConnectivityChanged` (Android puede emitir varios en
+    una sola transición de red) limpia el caché y dispara
+    `unawaited(maybePrefetchAhead())` (línea 299).
+- **`maybePrefetchAhead` (`reader_provider.dart:1416-1458`) hace su propio
+  `isReachable` (línea ~1441) sin guardia de reentrada propia** — solo mira
+  `state.isDownloading`, que `downloadChapters` no puso todavía. El patrón
+  del reporte 01:44 (19:36:37, 44, 45, 52 — unos 4-7s entre cada uno, cada
+  uno con su reintento a 5s/8s) encaja mejor con **dos `probeServer`
+  solapados** disparados por eventos de conectividad casi simultáneos que
+  con un único loop reintentando.
+
+`downloadChapters` no reintenta un párrafo fallido: incrementa
+`downloadFailed` y sigue con el siguiente, dejando el mensaje "Descarga
+incompleta: N párrafos fallaron" (`reader_provider.dart:1386-1391`) — coincide
+con lo reportado.
+
+**Veredicto de la recaída:** el fix funciona bien dentro de su propio loop de
+descarga; lo que falta es que `_busyUntil` (conocimiento sobre el *servidor*)
+deje de limpiarse junto con el caché de red (conocimiento sobre la *conexión
+del cliente*).
+
+**Ajuste concreto, sin implementar todavía:**
+- Separar el reset en `server_health.dart:44-47`: que `resetServerHealthCache`
+  siga limpiando el caché de veredictos, pero no `_busyUntil` — o exponer un
+  reset aparte que los call sites de "Probar conexión"
+  (`settings_screen.dart:83`) y de conectividad (`reader_provider.dart:298`)
+  usen en su lugar.
+- Darle a `maybePrefetchAhead` (`reader_provider.dart:1416`) una guardia de
+  reentrada propia antes de su `isReachable`, no solo depender de
+  `state.isDownloading`.

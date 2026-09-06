@@ -91,3 +91,31 @@ referencia esta entrada, no al revés.
 
 ---
 
+## 2026-09-06 01:33 — bug — pedro
+
+**Contexto:** La Odisea, capítulo 0
+
+> Volvio a fallar la descarga de la odisea, documentos la información para validarla con el celular y poder diagnosticar que pudo pasar
+
+**Diagnóstico:**
+- 19:32:21  /api/model-info  unreachable  8006ms (intento 2)
+- 19:31:50  /api/model-info  unreachable  5001ms
+- 19:28:44  /api/model-info  ok  309ms
+
+---
+
+## 2026-09-06 01:44 — bug — pedro
+
+**Contexto:** La Odisea, capítulo 0
+
+> Me sale descarga incompleta un parrafo fallido. He hecho varios intentos creo que el fix que mamdamos necesitamos afinarlo un poco mas.
+
+**Diagnóstico:**
+- 19:38:15  /api/model-info  ok  182ms
+- 19:36:52  /api/model-info  unreachable  8001ms (intento 2)
+- 19:36:45  /api/model-info  unreachable  8001ms (intento 2)
+- 19:36:44  /api/model-info  unreachable  5002ms
+- 19:36:37  /api/model-info  unreachable  5001ms
+
+---
+
