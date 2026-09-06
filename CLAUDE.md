@@ -5,10 +5,6 @@ cubre estructura, build y comandos; acá va solo lo que no está escrito ahí.
 
 ## Flujo de trabajo
 
-**El commit lo hace el usuario, no Claude.** Hay un hook a nivel de usuario que
-bloquea `git commit`. Al terminar un cambio: dejarlo en `git add` y proponer el
-mensaje. No intentar rodear el hook.
-
 Cerrar los cambios de código con:
 
 ```bash
