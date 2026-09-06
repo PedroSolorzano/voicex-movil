@@ -136,10 +136,10 @@ dado todavía.
 
 ---
 
-## Segundo nodo: la laptop con GPU (Chatterbox)
+## Segundo nodo: la laptop con GPU (F5-TTS)
 
 `voicex-server` no tiene GPU (Radeon Vega, fuera de la matriz de soporte de
-ROCm — ver [`TTS_ESPANOL.md`](TTS_ESPANOL.md)), así que Chatterbox no puede
+ROCm — ver [`TTS_ESPANOL.md`](TTS_ESPANOL.md)), así que F5 no puede
 vivir ahí. Corre en una laptop personal (RTX 4050) que entra a la misma
 tailnet como un nodo aparte.
 
@@ -151,26 +151,30 @@ contenedor se asignó (`curl` daba timeout), así que mucho menos el teléfono.
 En esta máquina el cliente tiene que ser la **app nativa de Tailscale para
 Windows** (tailscale.com/download), logueada con la misma cuenta.
 
-Una vez con Tailscale nativo corriendo, el contenedor de Chatterbox
-(`docker-compose-cu130.yml` en el clon de
-[devnen/Chatterbox-TTS-Server](https://github.com/devnen/Chatterbox-TTS-Server),
-fuera de este repo) ya publica el puerto 8004 en todas las interfaces, así que
-queda alcanzable directo por la IP de tailnet de la laptop — sin proxy y sin
-token, porque este nodo no se reparte a probadores. Como con Kokoro/Piper: no
-alcanza con que la consola diga "Connected", hay que confirmar tráfico real
-(`curl` desde el teléfono al puerto 8004).
+Una vez con Tailscale nativo corriendo, el contenedor de F5
+([`tools/f5`](../../tools/f5), este sí dentro del repo) publica el puerto 8005
+en todas las interfaces, así que queda alcanzable directo por la IP de tailnet
+de la laptop — sin proxy y sin token, porque este nodo no se reparte a
+probadores. Como con Kokoro/Piper: no alcanza con que la consola diga
+"Connected", hay que confirmar tráfico real (`curl` desde el teléfono al
+puerto 8005).
+
+Antes acá vivía Chatterbox, en el puerto 8004 y desde un clon externo del
+repo de devnen. Se fue en 0.8.0: sonaba bien, pero iba a 0.089x tiempo real
+—casi tres horas de GPU por capítulo— y F5 hace lo mismo por encima de tiempo
+real (ver [`tools/f5/README.md`](../../tools/f5/README.md)).
 
 **Confirmado funcionando**: con Tailscale nativo, la laptop entra como nodo
-`g14` en `100.102.250.94`, y `curl http://100.102.250.94:8004/api/model-info`
+`g14` en `100.102.250.94`, y `curl http://100.102.250.94:8005/health`
 responde 200 con el modelo cargado. La dirección vive en
-[`tools/release/chatterbox.json`](../../tools/release/chatterbox.json) como
-`CHATTERBOX_URL` — a diferencia de `KOKORO_URL`/`PIPER_URL`, ese archivo **sí
+[`tools/release/f5.json`](../../tools/release/f5.json) como
+`F5_URL` — a diferencia de `KOKORO_URL`/`PIPER_URL`, ese archivo **sí
 está trackeado en git**: sin proxy y sin token no hay nada que revocar, y la
 tailnet ya es la barrera de seguridad. Si la IP cambia (reinicio de
 Tailscale, reinstalación), hay que actualizar ese archivo y recompilar.
 
 Esta laptop es un nodo **intermitente**, no un servidor 24/7: cuando está
-apagada o dormida, el sondeo de salud de la app (`ChatterboxTtsProvider.healthOf`)
+apagada o dormida, el sondeo de salud de la app (`F5TtsProvider.healthOf`)
 falla y el repliegue a Edge es automático y silencioso, igual que con
 Kokoro/Piper.
 
@@ -369,7 +373,7 @@ Dos rutas alternativas, por si las circunstancias cambian:
 - **Oracle Cloud Always Free**, el día que la computadora deje de poder quedarse
   encendida. Con Hugging Face Spaces como respaldo si no hay capacidad ARM.
 
-Todo esto —trackear `KOKORO_URL`/`CHATTERBOX_URL` en git, y no tratar el token
+Todo esto —trackear `KOKORO_URL`/`F5_URL` en git, y no tratar el token
 como secreto— da por sentado que **este repositorio se queda privado**. Es la
 razón por la que `TTS_TOKEN`, en cambio, nunca se comitea (ver
 [`tools/release/README.md`](../../tools/release/README.md), "Configurar una

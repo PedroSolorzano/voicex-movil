@@ -42,9 +42,9 @@ devuelve WAV sin comprimir (~159 MB/hora) y no siempre conviene mandárselo a
 un probador, así que sigue viviendo en el `.json` personal de quien sí lo
 quiera.
 
-## Sumar Chatterbox a una compilación
+## Sumar F5 a una compilación
 
-`CHATTERBOX_URL` vive en [`chatterbox.json`](chatterbox.json), **trackeado en
+`F5_URL` vive en [`f5.json`](f5.json), **trackeado en
 git** a diferencia de los `.json` por probador: no lleva proxy ni token, así
 que no hay nada que revocar (ver
 [`docs/context/ACCESO_REMOTO.md`](../../docs/context/ACCESO_REMOTO.md),
@@ -54,10 +54,10 @@ que se combina con tu archivo personal en el mismo build:
 ```bash
 flutter build apk --release \
   --dart-define-from-file=tools/release/amigo.json \
-  --dart-define-from-file=tools/release/chatterbox.json
+  --dart-define-from-file=tools/release/f5.json
 ```
 
-Si la laptop cambia de IP de tailnet, actualizar `chatterbox.json` y
+Si la laptop cambia de IP de tailnet, actualizar `f5.json` y
 recompilar.
 
 ## Configurar una segunda PC propia
@@ -67,7 +67,7 @@ mismo `TTS_TOKEN`, la misma firma, otro disco. El objetivo es compilar ahí un
 APK igual de completo al de la primera PC sin tener que mandarse nada en cada
 build.
 
-**Lo que ya llega solo con `git pull`:** `kokoro.json` y `chatterbox.json`
+**Lo que ya llega solo con `git pull`:** `kokoro.json` y `f5.json`
 (las URLs, sin token) — no hay que tocarlos.
 
 **Lo que hay que llevar aparte, una sola vez, por USB** (nunca por git: ver

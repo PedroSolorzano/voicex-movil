@@ -304,33 +304,44 @@ void main() {
       expect(await repo.get(1, 0, 0, 'kokoro-af_bella', 'f96'), download);
     });
 
-    test('leaves a Chatterbox download alone instead of relabelling it Edge',
+    test('leaves an F5 download alone instead of relabelling it Edge',
         () async {
-      // Chatterbox came after the catch-all "no known prefix -> Edge" rule.
-      // Without an exclusion for it, every restart quietly turned
-      // 'chatterbox-voz_propia' into 'edge-chatterbox-voz_propia' -- a key
-      // playback never looks up, so the download sat on disk unreachable.
-      final download = await audioFile('pinned.wav');
-      await repo.savePin(1, 0, 0, 'chatterbox-voz_propia', 'f96', download, 2);
+      // La trampa que se comió a Chatterbox: la regla comodín "sin prefijo
+      // conocido -> Edge" convertía 'chatterbox-voz' en 'edge-chatterbox-voz'
+      // en cada arranque, una clave que la reproducción nunca consulta, así
+      // que la descarga quedaba inalcanzable con el archivo intacto. Este test
+      // existe para que no vuelva a pasar con el motor que lo reemplazó.
+      final download = await audioFile('pinned.mp3');
+      await repo.savePin(1, 0, 0, 'f5-esposa', 'f96', download, 2);
 
       await repo.migrateCacheKeys();
 
-      expect(await repo.get(1, 0, 0, 'chatterbox-voz_propia', 'f96'), download);
+      expect(await repo.get(1, 0, 0, 'f5-esposa', 'f96'), download);
     });
 
-    test('repairs a Chatterbox download mislabelled by the old migration',
+    test('retires Chatterbox audio, in both the good and the corrupted key',
         () async {
-      // Simulates a row already corrupted by a build that ran the buggy
-      // catch-all rule: the key must come back to 'chatterbox-...' so the
-      // download the user already paid the synthesis time for is reachable
-      // again, without forcing a re-download.
-      final download = await audioFile('pinned.wav');
-      await insertRow(download,
+      // Chatterbox se fue en 0.8.0. Su audio no lo puede reproducir ningún
+      // motor que quede, así que ocupa disco sin poder usarse -- el mismo
+      // trato que recibió Android TTS. Se van las dos formas: la clave sana y
+      // la que dejó corrupta la regla comodín de arriba.
+      final sana = await audioFile('chatterbox.mp3');
+      final corrupta = await audioFile('chatterbox-corrupta.mp3');
+      await insertRow(sana, pinned: true, voiceId: 'chatterbox-voz_propia');
+      await insertRow(corrupta,
           pinned: true, voiceId: 'edge-chatterbox-voz_propia');
+      final sobrevive = await audioFile('f5.mp3');
+      await repo.savePin(1, 0, 1, 'f5-esposa', 'f96', sobrevive, 2);
 
       await repo.migrateCacheKeys();
 
-      expect(await repo.get(1, 0, 0, 'chatterbox-voz_propia', 'f96'), download);
+      final db = await getDatabase();
+      expect(await db.query('audio_cache', where: "voice_id LIKE '%chatterbox%'"),
+          isEmpty);
+      expect(File(sana).existsSync(), isFalse);
+      expect(File(corrupta).existsSync(), isFalse);
+      expect(await repo.get(1, 0, 1, 'f5-esposa', 'f96'), sobrevive,
+          reason: 'el motor vigente no se toca');
     });
   });
 

@@ -1,0 +1,47 @@
+# Servidor de voz F5-TTS en español.
+#
+#   docker compose -f tools/f5/docker-compose.yml up -d --build
+#
+# Escucha en todas las interfaces, no en loopback como Kokoro y Piper. La
+# diferencia es deliberada y la misma que tenía Chatterbox: este servidor vive
+# en la laptop con GPU y el teléfono lo alcanza directo por la tailnet, sin
+# proxy y sin token, porque no se reparte a probadores (ver
+# docs/context/ACCESO_REMOTO.md, segundo nodo).
+services:
+  f5:
+    build:
+      context: .
+    container_name: voicex-f5
+    restart: unless-stopped
+    ports:
+      - "8005:8005"
+    volumes:
+      # Las voces clonadas: un .wav y un .txt con su transcripción exacta.
+      - ./voices:/voices
+      # El checkpoint, fuera de la imagen para no rearmarla al cambiarlo.
+      - f5-models:/models
+      # Caché de Hugging Face, para no volver a bajar el vocoder en cada
+      # contenedor nuevo.
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      # 64 y no el 32 por defecto de F5: con 32 aparecen tartamudeos
+      # ("trabajo" -> "trabajo abajo"). Ver el docstring de server.py.
+      F5_NFE: "64"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      # /health no toca la GPU, así que sigue contestando en milisegundos aun
+      # con una síntesis en curso -- justo lo que Chatterbox no hacía.
+      test: ["CMD", "curl", "-fs", "http://localhost:8005/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 180s
+
+volumes:
+  f5-models:

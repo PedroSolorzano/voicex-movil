@@ -77,8 +77,14 @@ tools/release/*.json
 !tools/release/tester.example.json
 # Excepción: solo CHATTERBOX_URL, sin proxy ni token -- la tailnet es la
 # barrera de seguridad, no la dirección (ver tools/release/README.md).
-!tools/release/chatterbox.json
+!tools/release/f5.json
 # Excepción: solo KOKORO_URL. Sí pasa por el proxy y sí hace falta token,
 # pero la dirección es la misma para cualquier compilación -lo que protege
 # es el token, que se queda en el .json personal (ver tools/release/README.md).
 !tools/release/kokoro.json
+
+# Voces clonadas para F5: son grabaciones de personas reales, no van a git.
+# El servidor las lee de aquí (ver tools/f5/README.md).
+tools/f5/voices/*
+!tools/f5/voices/.gitkeep
+!tools/f5/voices/sustituciones.json

@@ -355,24 +355,19 @@ class AudioCacheRepo {
         "WHERE voice_id LIKE 'edge-%' "
         "AND substr(voice_id, 6) GLOB '[abefhijpz][mf]_*'");
     // Whatever is left with no engine prefix predates the split and came from Edge.
-    // Chatterbox and android are excluded: they already carry their own prefix
-    // (android's retired rows are gone by now, via _dropRetiredEngineRows above),
-    // so folding them in here silently relabelled every Chatterbox download as
-    // Edge on the next app restart -- the key stopped matching what playback
-    // computes, and the download became unreachable without ever failing loudly.
+    //
+    // **Cada motor nuevo tiene que sumarse a esta exclusión.** Olvidarlo no
+    // falla ruidosamente: la clave deja de coincidir con la que calcula la
+    // reproducción y la descarga se vuelve inalcanzable en silencio, con el
+    // archivo intacto en el disco. Eso es lo que le pasó a Chatterbox cuando
+    // se integró sin tocar esta línea, y por qué F5 figura acá desde el día
+    // uno. Los retirados no hacen falta: `_dropRetiredEngineRows` ya los borró
+    // más arriba.
     await db.execute(
         "UPDATE audio_cache SET voice_id = 'edge-' || voice_id "
         "WHERE voice_id NOT LIKE 'edge-%' AND voice_id NOT LIKE 'kokoro-%' "
-        "AND voice_id NOT LIKE 'piper-%' AND voice_id NOT LIKE 'chatterbox-%' "
+        "AND voice_id NOT LIKE 'piper-%' AND voice_id NOT LIKE 'f5-%' "
         "AND voice_id NOT LIKE 'android-%'");
-
-    // Repairs rows already mislabelled by the catch-all rule above before it
-    // learned about Chatterbox: their key gained a spurious 'edge-' prefix,
-    // which made every one of those downloads unreachable even though the
-    // file was still sitting on disk.
-    await db.execute(
-        "UPDATE audio_cache SET voice_id = substr(voice_id, 6) "
-        "WHERE voice_id LIKE 'edge-chatterbox-%'");
 
     await _stampLanguage();
     await _dropDuplicateRows();
@@ -413,9 +408,18 @@ class AudioCacheRepo {
   ///
   /// Android TTS went away in 0.6.0. Covers both spellings its key ever had:
   /// the 'android:' form used before 0.5.0 and the 'android-' one after it.
+  ///
+  /// Chatterbox se fue en 0.8.0, reemplazado por F5 (`tools/f5/README.md`):
+  /// sonaban parecido, pero Chatterbox iba a 0.089x tiempo real y no servía
+  /// para un audiolibro. Su audio cacheado no lo puede reproducir ningún
+  /// motor que quede, así que ocupa disco sin poder usarse nunca.
   Future<void> _dropRetiredEngineRows() async {
     final db = await _db;
-    const where = "voice_id LIKE 'android-%' OR voice_id LIKE 'android:%'";
+    // 'edge-chatterbox-%' es la forma corrupta que dejó la regla comodín de
+    // abajo antes de aprender a excluirlo: son filas de Chatterbox igual, y
+    // se van por la misma puerta.
+    const where = "voice_id LIKE 'android-%' OR voice_id LIKE 'android:%' "
+        "OR voice_id LIKE 'chatterbox-%' OR voice_id LIKE 'edge-chatterbox-%'";
     final rows = await db.query('audio_cache', where: where);
     for (final row in rows) {
       await _deleteCachedFile(row['file_path'] as String);

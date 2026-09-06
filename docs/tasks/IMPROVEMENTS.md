@@ -51,7 +51,7 @@ y su arreglo. Aquí solo queda lo que no está hecho.
   `book.language` en la clave y migrar las filas existentes leyendo
   `books.language`; si no, se huerfanizan todas las descargas hechas hasta hoy.
   Documentado en `test/cache_key_test.dart`.
-- [ ] `medio` 2026-09-03 — **Reemplazar Piper por algo que suene en español —
+- [x] `medio` 2026-09-03 — **Reemplazar Piper por algo que suene en español —
   veredicto: Chatterbox Multilingual, integración en curso.** Reportado desde
   la app: *"no me gusta ese modelo, buscar una alternativa que tenga
   entrenamiento de voces en español, pero que sea mejor"*. Probado en la
@@ -79,15 +79,16 @@ y su arreglo. Aquí solo queda lo que no está hecho.
     la solución barata que este ítem sugería probar primero.
   - **Superado por el ítem siguiente:** Chatterbox queda descartado por
     velocidad, no por calidad.
-- [ ] `alto` 2026-09-06 — **Cambiar Chatterbox por F5-Spanish, y sacar
-  Chatterbox de la app.** Chatterbox gana en calidad pero es inviable para un
+- [x] `alto` 2026-09-06 — **Cambiar Chatterbox por F5-Spanish, y sacar
+  Chatterbox de la app.** **Hecho en 0.8.0.** Chatterbox gana en calidad pero es inviable para un
   audiolibro: medido en la RTX 4050, **0.089x tiempo real** — un capítulo de 37
   párrafos son ~2.9 horas de GPU. Peor: el servidor completa el audio y el
   cliente ya se rindió, así que se tira a la basura (ver
   [`docs/bugs/CHATTERBOX_DESCARGAS.md`](../bugs/CHATTERBOX_DESCARGAS.md)).
   - **F5-Spanish ([`jpgallegoar/F5-Spanish`](https://huggingface.co/jpgallegoar/F5-Spanish),
-    CC0) va a 1.26x tiempo real en la misma tarjeta con `nfe_step 64`**: el
-    mismo capítulo baja a ~12 minutos, 27x más rápido. La razón es
+    CC0) va por encima de tiempo real en la misma tarjeta con `nfe_step 64`**:
+    1.26x en un párrafo suelto y 0.60x en texto largo, donde el troceo en
+    lotes pesa. El capítulo baja de 2.9 horas a ~26 minutos. La razón es
     arquitectónica y contradice lo que suponía
     [`TTS_ESPANOL.md`](../context/TTS_ESPANOL.md) al descartarlo ("en la 4050
     competirían de igual a igual"): F5 no es autoregresivo, genera en un

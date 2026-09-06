@@ -20,7 +20,7 @@ const voiceMap = {
 
 /// Engines the app can build. Anything else found in stored settings comes from
 /// a version that offered more of them, and has to be brought back here.
-const ttsEngines = ['edge', 'kokoro', 'piper', 'chatterbox', 'android'];
+const ttsEngines = ['edge', 'kokoro', 'piper', 'f5', 'android'];
 
 String resolveVoice(String provider, String lang, String gender) {
   return voiceMap[provider]?[lang]?[gender] ??
@@ -76,13 +76,14 @@ class AppSettings {
   /// Phoneme length. Above 1.0 slows the voice; es_AR-daniela reads fast at 1.0.
   double piperLengthScale;
 
-  // ── Chatterbox (laptop personal con GPU, solo español) ───────────────────
-  String chatterboxBaseUrl;
+  // ── F5-TTS (laptop personal con GPU, solo español) ───────────────────────
+  String f5BaseUrl;
 
-  /// Nombre del audio de referencia clonado en `reference_audio/` del
-  /// servidor (`piper-mx-clon.wav` o `voz-propia.mp3`). Sin variante `En`:
-  /// este motor no ofrece inglés, ver `ChatterboxTtsProvider`.
-  String chatterboxVoiceEs;
+  /// Nombre de la voz clonada que sirve `tools/f5` — el nombre a secas, sin
+  /// extensión: el servidor guarda cada voz como un `.wav` y su `.txt` con la
+  /// transcripción. Sin variante `En`: este motor no ofrece inglés, ver
+  /// `F5TtsProvider`.
+  String f5VoiceEs;
   String theme;
   int cacheMaxMb;
 
@@ -128,8 +129,8 @@ class AppSettings {
     this.piperVoiceEs = 'es_AR-daniela-high',
     this.piperVoiceEn = 'en_US-lessac-high',
     this.piperLengthScale = 1.0,
-    this.chatterboxBaseUrl = '',
-    this.chatterboxVoiceEs = 'piper-mx-clon.wav',
+    this.f5BaseUrl = '',
+    this.f5VoiceEs = 'esposa',
     this.theme = 'dark',
     this.cacheMaxMb = 150,
     this.fontSize = 18,
@@ -158,8 +159,8 @@ class AppSettings {
         return v.isNotEmpty ? v : 'af_bella';
       case 'piper':
         return lang == 'es' ? piperVoiceEs : piperVoiceEn;
-      case 'chatterbox':
-        return chatterboxVoiceEs;
+      case 'f5':
+        return f5VoiceEs;
       case 'android':
         final v = lang == 'es' ? androidVoiceEs : androidVoiceEn;
         if (v.isNotEmpty) return v;
@@ -175,13 +176,13 @@ class AppSettings {
 
   bool get hasPiperServer => piperBaseUrl.trim().isNotEmpty;
 
-  bool get hasChatterboxServer => chatterboxBaseUrl.trim().isNotEmpty;
+  bool get hasF5Server => f5BaseUrl.trim().isNotEmpty;
 
   /// Base URL of the self-hosted engine currently selected, if any.
   String get selfHostedUrl => switch (ttsProvider) {
         'kokoro' => kokoroBaseUrl,
         'piper' => piperBaseUrl,
-        'chatterbox' => chatterboxBaseUrl,
+        'f5' => f5BaseUrl,
         _ => '',
       };
 
@@ -189,7 +190,7 @@ class AppSettings {
   bool get usesSelfHostedServer =>
       ttsProvider == 'kokoro' ||
       ttsProvider == 'piper' ||
-      ttsProvider == 'chatterbox';
+      ttsProvider == 'f5';
 
   /// Credential for the proxy that fronts the self-hosted engines.
   ///
@@ -218,7 +219,8 @@ class AppSettings {
   /// reads, so a stale server address does not linger on disk.
   static Future<void> forgetRetiredKeys() async {
     final prefs = await SharedPreferences.getInstance();
-    for (final key in ['kokoroBaseUrl', 'piperBaseUrl', 'chatterboxBaseUrl']) {
+    for (final key in ['kokoroBaseUrl', 'piperBaseUrl', 'chatterboxBaseUrl',
+      'chatterboxVoiceEs', 'f5BaseUrl']) {
       await prefs.remove(key);
     }
   }
@@ -250,9 +252,9 @@ class AppSettings {
       piperVoiceEn: prefs.getString('piperVoiceEn') ?? 'en_US-lessac-high',
       piperLengthScale: prefs.getDouble('piperLengthScale') ?? 1.0,
       // Compilada, no guardada: mismo motivo que kokoroBaseUrl/piperBaseUrl.
-      chatterboxBaseUrl: TtsServerConfig.chatterboxUrl,
-      chatterboxVoiceEs:
-          prefs.getString('chatterboxVoiceEs') ?? 'piper-mx-clon.wav',
+      f5BaseUrl: TtsServerConfig.f5Url,
+      f5VoiceEs:
+          prefs.getString('f5VoiceEs') ?? 'esposa',
       theme: prefs.getString('theme') ?? 'dark',
       cacheMaxMb: prefs.getInt('cacheMaxMb') ?? 150,
       fontSize: prefs.getDouble('fontSize') ?? 18,
@@ -285,7 +287,7 @@ class AppSettings {
     await prefs.setString('piperVoiceEs', piperVoiceEs);
     await prefs.setString('piperVoiceEn', piperVoiceEn);
     await prefs.setDouble('piperLengthScale', piperLengthScale);
-    await prefs.setString('chatterboxVoiceEs', chatterboxVoiceEs);
+    await prefs.setString('f5VoiceEs', f5VoiceEs);
     await prefs.setString('theme', theme);
     await prefs.setInt('cacheMaxMb', cacheMaxMb);
     await prefs.setDouble('fontSize', fontSize);
@@ -318,8 +320,8 @@ class AppSettings {
     String? piperVoiceEs,
     String? piperVoiceEn,
     double? piperLengthScale,
-    String? chatterboxBaseUrl,
-    String? chatterboxVoiceEs,
+    String? f5BaseUrl,
+    String? f5VoiceEs,
     String? theme,
     int? cacheMaxMb,
     double? fontSize,
@@ -351,8 +353,8 @@ class AppSettings {
         piperVoiceEs: piperVoiceEs ?? this.piperVoiceEs,
         piperVoiceEn: piperVoiceEn ?? this.piperVoiceEn,
         piperLengthScale: piperLengthScale ?? this.piperLengthScale,
-        chatterboxBaseUrl: chatterboxBaseUrl ?? this.chatterboxBaseUrl,
-        chatterboxVoiceEs: chatterboxVoiceEs ?? this.chatterboxVoiceEs,
+        f5BaseUrl: f5BaseUrl ?? this.f5BaseUrl,
+        f5VoiceEs: f5VoiceEs ?? this.f5VoiceEs,
         theme: theme ?? this.theme,
         cacheMaxMb: cacheMaxMb ?? this.cacheMaxMb,
         fontSize: fontSize ?? this.fontSize,

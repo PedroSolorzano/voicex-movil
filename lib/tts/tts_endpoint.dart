@@ -33,13 +33,33 @@ class TtsTimeouts {
   static const synthesisKokoro = Duration(seconds: 180);
   static const synthesisPiper = Duration(seconds: 120);
 
-  /// Chatterbox corre en GPU pero es autoregresivo: ~55-75 s medidos para un
-  /// párrafo de ~25 s de audio (más lento que tiempo real). Generoso a
-  /// propósito para no cortar un párrafo largo a mitad de síntesis.
+  /// Piso del presupuesto de F5, para un párrafo corto.
   ///
-  /// Es el punto de partida, no el techo definitivo de una descarga: ver
-  /// [adaptiveSynthesis].
-  static const synthesisChatterbox = Duration(seconds: 240);
+  /// Es solo el piso: el presupuesto real sale de [synthesisForChars], porque
+  /// lo que manda es el largo del texto. Un número fijo calibrado con un
+  /// párrafo de prueba **ya falló una vez**: 120 s alcanzaban de sobra para
+  /// los 29 s de audio del párrafo con el que se midió, y se quedaban cortos
+  /// para la sinopsis de la cubierta de La Odisea, cuatro veces más larga.
+  static const synthesisF5 = Duration(seconds: 120);
+
+  /// Cuánto tarda F5 por carácter de texto, medido: 378 palabras (~2.100
+  /// caracteres) tardaron 291 s en la RTX 4050, o sea ~0,13 s por carácter.
+  /// Se presupuesta el doble para absorber un párrafo que salga lento sin
+  /// abandonar audio que el servidor sí va a terminar.
+  static const _msPorCaracterF5 = 250;
+
+  /// Presupuesto de síntesis para un texto de [chars] caracteres.
+  ///
+  /// El tiempo de F5 crece con el texto, así que el timeout tiene que crecer
+  /// también: es la diferencia entre un párrafo de diálogo y la sinopsis de
+  /// una contraportada. [floor] permite que una descarga suba el piso con lo
+  /// que viene midiendo (ver [adaptiveSynthesis]) sin bajarlo nunca.
+  static Duration synthesisForChars(int chars, {Duration floor = synthesisF5}) {
+    final estimado = Duration(milliseconds: chars * _msPorCaracterF5);
+    if (estimado < floor) return floor;
+    if (estimado > adaptiveSynthesisCeiling) return adaptiveSynthesisCeiling;
+    return estimado;
+  }
 
   /// Cuánto se asume que un servidor sigue ocupado tras abandonar una síntesis.
   ///
@@ -52,12 +72,13 @@ class TtsTimeouts {
   /// Techo de síntesis derivado de lo que esta máquina viene tardando de
   /// verdad, en vez de un número fijo calibrado en otro hardware.
   ///
-  /// El 240 s de [synthesisChatterbox] sale de medir ~55-75 s por párrafo. Una
-  /// GPU más justa tarda varias veces eso, y el resultado es el peor
-  /// desperdicio posible: el servidor **termina** el audio y el cliente ya se
-  /// rindió, así que se tira a la basura una generación entera —medido en
-  /// `docs/bugs/CHATTERBOX_DESCARGAS.md`, un párrafo de 4 m 37 s abandonado a
-  /// los 4 m.
+  /// [synthesisF5] se calibró en una RTX 4050. Una GPU más justa tarda varias
+  /// veces eso, y el resultado es el peor desperdicio posible: el servidor
+  /// **termina** el audio y el cliente ya se rindió, así que se tira a la
+  /// basura una generación entera. Medido con el motor anterior en
+  /// `docs/bugs/CHATTERBOX_DESCARGAS.md`: un párrafo de 4 m 37 s abandonado a
+  /// los 4 m. F5 es mucho más rápido, pero la trampa es la misma en cuanto el
+  /// hardware no sea el de calibración.
   ///
   /// Cinco veces el promedio observado cubre ese caso con margen sin volverse
   /// una espera infinita. El suelo es el valor de siempre —esto solo puede
@@ -67,9 +88,9 @@ class TtsTimeouts {
     required Duration measured,
     required int samples,
   }) {
-    if (samples <= 0 || measured <= Duration.zero) return synthesisChatterbox;
+    if (samples <= 0 || measured <= Duration.zero) return synthesisF5;
     final scaled = measured * 5;
-    if (scaled < synthesisChatterbox) return synthesisChatterbox;
+    if (scaled < synthesisF5) return synthesisF5;
     if (scaled > adaptiveSynthesisCeiling) return adaptiveSynthesisCeiling;
     return scaled;
   }

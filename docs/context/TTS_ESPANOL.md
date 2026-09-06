@@ -117,10 +117,25 @@ marcas por palabra.
 
 ## Lo que quedó fuera
 
-- **F5-Spanish** y **VoicePoweredAI Spanish v1**: Apache 2.0 y entrenados en
+- ~~**F5-Spanish** y **VoicePoweredAI Spanish v1**: Apache 2.0 y entrenados en
   español de verdad —lo que se pedía—, pero son F5-TTS, que es difusión.
   Demasiado pesado para CPU, y en la 4050 competirían de igual a igual con
-  Chatterbox, que puntúa mejor.
+  Chatterbox, que puntúa mejor.~~
+
+  **Descartado por una premisa equivocada, y corregido en 0.8.0.** Lo de
+  "demasiado pesado para CPU" era cierto; lo de competir de igual a igual en
+  la 4050, no, y por más de un orden de magnitud. F5 **no es autoregresivo**:
+  genera todo el audio en un número fijo de pasos en paralelo, en vez de token
+  por token como Chatterbox. Medido en la misma tarjeta: Chatterbox 0.089x
+  tiempo real, F5-Spanish 1.26x. Veintisiete veces más rápido, calidad pareja
+  al oído y licencia CC0. Es el motor que quedó
+  ([`tools/f5/README.md`](../../tools/f5/README.md)).
+
+  La lección para la próxima comparativa: **el throughput es criterio de
+  primera clase, no un detalle a mirar después**. Esta tabla ordenó los
+  candidatos por calidad de voz y dejó la velocidad como nota al pie, y por
+  eso el ganador tardó tres semanas en revelarse inservible para leer un
+  libro.
 - **XTTS-v2** (Coqui): licencia CPML, **prohíbe el uso comercial**, o sea que
   no es de uso libre. Y Coqui cerró: nadie lo mantiene.
 - **CosyVoice2**, **Orpheus** (3B sobre Llama), **IndexTTS-2**: no entran en

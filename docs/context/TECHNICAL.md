@@ -23,7 +23,7 @@ pieza es como es está en [RELEASES.md](../RELEASES.md).
 | UI | Flutter + Material 3 |
 | Estado | Riverpod 2.x |
 | Navegación | GoRouter |
-| Motores TTS | Edge (WebSocket propio en Dart), Kokoro, Piper y Chatterbox (HTTP), motor del sistema (`flutter_tts`) |
+| Motores TTS | Edge (WebSocket propio en Dart), Kokoro, Piper y F5 (HTTP), motor del sistema (`flutter_tts`) |
 | Reproducción | just_audio + audio_service (MediaSession) |
 | EPUB | epubx + html |
 | Base de datos | sqflite (SQLite) |
@@ -87,19 +87,22 @@ con la ruta del audio y la lista de `WordTimestamp`.
 | **Edge** | WebSocket a `speech.platform.bing.com` | MP3 24 kHz 96 kbps | Por palabra (`WordBoundary`) |
 | **Kokoro** | HTTP a servidor propio (`/dev/captioned_speech`) | AAC-LC 24 kHz ~94 kbps | Por palabra (`x-word-timestamps`) |
 | **Piper** | HTTP a servidor propio (`/synthesize`) | WAV 22,05 kHz | Ninguno |
-| **Chatterbox** | HTTP a servidor propio (`/tts`, `voice_mode: clone`) | MP3 24 kHz | Ninguno |
+| **F5** | HTTP a servidor propio (`/tts`, voz clonada) | MP3 24 kHz | Ninguno |
 | **Teléfono** | `flutter_tts`, motor del sistema | WAV | Ninguno |
 
-**Chatterbox necesita GPU y solo sirve español.** Corre en una laptop
-personal, no en `voicex-server` (sin GPU) — ver
-[`docs/context/TTS_ESPANOL.md`](TTS_ESPANOL.md) para la comparativa que llevó
-a elegirlo y [`ACCESO_REMOTO.md`](ACCESO_REMOTO.md) para cómo se llega a esa
-laptop por Tailscale. Es, de los tres motores propios, el más lento: ~55-75 s
-de síntesis por párrafo (más lento que tiempo real), contra los ~5 s de Kokoro
-y menos de 2 s de Piper.
+**F5 necesita GPU y solo sirve español.** Corre en una laptop personal, no
+en `voicex-server` (sin GPU) — ver
+[`docs/context/TTS_ESPANOL.md`](TTS_ESPANOL.md) para la comparativa y
+[`ACCESO_REMOTO.md`](ACCESO_REMOTO.md) para cómo se llega a esa laptop por
+Tailscale. Es el más lento de los tres motores propios —va a ~1,26x tiempo
+real en un párrafo suelto y ~0,60x en texto largo, contra los ~5x de Kokoro—,
+pero clona una voz concreta, que es lo que ninguno de los otros hace.
+
+Reemplazó a Chatterbox en 0.8.0. La calidad estaba pareja; lo que no llegaba
+era la velocidad: 0.089x tiempo real, casi tres horas de GPU por capítulo.
 
 **Solo el del teléfono funciona sin red.** Edge necesita internet; Kokoro,
-Piper y Chatterbox, una máquina encendida al otro lado. Se retiró en 0.6.0 por
+Piper y F5, una máquina encendida al otro lado. Se retiró en 0.6.0 por
 no marcar palabras y llenar la caché con WAV, y volvió en 0.7.0 al repartir la
 app a gente sin servidor propio: para ellos es el único que sigue leyendo en
 el metro, y las
@@ -111,7 +114,7 @@ aproximada y el resaltado baja de palabra a oración.
 
 ### Repliegue automático
 
-Kokoro, Piper y Chatterbox corren en una máquina de la red local que a menudo
+Kokoro, Piper y F5 corren en una máquina de la red local que a menudo
 está apagada. `ReaderNotifier._resolveEngineKind()` sondea el servidor antes de
 sintetizar y, si no responde, sustituye el motor por Edge. Dos consecuencias
 que hay que respetar:
@@ -120,7 +123,7 @@ que hay que respetar:
   no con `voiceFor(idioma)`. Pedirle `af_bella` a Edge devuelve audio vacío.
 - La clave de caché nombra el motor que *produjo* el audio, no el seleccionado.
 
-Chatterbox tiene además una condición previa al sondeo, no una consecuencia de
+F5 tiene además una condición previa al sondeo, no una consecuencia de
 él: si el libro no está en español, `_resolveEngineKind` cae a Edge sin ni
 siquiera preguntarle al servidor — ese motor no ofrece otro idioma.
 
@@ -261,7 +264,7 @@ sustituyen antes de insertar.
 
 | Campo | Default | Notas |
 |---|---|---|
-| `ttsProvider` | `edge` | `edge` · `kokoro` · `piper` · `chatterbox` · `android`. `AppSettings.resolveEngine()` devuelve a `edge` cualquier otro valor guardado por una versión anterior |
+| `ttsProvider` | `edge` | `edge` · `kokoro` · `piper` · `f5` · `android`. `AppSettings.resolveEngine()` devuelve a `edge` cualquier otro valor guardado por una versión anterior |
 | `gender` | `female` | Solo para derivar la voz de Edge si no hay una explícita |
 | `edgeVoiceEs` / `edgeVoiceEn` | `''` | Vacío = derivar de `gender` con `voiceMap` |
 | `kokoroBaseUrl` | `''` | p. ej. `http://192.168.1.50:8880` |
@@ -270,8 +273,8 @@ sustituyen antes de insertar.
 | `piperVoiceEs` | `es_AR-daniela-high` | Un modelo por idioma: sus voces no son multilingües |
 | `piperVoiceEn` | `en_US-lessac-high` | |
 | `piperLengthScale` | `1.0` | Longitud de fonema; >1 más pausado. Va grabado en el audio |
-| `chatterboxBaseUrl` | `''` | Compilada, no compartida por Ajustes: dirección de tailnet de la laptop personal con GPU |
-| `chatterboxVoiceEs` | `piper-mx-clon.wav` | Nombre del audio de referencia clonado en el servidor. Sin `chatterboxVoiceEn`: el motor no ofrece inglés |
+| `f5BaseUrl` | `''` | Compilada, no compartida por Ajustes: dirección de tailnet de la laptop personal con GPU |
+| `f5VoiceEs` | `esposa` | Nombre de la voz clonada que sirve `tools/f5`. Sin `f5VoiceEn`: el motor no ofrece inglés |
 | `playbackSpeed` | `1.0` | Se aplica al reproducir, no re-sintetiza |
 | `edgeRate` / `edgeVolume` | `+0%` | Neutros a propósito, para que la caché no dependa de ellos |
 | `highlightSentences` / `highlightWords` | `true` | |
@@ -288,9 +291,8 @@ La dirección de los servidores propios y el token **no se escriben en Ajustes**
 van en el binario, con `--dart-define-from-file` y un fichero por probador (ver
 [`tools/release/README.md`](../../tools/release/README.md)). `TtsServerConfig` es
 el único sitio que los lee, y `availableEngines` decide qué motores puede
-ofrecer cada compilación: Edge y el del teléfono siempre, Kokoro, Piper y
-Chatterbox solo si
-traen dirección.
+ofrecer cada compilación: Edge y el del teléfono siempre, Kokoro, Piper y F5
+solo si traen dirección.
 
 `voiceForEngine(engine, lang)` resuelve la voz de un motor concreto;
 `voiceFor(lang)` es el atajo para el seleccionado. La distinción importa en el
@@ -328,7 +330,7 @@ el audio suene con normalidad.
 |---------|----------|
 | Claves API | Edge usa el token público del navegador. Los motores propios van detrás de un proxy que exige `Authorization: Bearer`, con **un token por probador** compilado en su APK |
 | Permisos | `INTERNET`, `FOREGROUND_SERVICE`, scoped storage, y `RECORD_AUDIO` solo para las notas de voz de los reportes, pedido al pulsar grabar |
-| Servidores propios | Kokoro y Piper **solo escuchan en loopback**; el único camino es el proxy (`tools/proxy`), que valida token, limita el ritmo y publica seis rutas exactas. Chatterbox es la excepción: escucha en todas las interfaces y se llega directo por Tailscale, sin proxy ni token — no se reparte a probadores, así que el modelo de acceso es "solo mis propios dispositivos en la tailnet", no "público detrás de un token" |
+| Servidores propios | Kokoro y Piper **solo escuchan en loopback**; el único camino es el proxy (`tools/proxy`), que valida token, limita el ritmo y publica seis rutas exactas. F5 es la excepción: escucha en todas las interfaces y se llega directo por Tailscale, sin proxy ni token — no se reparte a probadores, así que el modelo de acceso es "solo mis propios dispositivos en la tailnet", no "público detrás de un token" |
 | Datos del usuario | Los EPUB nunca salen del dispositivo. El texto de un párrafo sí viaja al servidor propio para sintetizarlo, y **no se registra en ninguna parte**: el log guarda su longitud, nunca su contenido |
 | Telemetría | Log de acceso en el proxy propio -alias, ruta, código, duración, bytes, caracteres-, 14 días. Reportes de error automáticos, saneados para que una excepción no arrastre texto del libro. Nada sale hacia terceros |
 | Lo que el APK no puede esconder | La dirección y el token son extraíbles con `strings` sobre el binario. El token es un **identificador revocable**, no un secreto; lo que protege la máquina es la revocación individual, el límite de ritmo y apagar el túnel |

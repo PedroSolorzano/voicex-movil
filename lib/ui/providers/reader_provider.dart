@@ -16,7 +16,7 @@ import '../../storage/repositories.dart';
 import '../../tts/models.dart';
 import '../../tts/tts_factory.dart';
 import '../../tts/tts_provider.dart';
-import '../../tts/chatterbox_tts_provider.dart';
+import '../../tts/f5_tts_provider.dart';
 import '../../tts/kokoro_tts_provider.dart';
 import '../../tts/piper_tts_provider.dart';
 import '../../tts/server_health.dart';
@@ -543,9 +543,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
       'kokoro' =>
         'kokoro-$lang-${settings.voiceForEngine('kokoro', book.language)}',
       // Sin idioma en la clave: este motor solo sirve español (ver
-      // ChatterboxTtsProvider), así que no hay ambigüedad que resolver.
-      'chatterbox' =>
-        'chatterbox-${settings.voiceForEngine('chatterbox', book.language)}',
+      // F5TtsProvider), así que no hay ambigüedad que resolver.
+      'f5' => 'f5-${settings.voiceForEngine('f5', book.language)}',
       // La voz del teléfono entra en la clave porque cambiarla cambia el audio,
       // y el idioma porque una voz puede servir a los dos.
       'android' =>
@@ -598,10 +597,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
   Future<String> _resolveEngineKind(AppSettings settings, String lang) async {
     var kind = settings.ttsProvider;
 
-    // Chatterbox solo sirve español: sus dos voces son clones pensados para
-    // eso, y el modelo no se probó (ni se confía) para inglés. Ni se hace el
-    // health check -- directo a Edge, igual que un servidor no configurado.
-    if (kind == 'chatterbox' && !lang.toLowerCase().startsWith('es')) {
+    // F5 solo sirve español: el checkpoint es un finetune en español, y sus
+    // voces son clones grabados para eso. Ni se hace el health check --
+    // directo a Edge, igual que un servidor no configurado.
+    if (kind == 'f5' && !lang.toLowerCase().startsWith('es')) {
       return 'edge';
     }
 
@@ -614,7 +613,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
                   token: settings.serverToken),
               'piper' => await PiperTtsProvider.healthOf(url,
                   token: settings.serverToken),
-              'chatterbox' => await ChatterboxTtsProvider.healthOf(url,
+              'f5' => await F5TtsProvider.healthOf(url,
                   token: settings.serverToken),
               _ => ServerHealth.ok,
             };
@@ -690,7 +689,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
     if (chosen != null) {
       // A hit under the reader's own engine proves it is in use for this
       // paragraph, whatever a past health check found. Without this, a label
-      // like "Edge (Chatterbox no disponible)" from one failed lookup could
+      // like "Edge (F5 no disponible)" from one failed lookup could
       // sit on screen through any number of later paragraphs served — like
       // this one — straight from cache, with no synthesis call to refresh it.
       _activeEngineKind = settings.ttsProvider;
@@ -1282,12 +1281,12 @@ class ReaderNotifier extends Notifier<ReaderState> {
     final startedAt = DateTime.now();
     var synthesized = 0;
 
-    // Cuánto tardó Chatterbox de verdad en esta descarga, para calibrar su
+    // Cuánto tardó F5 de verdad en esta descarga, para calibrar su
     // propio techo de espera. Vive por descarga y no se persiste: un capítulo
     // recalibra en los primeros párrafos, y así un cambio de máquina o de
     // servidor no arrastra una medición vieja.
-    var chatterboxTotal = Duration.zero;
-    var chatterboxSamples = 0;
+    var f5Total = Duration.zero;
+    var f5Samples = 0;
 
     for (var chapterIdx = from; chapterIdx < last; chapterIdx++) {
       for (final para in chapters[chapterIdx].paragraphs) {
@@ -1300,6 +1299,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
           continue;
         }
 
+        // Fuera del try: un timeout también se cronometra, y el catch lo
+        // necesita para poder aprender de él.
+        final paragraphStartedAt = DateTime.now();
         try {
           // Re-resolved per paragraph: the server can drop out mid-download,
           // and the key fixed before the loop would then file Edge's audio
@@ -1318,21 +1320,20 @@ class ReaderNotifier extends Notifier<ReaderState> {
           }
           final voice = _cacheKeyFor(dlKind, settings, book);
 
-          // Chatterbox corre en una GPU cualquiera, no en la que se usó para
+          // F5 corre en una GPU cualquiera, no en la que se usó para
           // calibrar los 240 s por defecto: en una tarjeta justa un párrafo
           // tarda varias veces eso, y rendirse antes de tiempo tira a la
           // basura una generación que el servidor sí terminó. El techo se
           // reajusta con lo que esta máquina viene tardando de verdad.
-          if (dlProvider is ChatterboxTtsProvider) {
+          if (dlProvider is F5TtsProvider) {
             dlProvider.synthesisTimeout = TtsTimeouts.adaptiveSynthesis(
-              measured: chatterboxSamples == 0
+              measured: f5Samples == 0
                   ? Duration.zero
-                  : chatterboxTotal ~/ chatterboxSamples,
-              samples: chatterboxSamples,
+                  : f5Total ~/ f5Samples,
+              samples: f5Samples,
             );
           }
 
-          final paragraphStartedAt = DateTime.now();
           final result = await dlProvider.synthesize(
             text: para.rawText,
             voice: settings.voiceForEngine(dlKind, book.language),
@@ -1340,12 +1341,12 @@ class ReaderNotifier extends Notifier<ReaderState> {
             volume: settings.edgeVolume,
           );
 
-          // Solo Chatterbox y solo lo que salió bien: los tiempos de Edge son
+          // Solo F5 y solo lo que salió bien: los tiempos de Edge son
           // un orden de magnitud menores y bajarían el promedio justo cuando
           // el servidor propio vuelve, dejando el techo demasiado corto.
-          if (dlKind == 'chatterbox') {
-            chatterboxTotal += DateTime.now().difference(paragraphStartedAt);
-            chatterboxSamples++;
+          if (dlKind == 'f5') {
+            f5Total += DateTime.now().difference(paragraphStartedAt);
+            f5Samples++;
           }
 
           final ext = result.filePath.split('.').last;
@@ -1365,6 +1366,21 @@ class ReaderNotifier extends Notifier<ReaderState> {
           final elapsed = DateTime.now().difference(startedAt).inMilliseconds;
           state = state.copyWith(
               downloadSecondsPerParagraph: elapsed / 1000 / synthesized);
+        } on TimeoutException catch (e) {
+          dev.log('[Reader] Download ch$chapterIdx para ${para.index}: $e');
+          state = state.copyWith(downloadFailed: state.downloadFailed + 1);
+
+          // Agotar el presupuesto también es una medición: dice que esta
+          // máquina necesita **al menos** eso. Sin contarlo, el techo
+          // adaptativo no puede arrancar nunca en un equipo más lento que el
+          // de calibración —para ganar paciencia necesitaría un éxito, y para
+          // tener un éxito necesitaría la paciencia—, que es exactamente cómo
+          // se perdieron horas de GPU con el motor anterior.
+          if (dlKind == 'f5') {
+            f5Total += DateTime.now().difference(paragraphStartedAt);
+            f5Samples++;
+          }
+          if (silent) _downloadCancelled = true;
         } catch (e) {
           dev.log('[Reader] Download ch$chapterIdx para ${para.index}: $e');
           state = state.copyWith(downloadFailed: state.downloadFailed + 1);
@@ -1402,9 +1418,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
       switch (settings.ttsProvider) {
         'piper' => 2.0,
         'kokoro' => 5.0,
-        // Autoregresivo en GPU: ~55-75 s medidos para un párrafo de ~25 s de
-        // audio, más lento que tiempo real -- no confundir con Kokoro/Piper.
-        'chatterbox' => 65.0,
+        // En GPU y por encima de tiempo real: medido, ~23 s para un párrafo de
+        // ~29 s de audio. Sigue siendo un orden de magnitud más lento que
+        // Kokoro, que corre en CPU pero a 5x tiempo real.
+        'f5' => 25.0,
         'android' => 1.5, // en el propio teléfono, sin red de por medio
         _ => 3.0, // Edge, dominated by the network
       };
@@ -1419,13 +1436,13 @@ class ReaderNotifier extends Notifier<ReaderState> {
     if (book == null || !settings.prefetchOnWifi || state.isDownloading) return;
 
     // Only worth doing for a home server; Edge already streams on demand and
-    // its audio is cached paragraph by paragraph as it plays. Chatterbox solo
+    // its audio is cached paragraph by paragraph as it plays. F5 solo
     // vale la pena si el libro está en español -- mismo criterio que
     // _resolveEngineKind.
     final hasServer = switch (settings.ttsProvider) {
       'kokoro' => settings.hasKokoroServer,
       'piper' => settings.hasPiperServer,
-      'chatterbox' => settings.hasChatterboxServer &&
+      'f5' => settings.hasF5Server &&
           book.language.toLowerCase().startsWith('es'),
       _ => false,
     };
@@ -1443,7 +1460,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
           token: settings.serverToken),
       'piper' => await PiperTtsProvider.isReachable(settings.selfHostedUrl,
           token: settings.serverToken),
-      'chatterbox' => await ChatterboxTtsProvider.isReachable(
+      'f5' => await F5TtsProvider.isReachable(
           settings.selfHostedUrl,
           token: settings.serverToken),
       _ => false,

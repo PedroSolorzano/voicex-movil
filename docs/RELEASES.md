@@ -9,6 +9,80 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## 0.8.0-preview.1 — 2026-09-06
+
+Se va Chatterbox, entra F5-TTS. No por calidad —quedaron parejos escuchándolos
+a ciegas— sino porque Chatterbox nunca pudo servir para un audiolibro.
+
+### El motor que sonaba bien pero no llegaba a tiempo
+
+Chatterbox va a **0.089x tiempo real** en la RTX 4050: un capítulo de 37
+párrafos son ~2.9 horas de GPU. Y el problema no era solo esperar. Es
+autoregresivo y de un solo worker, así que mientras generaba no contestaba
+**ni su propio sondeo de salud**; la app lo leía como servidor caído y se
+replegaba a Edge en mitad de una descarga
+([`docs/bugs/CHATTERBOX_DESCARGAS.md`](bugs/CHATTERBOX_DESCARGAS.md)). Peor
+aún: el servidor terminaba el audio segundos después de que el cliente se
+había rendido, así que se tiraba a la basura una generación entera.
+
+**F5-Spanish va a 1.26x tiempo real en la misma tarjeta**, con el mismo
+`nfe_step` que hace falta para que lea sin tartamudear. El mismo capítulo baja
+de 2.9 horas a unos 26 minutos. La diferencia es arquitectónica y no de
+ajuste: F5 no es autoregresivo, genera en un número fijo de pasos en paralelo.
+
+Eso contradice lo que suponía
+[`TTS_ESPANOL.md`](context/TTS_ESPANOL.md) cuando lo descartó —"en la 4050
+competirían de igual a igual con Chatterbox"—, y la corrección está anotada
+ahí. Licencia CC0, todavía más permisiva que el MIT de Chatterbox.
+
+### El servidor contesta mientras trabaja
+
+`tools/f5` es propio, no un clon externo, y eso permitió arreglar de raíz el
+bug de arriba: `/tts` es una función sincrónica, así que FastAPI la corre en
+otro hilo y el bucle de eventos queda libre. **Medido: `/health` contesta en
+4-9 ms mientras la GPU lleva 25 segundos sintetizando.** Chatterbox, en la
+misma situación, moría a los 5.000 y 8.000 ms.
+
+Sale MP3 en vez del WAV nativo de 24 kHz, porque el WAV sin comprimir es la
+razón medida por la que Piper nunca se repartió a probadores.
+
+### Dos defectos del modelo, y cómo se tapan
+
+Con el `nfe_step` que trae F5 por defecto (32) aparecen tartamudeos —"trabajo"
+sale "trabajo abajo"—, verificado transcribiendo la salida y comparándola con
+el texto pedido. A **64** la lectura sale al 100 % y sigue por encima de
+tiempo real; cuesta la mitad de velocidad y vale la pena.
+
+Y hay palabras sueltas que pronuncia mal: "quizá" suena "guizás". No es
+sistemático de la "qu" —probado con pares mínimos *quiso/guiso*,
+*quita/guita*—, así que se corrige con una tabla de sustituciones fonéticas en
+el servidor (`voices/sustituciones.json`). Los nombres propios extranjeros
+sufren lo mismo (`Jack Sawyer` → "jakq sayer") y mejoran con el mismo truco,
+pero esos dependen del libro y no del motor.
+
+### El presupuesto de espera se calcula, no se adivina
+
+Probando en el teléfono apareció un fallo que vale la pena dejar escrito
+porque es el mismo error de razonamiento que ya había costado horas con
+Chatterbox: el timeout de síntesis se fijó en 120 s midiendo **un** párrafo de
+prueba, y la primera descarga real murió en la sinopsis de la contraportada de
+La Odisea, cuatro veces más larga.
+
+Ahora el presupuesto sale del largo del texto —250 ms por carácter, el doble
+de los 0,13 s/carácter medidos— con el valor fijo como piso. Y un timeout
+**cuenta como medición**: dice que esta máquina necesita al menos eso, así que
+el techo adaptativo puede crecer. Sin eso no arrancaba nunca en hardware más
+lento que el de calibración: para ganar paciencia hacía falta un éxito, y para
+tener un éxito hacía falta la paciencia.
+
+### Lo que se llevó por delante
+
+El audio cacheado de Chatterbox se retira en el arranque, igual que se hizo
+con el motor de Android en 0.6.0: no lo puede reproducir ningún motor que
+quede, así que solo ocupaba disco.
+
+---
+
 ## 0.7.2-preview.1 — 2026-09-05
 
 Dos correcciones que salen del mismo incidente, investigado cruzando el

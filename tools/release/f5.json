@@ -1,0 +1,5 @@
+{
+  "_comentario": "A diferencia de KOKORO_URL/PIPER_URL, esto SÍ va en git: sin proxy y sin token, la barrera de seguridad es la tailnet, no la dirección (ver docs/context/ACCESO_REMOTO.md, segundo nodo). Combinar con tu archivo personal en el mismo build: --dart-define-from-file se puede repetir.",
+
+  "F5_URL": "http://100.102.250.94:8005"
+}

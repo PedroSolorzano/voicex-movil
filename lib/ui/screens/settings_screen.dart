@@ -9,7 +9,7 @@ import '../../config/server_config.dart';
 import '../../config/settings.dart';
 import '../../storage/repositories.dart';
 import '../../tts/tts_factory.dart';
-import '../../tts/chatterbox_tts_provider.dart';
+import '../../tts/f5_tts_provider.dart';
 import '../../tts/kokoro_tts_provider.dart';
 import '../../tts/piper_tts_provider.dart';
 import '../../tts/server_health.dart';
@@ -84,7 +84,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final health = switch (_settings.ttsProvider) {
       'piper' =>
         await PiperTtsProvider.healthOf(url, token: _settings.serverToken),
-      'chatterbox' => await ChatterboxTtsProvider.healthOf(url,
+      'f5' => await F5TtsProvider.healthOf(url,
           token: _settings.serverToken),
       _ =>
         await KokoroTtsProvider.healthOf(url, token: _settings.serverToken),
@@ -175,7 +175,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ('edge', 'Edge', Icons.cloud_outlined),
                   ('kokoro', 'Kokoro', Icons.home_outlined),
                   ('piper', 'Piper', Icons.record_voice_over_outlined),
-                  ('chatterbox', 'Chatterbox', Icons.graphic_eq),
+                  ('f5', 'F5', Icons.graphic_eq),
                   ('android', 'Teléfono', Icons.phone_android),
                 ].where((e) => TtsServerConfig.availableEngines.contains(e.$1)))
                   ChoiceChip(
@@ -199,12 +199,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   'Voces entrenadas en cada idioma, en esa misma computadora. Muy '
                       'rápido, pero no marca las palabras: el resaltado se calcula '
                       'por oración de forma aproximada.',
-                'chatterbox' =>
+                'f5' =>
                   'Voz clonada, generada en una laptop personal con GPU. Solo '
                       'para libros en español, y solo mientras esa laptop esté '
                       'encendida: si no responde, la app usa Edge automáticamente. '
-                      'Más lento que los demás motores propios, y no marca las '
-                      'palabras.',
+                      'No marca las palabras.',
                 'android' =>
                   'El motor de voz del propio teléfono. El único que lee sin '
                       'internet y sin servidor, así que es el que sigue '
@@ -324,17 +323,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onPick: (id) => _update(switch (s.ttsProvider) {
                 'kokoro' => s.copyWith(kokoroVoiceEs: id),
                 'piper' => s.copyWith(piperVoiceEs: id),
-                'chatterbox' => s.copyWith(chatterboxVoiceEs: id),
+                'f5' => s.copyWith(f5VoiceEs: id),
                 'android' => s.copyWith(androidVoiceEs: id),
                 _ => s.copyWith(edgeVoiceEs: id),
               }),
               onPreview: _preview,
               previewing: _previewing,
             ),
-            // Sin fila de inglés para Chatterbox: no ofrece ese idioma (ver
-            // ChatterboxTtsProvider), y mostrarla dejaría un selector cuyo
+            // Sin fila de inglés para F5: no ofrece ese idioma (ver
+            // F5TtsProvider), y mostrarla dejaría un selector cuyo
             // onPick no tendría dónde guardar nada.
-            if (s.ttsProvider != 'chatterbox') ...[
+            if (s.ttsProvider != 'f5') ...[
               const SizedBox(height: 8),
               _VoiceTile(
                 label: 'Inglés',

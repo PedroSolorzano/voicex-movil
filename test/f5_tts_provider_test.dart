@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:voicex_movil/tts/chatterbox_tts_provider.dart';
+import 'package:voicex_movil/tts/f5_tts_provider.dart';
 import 'package:voicex_movil/tts/server_health.dart';
 
 /// Reproduces the incident in `docs/bugs/CHATTERBOX_DESCARGAS.md`: a paragraph
@@ -31,7 +31,7 @@ void main() {
       'next health check', () async {
     var healthHits = 0;
     await serve((req) {
-      if (req.uri.path == '/api/model-info') {
+      if (req.uri.path == '/health') {
         healthHits++;
         req.response
           ..statusCode = 200
@@ -40,16 +40,16 @@ void main() {
       // POST /tts: never responds, forcing the client's own timeout.
     });
 
-    final provider = ChatterboxTtsProvider(baseUrl,
+    final provider = F5TtsProvider(baseUrl,
         synthesisTimeout: const Duration(milliseconds: 50));
 
     await expectLater(
       provider.synthesize(
-          text: 'hola', voice: 'voz-propia.mp3', rate: '1.0', volume: '1.0'),
+          text: 'hola', voice: 'esposa', rate: '1.0', volume: '1.0'),
       throwsA(isA<TimeoutException>()),
     );
 
-    expect(await ChatterboxTtsProvider.healthOf(baseUrl),
+    expect(await F5TtsProvider.healthOf(baseUrl),
         ServerHealth.unreachable);
     expect(healthHits, 0,
         reason: 'la probe tiene que saltarse, no solo fallar');
@@ -68,15 +68,15 @@ void main() {
       }
     });
 
-    final provider = ChatterboxTtsProvider(baseUrl);
+    final provider = F5TtsProvider(baseUrl);
 
     await expectLater(
       provider.synthesize(
-          text: 'hola', voice: 'voz-propia.mp3', rate: '1.0', volume: '1.0'),
+          text: 'hola', voice: 'esposa', rate: '1.0', volume: '1.0'),
       throwsA(isA<HttpException>()),
     );
 
-    expect(await ChatterboxTtsProvider.healthOf(baseUrl), ServerHealth.ok);
+    expect(await F5TtsProvider.healthOf(baseUrl), ServerHealth.ok);
   });
 
   test('el silencio no se encoge al presupuesto de esa síntesis', () async {
@@ -88,7 +88,7 @@ void main() {
     // La expiración en sí se prueba en `server_health_test.dart`.
     var healthHits = 0;
     await serve((req) {
-      if (req.uri.path == '/api/model-info') {
+      if (req.uri.path == '/health') {
         healthHits++;
         req.response
           ..statusCode = 200
@@ -96,19 +96,19 @@ void main() {
       }
     });
 
-    final provider = ChatterboxTtsProvider(baseUrl,
+    final provider = F5TtsProvider(baseUrl,
         synthesisTimeout: const Duration(milliseconds: 50));
 
     await expectLater(
       provider.synthesize(
-          text: 'hola', voice: 'voz-propia.mp3', rate: '1.0', volume: '1.0'),
+          text: 'hola', voice: 'esposa', rate: '1.0', volume: '1.0'),
       throwsA(isA<TimeoutException>()),
     );
 
     // Muy por encima de los 50 ms de esa síntesis, muy por debajo del cooldown.
     await Future<void>.delayed(const Duration(milliseconds: 200));
 
-    expect(await ChatterboxTtsProvider.healthOf(baseUrl),
+    expect(await F5TtsProvider.healthOf(baseUrl),
         ServerHealth.unreachable);
     expect(healthHits, 0);
   });
