@@ -9,6 +9,68 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## 0.9.0-preview.1 — 2026-09-06
+
+Dos cosas que se cruzan en la misma pantalla: descargar solo lo que falta, y
+dejar de romper la descarga cuando el servidor está ocupado.
+
+### Descargar desde donde vas leyendo
+
+"Descargar → Este capítulo" bajaba el capítulo entero desde el párrafo 0. Quien
+leía en silencio hasta la mitad y ahí decidía escuchar pagaba de nuevo la
+síntesis de todo lo que ya había leído: con F5, media hora de GPU tirada por un
+capítulo mediano.
+
+Ahora hay una opción más, **"Desde aquí hasta el final del capítulo"**, que
+arranca en el párrafo donde está la lectura. "Este capítulo (completo)" se
+queda como estaba, porque a veces uno quiere volver a escuchar desde el
+principio. La opción nueva solo aparece cuando hay algo que saltarse.
+
+El contador de tiempo y la barra descuentan lo salteado, así que la estimación
+del diálogo sigue siendo la de lo que realmente se va a sintetizar. Un detalle
+que conviene saber: **el contador de "capítulos descargados" no sube con una
+descarga parcial**, porque cuenta capítulos completos. No es un fallo; si más
+tarde se pide el capítulo entero, los párrafos ya bajados se saltan y solo se
+sintetiza el principio que faltaba.
+
+### El servidor ocupado ya no rompe la descarga
+
+Dos reportes del mismo probador, mismo libro, decían que las descargas volvían
+a fallar después del arreglo de 0.7.2. La causa estaba en un supuesto que dejó
+de valer al cambiar de motor.
+
+Chatterbox no podía contestar mientras generaba, ni siquiera su sondeo de
+salud, así que un servidor ocupado se delataba solo: el sondeo se agotaba. F5
+contesta en milisegundos desde otro hilo —que es justamente por lo que se lo
+eligió—, y por eso un servidor **tomado** se leía como servidor **libre**. La
+app le mandaba el párrafo siguiente, ese pedido se quedaba haciendo cola por la
+GPU, y la cola consumía la espera del teléfono hasta agotarla. De ahí el
+"descarga incompleta, un párrafo fallido".
+
+Lo que faltaba estaba a la vista: el servidor ya publicaba `"busy"` en su
+`/health` y la app tiraba el cuerpo de la respuesta sin leerlo. Ahora lo lee, y
+"ocupado" pasó a ser un estado propio en vez de confundirse con "caído":
+Ajustes lo dice con esas palabras, la barra del lector escribe "F5 ocupado" en
+vez de "F5 no disponible", y el veredicto se reconsulta a los 5 s en vez de a
+los 60, que es lo que permite volver al servidor propio en cuanto se libera en
+lugar de terminar el capítulo por Edge.
+
+Alrededor de eso, dos fugas del mismo incidente:
+
+- Cambiar de red —o tocar "Probar conexión"— borraba lo que la app sabía del
+  *servidor* junto con lo que sabía de *su propia conexión*. Ahora solo borra
+  lo segundo: un cambio de WiFi no dice nada sobre si el servidor terminó la
+  síntesis que dejó a medias.
+- Android emite varios eventos de conectividad por cada transición de red, y
+  cada uno arrancaba su propia prelectura: dos descargas solapadas contra una
+  sola GPU. Van con debounce, y la descarga marca que empezó antes de sus
+  primeras esperas, no después.
+
+Detalle completo en
+[`docs/bugs/CHATTERBOX_DESCARGAS.md`](bugs/CHATTERBOX_DESCARGAS.md).
+
+---
+
 ## 0.8.0-preview.1 — 2026-09-06
 
 Se va Chatterbox, entra F5-TTS. No por calidad —quedaron parejos escuchándolos

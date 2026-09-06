@@ -38,7 +38,11 @@ const _scrollSettleDelay = Duration(milliseconds: 900);
 const _partiallyVisible = 0.05;
 
 /// How much to pre-synthesize for offline listening.
-enum _DownloadScope { chapter, ahead, book }
+/// `fromHere` es `chapter` recortado por donde va la lectura: mismo capítulo,
+/// desde el párrafo actual. Se ofrece aparte y no reemplaza a `chapter` porque
+/// quien leyó en silencio a veces sí quiere el capítulo entero para escucharlo
+/// de nuevo desde el principio.
+enum _DownloadScope { chapter, fromHere, ahead, book }
 
 class ReaderScreen extends ConsumerStatefulWidget {
   final int bookId;
@@ -320,6 +324,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               onSettings: () => context.push('/settings'),
               onTypography: () => showTypographySheet(context),
               isDownloading: reader.isDownloading,
+              canDownloadFromHere: reader.paragraphIndex > 0,
               onCancelDownload:
                   ref.read(readerProvider.notifier).cancelDownload,
               onDownload: (scope) => _download(context, scope, settings),
@@ -359,12 +364,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
     final (count, label) = switch (scope) {
       _DownloadScope.chapter => (1, 'este capítulo'),
+      _DownloadScope.fromHere => (1, 'desde aquí hasta el final del capítulo'),
       _DownloadScope.ahead => (
           settings.prefetchChapters,
           'los próximos ${settings.prefetchChapters} capítulos'
         ),
       _DownloadScope.book => (chapters - from, 'el resto del libro'),
     };
+    final fromParagraph =
+        scope == _DownloadScope.fromHere ? reader.paragraphIndex : 0;
 
     // Estimate before starting: chapters in this book run to ~450 paragraphs,
     // so even "the next three" is over an hour with Kokoro. Confirm whenever
@@ -373,7 +381,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     var paragraphs = 0;
     if (book != null) {
       for (var c = from; c < (from + count).clamp(0, chapters); c++) {
-        paragraphs += book.chapters[c].paragraphs.length;
+        paragraphs += book.chapters[c].paragraphs.length -
+            (c == from ? fromParagraph : 0);
       }
     }
     final estimate =
@@ -406,7 +415,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text('Descargando $label…')));
-    await notifier.downloadChapters(from, count);
+    await notifier.downloadChapters(from, count,
+        fromParagraph: fromParagraph);
   }
 
   /// Long-pressing a word offers to hear it, define it, or send it elsewhere.
@@ -634,6 +644,10 @@ class _TopBar extends StatelessWidget {
   final VoidCallback onCancelDownload;
   final bool isDownloading;
 
+  /// En el párrafo 0, "desde aquí" y "este capítulo" son la misma descarga:
+  /// ofrecer las dos solo obliga a elegir entre opciones idénticas.
+  final bool canDownloadFromHere;
+
   const _TopBar({
     required this.title,
     required this.palette,
@@ -646,6 +660,7 @@ class _TopBar extends StatelessWidget {
     required this.onDownload,
     required this.onCancelDownload,
     required this.isDownloading,
+    required this.canDownloadFromHere,
   });
 
   @override
@@ -689,14 +704,18 @@ class _TopBar extends StatelessWidget {
                 icon: Icon(Icons.download_outlined, color: palette.text),
                 tooltip: 'Descargar para escuchar sin conexión',
                 onSelected: onDownload,
-                itemBuilder: (_) => const [
-                  PopupMenuItem(
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
                       value: _DownloadScope.chapter,
-                      child: Text('Este capítulo')),
-                  PopupMenuItem(
+                      child: Text('Este capítulo (completo)')),
+                  if (canDownloadFromHere)
+                    const PopupMenuItem(
+                        value: _DownloadScope.fromHere,
+                        child: Text('Desde aquí hasta el final del capítulo')),
+                  const PopupMenuItem(
                       value: _DownloadScope.ahead,
                       child: Text('Los próximos capítulos')),
-                  PopupMenuItem(
+                  const PopupMenuItem(
                       value: _DownloadScope.book,
                       child: Text('Libro completo')),
                 ],

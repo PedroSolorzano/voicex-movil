@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:developer' as dev;
 import 'dart:io';
 
@@ -10,7 +11,14 @@ import 'tts_endpoint.dart';
 /// is not a server that went down, and the two need different words on screen.
 /// Before this, every failure collapsed into a single `false` whose reason only
 /// ever reached `dev.log`.
-enum ServerHealth { ok, unreachable, unauthorized, error }
+///
+/// [busy] is the server answering that it is there but occupied: F5 serves
+/// `/health` off the synthesis thread and reports `busy` while its single GPU
+/// lock is taken (`tools/f5/server.py`). Sending it work anyway does not fail
+/// fast -- the request blocks on that lock and burns the client's synthesis
+/// budget waiting in line -- so it counts as not usable, but for a different
+/// reason and with different words on screen.
+enum ServerHealth { ok, unreachable, unauthorized, error, busy }
 
 extension ServerHealthX on ServerHealth {
   bool get isUsable => this == ServerHealth.ok;
@@ -31,6 +39,10 @@ Duration _ttlFor(ServerHealth health) => switch (health) {
       // A rejected key will still be rejected in five seconds; re-probing only
       // burns battery and log lines.
       ServerHealth.unauthorized => _ttlOk,
+      // A busy server is the one verdict that flips on its own, without
+      // anything changing on this end: the short TTL is what lets a download
+      // come back to it as soon as the lock frees, instead of finishing the
+      // chapter on Edge.
       _ => _ttlFail,
     };
 
@@ -41,22 +53,36 @@ final Map<String, ({DateTime at, ServerHealth health})> _cache = {};
 final Map<String, DateTime> _busyUntil = {};
 
 /// Forgets every cached verdict, so the next probe really asks the server.
-void resetServerHealthCache() {
-  _cache.clear();
-  _busyUntil.clear();
-}
+///
+/// Deliberately does **not** clear [_busyUntil]. The cache holds what this
+/// phone knows about *its own connection* -- worthless the moment the network
+/// changes -- while the busy window holds what it knows about *the server*,
+/// which a change of Wi-Fi says nothing about. Clearing both together is how
+/// the download bug came back after its first fix: the two callers that reset
+/// on network change (the button in Ajustes, and every
+/// `onConnectivityChanged` event) reopened the window against a server that
+/// was still generating, and the paragraphs behind it queued up and timed out
+/// (`docs/bugs/CHATTERBOX_DESCARGAS.md`).
+void resetServerHealthCache() => _cache.clear();
+
+/// Forgets the busy windows too. Only for tests: nothing in the app knows
+/// better than the server whether it is still working.
+void resetBusyWindows() => _busyUntil.clear();
 
 /// Marks the server behind [healthUri] as likely still finishing a synthesis
 /// the client gave up waiting for, so [probeServer] skips the network and
-/// reports [ServerHealth.unreachable] until [cooldown] elapses.
+/// reports [ServerHealth.busy] until [cooldown] elapses.
 ///
-/// Chatterbox is a single-worker, autoregressive server: a request that blew
-/// through its synthesis timeout is not necessarily dead — it may still be
-/// generating in the background, since nothing tells it to stop when the
-/// client disconnects — and while it does, its own lightweight health
-/// endpoint is blocked too. Without this, every following paragraph of the
-/// same download re-probes health every ~13 s and fails the same way for
-/// minutes (see `docs/bugs/CHATTERBOX_DESCARGAS.md`).
+/// This is the *inferred* half of the same verdict a server can now report
+/// itself. It still earns its place: it covers the servers that say nothing
+/// (Kokoro, Piper) and the moment before the next probe. Chatterbox was the
+/// worst case — a single-worker, autoregressive server whose health endpoint
+/// was blocked by its own synthesis, so it could not answer at all — and F5
+/// keeps the part that matters: a request abandoned by the client is not
+/// cancelled server-side, and the GPU stays taken until it finishes. Without
+/// this, every following paragraph of the same download re-probes health
+/// every ~13 s and fails the same way for minutes (see
+/// `docs/bugs/CHATTERBOX_DESCARGAS.md`).
 void markServerBusy(Uri healthUri, {required Duration cooldown}) {
   _busyUntil[healthUri.toString()] = DateTime.now().add(cooldown);
 }
@@ -139,7 +165,7 @@ Future<ServerHealth> probeServer(
   final key = uri.toString();
   final busyUntil = _busyUntil[key];
   if (busyUntil != null) {
-    if (DateTime.now().isBefore(busyUntil)) return ServerHealth.unreachable;
+    if (DateTime.now().isBefore(busyUntil)) return ServerHealth.busy;
     _busyUntil.remove(key);
   }
 
@@ -213,11 +239,44 @@ Future<ServerHealth> _run(
   final req = await client.getUrl(uri);
   applyRequestHeaders(req, token: token, engine: engine, attempt: attempt);
   final resp = await req.close();
+  // The 200 branch reads the body instead of draining it: draining a stream
+  // that was already listened to throws.
+  if (resp.statusCode == 200) return _readVerdict(resp);
+
   final health = switch (resp.statusCode) {
-    200 => ServerHealth.ok,
     401 || 403 => ServerHealth.unauthorized,
     _ => ServerHealth.error,
   };
   await resp.drain<void>();
   return health;
+}
+
+/// A 200 is not always a free server: F5 answers `{"busy": true}` while its GPU
+/// lock is taken, and the body was being thrown away.
+///
+/// That flag is the one thing the phone cannot work out for itself. Guessing it
+/// from a timeout costs a whole synthesis budget first, and the guess expires on
+/// a fixed cooldown rather than when the server actually frees up. Servers that
+/// say nothing — Kokoro, Piper, anything in front of them — read as [ok] exactly
+/// as before.
+///
+/// Same rule as everywhere else in this app: trust `content-type`, not the shape
+/// of the body. An intermediary answering 200 with an HTML page must not be
+/// parsed as JSON (see the note in CLAUDE.md).
+Future<ServerHealth> _readVerdict(HttpClientResponse resp) async {
+  if (resp.headers.contentType?.mimeType != 'application/json') {
+    await resp.drain<void>();
+    return ServerHealth.ok;
+  }
+  try {
+    final body = await resp.transform(utf8.decoder).join();
+    final json = jsonDecode(body);
+    if (json is Map && json['busy'] == true) return ServerHealth.busy;
+  } catch (e) {
+    // A health endpoint that answers 200 with something unreadable is still a
+    // server that is up; the verdict it could not refine stays the optimistic
+    // one, and the download falls back on the inferred busy window.
+    dev.log('[health] ${resp.headers.contentType} body unreadable: $e');
+  }
+  return ServerHealth.ok;
 }

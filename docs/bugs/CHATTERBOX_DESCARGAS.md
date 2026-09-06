@@ -161,7 +161,7 @@ descarga; lo que falta es que `_busyUntil` (conocimiento sobre el *servidor*)
 deje de limpiarse junto con el caché de red (conocimiento sobre la *conexión
 del cliente*).
 
-**Ajuste concreto, sin implementar todavía:**
+**Ajuste concreto** (implementado en 0.9.0, ver más abajo)**:**
 - Separar el reset en `server_health.dart:44-47`: que `resetServerHealthCache`
   siga limpiando el caché de veredictos, pero no `_busyUntil` — o exponer un
   reset aparte que los call sites de "Probar conexión"
@@ -170,3 +170,46 @@ del cliente*).
 - Darle a `maybePrefetchAhead` (`reader_provider.dart:1416`) una guardia de
   reentrada propia antes de su `isReachable`, no solo depender de
   `state.isDownloading`.
+
+## Arreglo (2026-09-06, 0.9.0)
+
+Se hizo lo propuesto, y además se atacó la causa que las dos rondas anteriores
+no habían mirado: **el teléfono estaba adivinando un dato que el servidor ya le
+mandaba**.
+
+`tools/f5/server.py:146` publica `"busy": _turno.locked()` en `/health` desde
+que existe, y `_run` (`server_health.dart`) miraba solo el código de estado y
+hacía `drain()` del cuerpo. Con F5 eso pasó de desperdicio a fallo: Chatterbox
+al menos *no podía* contestar mientras generaba, y el timeout del sondeo
+delataba que estaba ocupado; F5 contesta 200 en milisegundos desde otro hilo,
+así que un servidor tomado se leía como servidor libre. La app le mandaba el
+párrafo siguiente, ese POST se quedaba esperando el lock de la GPU
+(`server.py:164`), y la espera en la cola consumía el presupuesto de síntesis
+del cliente hasta agotarlo. Eso es el "un párrafo fallido" del reporte de las
+01:44.
+
+Ahora:
+
+- `probeServer` lee el cuerpo cuando el `content-type` es JSON y devuelve
+  `ServerHealth.busy` si el servidor se declara ocupado. La regla de siempre
+  sigue en pie: se decide por `content-type`, no por la forma del cuerpo, así
+  que un intermediario que conteste 200 con HTML sigue leyéndose como servidor
+  sano. Kokoro y Piper no mandan el campo y no cambian en nada.
+- `busy` es un veredicto propio, no un `unreachable` disfrazado: se cachea 5 s
+  (no 60), que es lo que permite volver al servidor propio en cuanto suelta el
+  lock en vez de terminar el capítulo entero por Edge. En pantalla dice
+  "ocupado", no "no disponible", que era la palabra que mandaba a la gente a
+  revisar su red.
+- `resetServerHealthCache` ya no toca `_busyUntil`. Lo que el teléfono sabe de
+  *su conexión* caduca al cambiar de red; lo que sabe del *servidor*, no.
+- `downloadChapters` levanta una bandera sincrónica al entrar, antes de sus dos
+  `await`. `state.isDownloading` se ponía dos `await` más tarde —uno de ellos
+  un sondeo de red—, así que dos llamadores del mismo turno del event loop
+  pasaban los dos. `maybePrefetchAhead` tiene la suya para el tramo previo,
+  donde la descarga todavía no empezó.
+- Los eventos de `onConnectivityChanged` van con debounce de 3 s, que es lo que
+  colapsa la ráfaga que Android emite por cada transición de red.
+
+Lo que **no** cambió, a propósito: `markServerBusy` sigue ahí. Cubre a los
+servidores que no dicen nada de sí mismos y el rato que va entre un timeout y
+el sondeo siguiente.

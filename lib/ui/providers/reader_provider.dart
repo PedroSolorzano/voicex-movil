@@ -285,6 +285,14 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
+  /// Collapses the burst of events Android emits for a single network change.
+  Timer? _connectivityDebounce;
+
+  /// How long to wait for that burst to settle. Long enough to swallow the
+  /// three or four events of one Wi-Fi handoff, short enough that nobody
+  /// notices the prefetch starting late.
+  static const _connectivityDebounceDelay = Duration(seconds: 3);
+
   @override
   ReaderState build() {
     ref.onDispose(cleanup);
@@ -293,13 +301,20 @@ class ReaderNotifier extends Notifier<ReaderState> {
     // out of the house, or back into coverage, dragged a stale verdict along
     // until it aged out. A change of network is the one moment where the old
     // answer is guaranteed to be worthless.
-    _connectivitySub =
-        Connectivity().onConnectivityChanged.listen((_) {
-      resetServerHealthCache();
-      unawaited(maybePrefetchAhead());
-      // Los reportes encolados esperan exactamente a este momento: se generan
-      // cuando no hay servidor y salen cuando vuelve a haberlo.
-      unawaited(Reporter.flush());
+    //
+    // Debounced because Android emits several events per transition, and each
+    // one used to fire its own `maybePrefetchAhead`: two probes of the same
+    // server seconds apart, which is the pattern the diagnostic ring showed
+    // during the download failures (`docs/bugs/CHATTERBOX_DESCARGAS.md`).
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((_) {
+      _connectivityDebounce?.cancel();
+      _connectivityDebounce = Timer(_connectivityDebounceDelay, () {
+        resetServerHealthCache();
+        unawaited(maybePrefetchAhead());
+        // Los reportes encolados esperan exactamente a este momento: se
+        // generan cuando no hay servidor y salen cuando vuelve a haberlo.
+        unawaited(Reporter.flush());
+      });
     });
     return const ReaderState();
   }
@@ -661,9 +676,13 @@ class ReaderNotifier extends Notifier<ReaderState> {
   String _engineLabel(AppSettings settings) {
     final label = providerLabel(_activeEngineKind);
     if (_activeEngineKind == settings.ttsProvider) return label;
-    final reason = _lastHealth == ServerHealth.unauthorized
-        ? 'clave rechazada'
-        : '${providerLabel(settings.ttsProvider)} no disponible';
+    final reason = switch (_lastHealth) {
+      ServerHealth.unauthorized => 'clave rechazada',
+      // Ocupado no es lo mismo que caído, y el repliegue dura lo que dure la
+      // síntesis ajena: decirlo evita que alguien salga a revisar la red.
+      ServerHealth.busy => '${providerLabel(settings.ttsProvider)} ocupado',
+      _ => '${providerLabel(settings.ttsProvider)} no disponible',
+    };
     return '$label ($reason)';
   }
 
@@ -1232,6 +1251,16 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
   Future<void> downloadChapter() => downloadChapters(state.chapterIndex, 1);
 
+  /// True from the moment a download is accepted, not from the moment the bar
+  /// appears.
+  ///
+  /// `state.isDownloading` cannot do this job: it is set two `await`s into
+  /// [_runDownload] — one of them a network probe — so two callers arriving in
+  /// the same turn of the event loop both got past it. That is how the burst of
+  /// connectivity events ended up running overlapping downloads against one
+  /// single-GPU server (`docs/bugs/CHATTERBOX_DESCARGAS.md`).
+  bool _downloading = false;
+
   /// Synthesizes [count] chapters starting at [from] and pins them in
   /// getApplicationDocumentsDirectory(), where the OS will not clear them and
   /// the LRU eviction skips them.
@@ -1239,14 +1268,36 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// This is what makes Kokoro usable away from home: the audio is produced
   /// while the phone can still reach the server, then played back offline with
   /// its word timings intact.
+  ///
+  /// [fromParagraph] skips the start of the **first** chapter of the range, so
+  /// somebody who read half a chapter in silence and then wants to listen does
+  /// not pay to synthesize what they already read. The following chapters
+  /// always start at 0: there is no "where you are" inside a chapter you have
+  /// not opened.
   Future<void> downloadChapters(int from, int count,
-      {bool silent = false}) async {
+      {int fromParagraph = 0, bool silent = false}) async {
+    if (_downloading) return;
+    _downloading = true;
+    try {
+      await _runDownload(from, count,
+          fromParagraph: fromParagraph, silent: silent);
+    } finally {
+      _downloading = false;
+    }
+  }
+
+  Future<void> _runDownload(int from, int count,
+      {required int fromParagraph, required bool silent}) async {
     final book = state.book;
-    if (book == null || state.isDownloading) return;
+    if (book == null) return;
 
     final chapters = book.chapters;
     final last = (from + count).clamp(0, chapters.length);
     if (from >= chapters.length || from < 0) return;
+
+    // Un párrafo inicial fuera de rango descargaría el capítulo entero sin
+    // decirlo; recortarlo lo deja en "desde el principio", que es lo esperable.
+    final skipUntil = fromParagraph.clamp(0, chapters[from].paragraphs.length);
 
     final settings = _settings;
     // Its own instance, never `_provider`/`_ttsProvider`: those belong to
@@ -1264,8 +1315,12 @@ class ReaderNotifier extends Notifier<ReaderState> {
     final skipKey = _cacheKeyFor(dlKind, settings, book);
     final docsDir = await getApplicationDocumentsDirectory();
 
+    // Descuenta lo salteado: si no, la barra arranca en 25/40 sin haber
+    // sintetizado nada y el tiempo estimado cuenta párrafos que nadie va a
+    // pedir.
     final totalParagraphs = [
-      for (var c = from; c < last; c++) chapters[c].paragraphs.length
+      for (var c = from; c < last; c++)
+        chapters[c].paragraphs.length - (c == from ? skipUntil : 0)
     ].fold<int>(0, (a, b) => a + b);
 
     _downloadCancelled = false;
@@ -1291,6 +1346,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
     for (var chapterIdx = from; chapterIdx < last; chapterIdx++) {
       for (final para in chapters[chapterIdx].paragraphs) {
         if (_downloadCancelled) break;
+        if (chapterIdx == from && para.index < skipUntil) continue;
 
         final alreadyPinned = await _cacheRepo.isPinnedParagraph(
             book.id!, chapterIdx, para.index, skipKey, _cacheFormatTag);
@@ -1433,8 +1489,27 @@ class ReaderNotifier extends Notifier<ReaderState> {
   Future<void> maybePrefetchAhead() async {
     final settings = _settings;
     final book = state.book;
-    if (book == null || !settings.prefetchOnWifi || state.isDownloading) return;
+    // `_downloading` y no `state.isDownloading`: este método hace su propio
+    // health check antes de llamar a downloadChapters, y dos prefetch
+    // solapados sondeaban el mismo servidor dos veces. `_prefetching` cubre
+    // justo ese tramo previo, donde la descarga todavía no empezó.
+    if (book == null ||
+        !settings.prefetchOnWifi ||
+        _downloading ||
+        _prefetching) {
+      return;
+    }
+    _prefetching = true;
+    try {
+      await _prefetchAhead(settings, book);
+    } finally {
+      _prefetching = false;
+    }
+  }
 
+  bool _prefetching = false;
+
+  Future<void> _prefetchAhead(AppSettings settings, Book book) async {
     // Only worth doing for a home server; Edge already streams on demand and
     // its audio is cached paragraph by paragraph as it plays. F5 solo
     // vale la pena si el libro está en español -- mismo criterio que
@@ -1506,6 +1581,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
     unawaited(_saveProgress(offsetMs: audioHandler.elapsedMs));
     unawaited(_connectivitySub?.cancel());
     _connectivitySub = null;
+    _connectivityDebounce?.cancel();
+    _connectivityDebounce = null;
     _listening = false;
     _loadedChapter = -1;
     _loadedParagraph = -1;

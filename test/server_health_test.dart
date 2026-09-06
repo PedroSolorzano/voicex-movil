@@ -23,7 +23,12 @@ void main() {
     uri = Uri.parse('http://${server.address.address}:${server.port}/health');
   }
 
-  setUp(resetServerHealthCache);
+  setUp(() {
+    resetServerHealthCache();
+    // Aparte a propósito: la app ya no borra la ventana de ocupado, solo los
+    // tests la limpian entre casos.
+    resetBusyWindows();
+  });
 
   tearDown(() async {
     TtsDiagnostics.clear();
@@ -161,7 +166,7 @@ void main() {
 
     markServerBusy(uri, cooldown: const Duration(milliseconds: 200));
 
-    expect(await probeServer(uri), ServerHealth.unreachable);
+    expect(await probeServer(uri), ServerHealth.busy);
     expect(hits, 0, reason: 'la probe no debe llegar a tocar la red');
   });
 
@@ -176,13 +181,52 @@ void main() {
     expect(await probeServer(uri), ServerHealth.ok);
   });
 
-  test('resetServerHealthCache also forgets the busy window', () async {
+  test('resetServerHealthCache keeps the busy window', () async {
+    // La recaída de `docs/bugs/CHATTERBOX_DESCARGAS.md`: cambiar de red, o
+    // tocar "Probar conexión", no dice nada sobre si el servidor terminó la
+    // síntesis que dejó a medias. Borrar las dos cosas juntas reabría la cola
+    // contra un servidor todavía ocupado.
     await serve((req) => req.response
       ..statusCode = 200
       ..close());
 
     markServerBusy(uri, cooldown: const Duration(seconds: 30));
     resetServerHealthCache();
+
+    expect(await probeServer(uri), ServerHealth.busy);
+  });
+
+  test('a 200 that says it is busy is not a free server', () async {
+    // F5 contesta /health fuera del hilo de síntesis, así que responde 200 al
+    // instante mientras la GPU está tomada. El cuerpo era lo único que lo
+    // decía y se estaba tirando.
+    await serve((req) => req.response
+      ..statusCode = 200
+      ..headers.contentType = ContentType.json
+      ..write('{"status":"ok","busy":true}')
+      ..close());
+
+    expect(await probeServer(uri), ServerHealth.busy);
+  });
+
+  test('the same server free again answers ok', () async {
+    await serve((req) => req.response
+      ..statusCode = 200
+      ..headers.contentType = ContentType.json
+      ..write('{"status":"ok","busy":false}')
+      ..close());
+
+    expect(await probeServer(uri), ServerHealth.ok);
+  });
+
+  test('a 200 that is not JSON is still a healthy server', () async {
+    // Kokoro y Piper no mandan `busy`, y un intermediario puede contestar 200
+    // con HTML: ninguno de los dos casos debe leerse como JSON.
+    await serve((req) => req.response
+      ..statusCode = 200
+      ..headers.contentType = ContentType.html
+      ..write('<html>ok</html>')
+      ..close());
 
     expect(await probeServer(uri), ServerHealth.ok);
   });

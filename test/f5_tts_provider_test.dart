@@ -19,7 +19,10 @@ void main() {
     baseUrl = 'http://${server.address.address}:${server.port}';
   }
 
-  setUp(resetServerHealthCache);
+  setUp(() {
+    resetServerHealthCache();
+    resetBusyWindows();
+  });
 
   tearDown(() async {
     TtsDiagnostics.clear();
@@ -49,8 +52,7 @@ void main() {
       throwsA(isA<TimeoutException>()),
     );
 
-    expect(await F5TtsProvider.healthOf(baseUrl),
-        ServerHealth.unreachable);
+    expect(await F5TtsProvider.healthOf(baseUrl), ServerHealth.busy);
     expect(healthHits, 0,
         reason: 'la probe tiene que saltarse, no solo fallar');
   });
@@ -108,8 +110,7 @@ void main() {
     // Muy por encima de los 50 ms de esa síntesis, muy por debajo del cooldown.
     await Future<void>.delayed(const Duration(milliseconds: 200));
 
-    expect(await F5TtsProvider.healthOf(baseUrl),
-        ServerHealth.unreachable);
+    expect(await F5TtsProvider.healthOf(baseUrl), ServerHealth.busy);
     expect(healthHits, 0);
   });
 }

@@ -107,6 +107,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               'mal dentro.',
         ServerHealth.unreachable =>
           'No responde. O está apagado, o la red no llega hasta él.',
+        // Ni un fallo ni un permiso: está trabajando. Mandarle otro párrafo
+        // ahora solo lo pone a hacer cola y agota la espera del teléfono.
+        ServerHealth.busy =>
+          'Está ocupado terminando otra síntesis. Vuelve a probar en un '
+              'minuto: mientras tanto la app usa Edge.',
       };
     });
   }

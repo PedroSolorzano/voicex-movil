@@ -129,6 +129,43 @@ siquiera preguntarle al servidor — ese motor no ofrece otro idioma.
 
 El motor realmente en uso aparece en la barra de estado del lector.
 
+### El sondeo de salud, y qué cuenta como "no usable"
+
+`probeServer()` (`lib/tts/server_health.dart`) devuelve cinco estados, y solo
+`ok` sirve para sintetizar. Los otros cuatro no son intercambiables: cada uno
+manda a quien lo lee a hacer una cosa distinta.
+
+| Estado | Qué pasó | Se recuerda |
+|---|---|---|
+| `ok` | 200, y el cuerpo no dice lo contrario | 60 s |
+| `unauthorized` | 401/403 — la clave de esta compilación, no la red | 60 s |
+| `error` | Contestó, pero mal (5xx) | 5 s |
+| `unreachable` | No contestó: apagado, o la red no llega | 5 s |
+| `busy` | Contestó que está trabajando | 5 s |
+
+`busy` es el único veredicto que cambia solo, sin que cambie nada del lado del
+teléfono, y por eso se recuerda 5 s y no 60: es lo que permite volver al
+servidor propio en cuanto suelta la GPU, en vez de terminar el capítulo por
+Edge. Llega por dos caminos:
+
+- **Reportado.** F5 sirve `/health` fuera del hilo de síntesis y publica
+  `"busy": true` mientras su lock de GPU está tomado (`tools/f5/server.py`).
+  El cuerpo se lee **solo si el `content-type` es JSON** — la misma regla que
+  usa Kokoro para distinguir base64 de audio crudo—, así que un intermediario
+  que conteste 200 con HTML sigue siendo `ok`. Kokoro y Piper no mandan el
+  campo y no cambian.
+- **Inferido.** `markServerBusy()`, que un provider llama al agotarse su
+  presupuesto de síntesis: la petición abandonada no se cancela del lado del
+  servidor, así que la GPU sigue tomada. Vale `TtsTimeouts.busyCooldown`.
+
+**Invariante:** `resetServerHealthCache()` no borra las ventanas de ocupado.
+El caché de veredictos es lo que el teléfono sabe de *su propia conexión* y
+caduca al cambiar de red; la ventana de ocupado es lo que sabe del *servidor*,
+y un cambio de WiFi no dice nada de eso. Borrar las dos juntas es lo que hizo
+recaer el bug de descargas (`docs/bugs/CHATTERBOX_DESCARGAS.md`): quedaba una
+cola de párrafos contra un servidor todavía trabajando. `resetBusyWindows()`
+existe para los tests, no para la app.
+
 ### Edge: detalles del protocolo
 
 Mismo protocolo que la librería Python `edge-tts`. Requiere `TrustedClientToken`

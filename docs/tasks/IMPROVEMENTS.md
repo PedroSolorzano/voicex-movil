@@ -146,7 +146,7 @@ y su arreglo. Aquí solo queda lo que no está hecho.
   `.timeout(...)` alrededor de esa síntesis para que el cuelgue caiga por el
   mismo `catch` que ya maneja los demás fallos. Sin reproducir en banco
   todavía, solo rastreado por código.
-- [ ] `alto` 2026-09-06 — **`resetServerHealthCache` borra `_busyUntil` junto
+- [x] `alto` 2026-09-06 — **`resetServerHealthCache` borra `_busyUntil` junto
   con el caché de red, y sigue pasando con F5.** Detectado en la recaída del
   2026-09-06 de `docs/bugs/CHATTERBOX_DESCARGAS.md` (dos reportes desde la
   app sobre descargas de *La Odisea* que volvían a fallar tras el primer
@@ -169,7 +169,15 @@ y su arreglo. Aquí solo queda lo que no está hecho.
   para los dos call sites de arriba; de paso, darle a `maybePrefetchAhead`
   (`reader_provider.dart:1416`) una guardia de reentrada propia, en vez de
   depender solo de `state.isDownloading`.
-- [ ] `medio` 2026-09-03 — **"Descargar este capítulo" no sabe por dónde vas
+
+  Hecho en 0.9.0, y por un lado que no estaba propuesto: el servidor F5 ya
+  publicaba `"busy"` en `/health` (`tools/f5/server.py:146`) y la app tiraba el
+  cuerpo de la respuesta. Ahora lo lee, así que la ventana de ocupado deja de
+  ser una conjetura del teléfono y pasa a ser lo que el servidor dice de sí
+  mismo. Encima de eso van las tres piezas propuestas: el reset ya no toca
+  `_busyUntil`, `downloadChapters` levanta su bandera sincrónicamente y los
+  eventos de conectividad tienen debounce. Ver `RELEASES.md` 0.9.0.
+- [x] `medio` 2026-09-03 — **"Descargar este capítulo" no sabe por dónde vas
   leyendo.** `downloadChapters(from, count)`
   (`reader_provider.dart:1180`) sintetiza el capítulo completo desde su
   párrafo 0; "Descargar → Este capítulo"
@@ -181,6 +189,11 @@ y su arreglo. Aquí solo queda lo que no está hecho.
   use con `reader.paragraphIndex` en vez de 0 -- las otras dos opciones
   ("los próximos capítulos", "el resto del libro") siguen empezando en 0,
   porque ahí no hay "por dónde vas" dentro del capítulo siguiente.
+
+  Hecho en 0.9.0, con una diferencia: en vez de cambiar "Este capítulo" se
+  agregó "Desde aquí hasta el final del capítulo" al lado, porque quien leyó en
+  silencio a veces sí quiere el capítulo entero para escucharlo desde el
+  principio. La opción nueva solo aparece si hay algo que saltarse.
 
 ---
 
