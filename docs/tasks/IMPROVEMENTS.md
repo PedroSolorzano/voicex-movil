@@ -77,6 +77,60 @@ y su arreglo. Aquí solo queda lo que no está hecho.
   - La voz `es_MX-claude-high` de Piper directamente (sin Chatterbox) se
     volvió a confirmar con errores de lectura (`tools/piper/README.md`): no es
     la solución barata que este ítem sugería probar primero.
+  - **Superado por el ítem siguiente:** Chatterbox queda descartado por
+    velocidad, no por calidad.
+- [ ] `alto` 2026-09-06 — **Cambiar Chatterbox por F5-Spanish, y sacar
+  Chatterbox de la app.** Chatterbox gana en calidad pero es inviable para un
+  audiolibro: medido en la RTX 4050, **0.089x tiempo real** — un capítulo de 37
+  párrafos son ~2.9 horas de GPU. Peor: el servidor completa el audio y el
+  cliente ya se rindió, así que se tira a la basura (ver
+  [`docs/bugs/CHATTERBOX_DESCARGAS.md`](../bugs/CHATTERBOX_DESCARGAS.md)).
+  - **F5-Spanish ([`jpgallegoar/F5-Spanish`](https://huggingface.co/jpgallegoar/F5-Spanish),
+    CC0) va a 1.26x tiempo real en la misma tarjeta con `nfe_step 64`**: el
+    mismo capítulo baja a ~12 minutos, 27x más rápido. La razón es
+    arquitectónica y contradice lo que suponía
+    [`TTS_ESPANOL.md`](../context/TTS_ESPANOL.md) al descartarlo ("en la 4050
+    competirían de igual a igual"): F5 no es autoregresivo, genera en un
+    número fijo de pasos en paralelo. Arquitectura F5TTS_Base, verificada
+    contra el `transformer_config.yaml` del propio checkpoint.
+  - Calidad juzgada de oído contra Chatterbox por quien reportó el problema:
+    **igualada**, con una referencia de voz limpia de 11 s (36.9 dB de SNR).
+  - `nfe_step` **64 en vez de 32 no es opcional**: con el valor por defecto
+    aparecen tartamudeos y repeticiones (`trabajo` → "trabajo abajo"),
+    verificado transcribiendo la salida y comparándola con el texto pedido.
+    A 64 la lectura sale al 100 %. Cuesta la mitad de velocidad y aun así
+    queda por encima de tiempo real.
+  - **Hace falta una tabla de sustituciones fonéticas antes de sintetizar**,
+    y cubre dos casos distintos:
+    - *Palabras españolas sueltas*: el modelo pronuncia "quizá" como
+      "guizás"; reescrito `kizá` sale perfecto. **No es sistemático de la
+      "qu"** — probado con pares mínimos (*quiso/guiso*, *quita/guita*): el
+      resto sale bien. Pasado un corpus de 378 palabras de prosa real, **no
+      apareció ningún otro error en español**, así que la lista es corta.
+    - *Nombres propios extranjeros*: es el defecto que sí aparece seguido en
+      novela traducida. `Jack Sawyer` → "jakq sayer", `New Hampshire` →
+      "neuampa re", `Speedy` → "spady". Reescritos `Yac Sóyer`, `Niu
+      Jámpshir`, `Spidi` suenan mejor, confirmado de oído. Diez entradas por
+      libro cubren la mayoría, porque los nombres que importan se repiten
+      cientos de veces.
+    - Se descartó detectar automáticamente las palabras extranjeras contra un
+      diccionario español: el riesgo de falso positivo (conjugaciones,
+      nombres propios españoles) es peor que el problema que resuelve.
+  - Detectarlas requiere un reconocedor **sin** modelo de lenguaje — Whisper
+    las tapa porque las "corrige" al transcribir. Herramientas dejadas en
+    `muestras_voz/`: `_detectar.py` (CTC + normalización fonética del
+    español, para no marcar el seseo como error), `_analyze.py` y `_bands.py`
+    (calidad de una grabación), `_cortar.py` (ventana de 12 s), `_verificar.py`
+    (inserciones y omisiones con Whisper).
+  - Segundo defecto anotado: la **primera palabra** de cada generación sale
+    inestable ("Él" → "Gul"). Afecta el arranque de cada párrafo.
+  - El ritmo de la referencia **fija el ritmo de todo lo generado**: la misma
+    voz leyendo más lento dio 42 s contra 32 s para el mismo párrafo.
+  - Trabajo pendiente: servidor HTTP para F5 (el CLI no expone uno usable),
+    transcodificar a MP3 —F5 emite WAV a 24 kHz y el WAV ya descalificó a
+    Piper por consumo de datos—, `F5TtsProvider` nuevo, y **borrar
+    `ChatterboxTtsProvider`** de `lib/tts/`, `tts_factory.dart`,
+    `settings.dart`, `reader_provider.dart` y `server_config.dart`.
 - [ ] `alto` 2026-09-03 — **La previsualización de voz del motor Teléfono se
   cuelga para siempre tras el primer fallo del motor nativo.** Reportado por
   un tester: *"no me funcionan los previos de las voces, solo me funcionó
