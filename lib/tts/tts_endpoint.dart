@@ -36,7 +36,46 @@ class TtsTimeouts {
   /// Chatterbox corre en GPU pero es autoregresivo: ~55-75 s medidos para un
   /// párrafo de ~25 s de audio (más lento que tiempo real). Generoso a
   /// propósito para no cortar un párrafo largo a mitad de síntesis.
+  ///
+  /// Es el punto de partida, no el techo definitivo de una descarga: ver
+  /// [adaptiveSynthesis].
   static const synthesisChatterbox = Duration(seconds: 240);
+
+  /// Cuánto se asume que un servidor sigue ocupado tras abandonar una síntesis.
+  ///
+  /// Constante aparte del presupuesto de síntesis a propósito: ese presupuesto
+  /// ahora se estira según la máquina (ver [adaptiveSynthesis]), y atar el
+  /// silencio a un número que puede llegar a quince minutos dejaría a la app
+  /// replegada a Edge un cuarto de hora por un solo párrafo lento.
+  static const busyCooldown = Duration(seconds: 240);
+
+  /// Techo de síntesis derivado de lo que esta máquina viene tardando de
+  /// verdad, en vez de un número fijo calibrado en otro hardware.
+  ///
+  /// El 240 s de [synthesisChatterbox] sale de medir ~55-75 s por párrafo. Una
+  /// GPU más justa tarda varias veces eso, y el resultado es el peor
+  /// desperdicio posible: el servidor **termina** el audio y el cliente ya se
+  /// rindió, así que se tira a la basura una generación entera —medido en
+  /// `docs/bugs/CHATTERBOX_DESCARGAS.md`, un párrafo de 4 m 37 s abandonado a
+  /// los 4 m.
+  ///
+  /// Cinco veces el promedio observado cubre ese caso con margen sin volverse
+  /// una espera infinita. El suelo es el valor de siempre —esto solo puede
+  /// hacer la app más paciente, nunca menos— y el techo evita que una racha
+  /// lenta convierta un servidor colgado en una espera de media hora.
+  static Duration adaptiveSynthesis({
+    required Duration measured,
+    required int samples,
+  }) {
+    if (samples <= 0 || measured <= Duration.zero) return synthesisChatterbox;
+    final scaled = measured * 5;
+    if (scaled < synthesisChatterbox) return synthesisChatterbox;
+    if (scaled > adaptiveSynthesisCeiling) return adaptiveSynthesisCeiling;
+    return scaled;
+  }
+
+  /// Tope duro de [adaptiveSynthesis].
+  static const adaptiveSynthesisCeiling = Duration(minutes: 20);
 
   /// Reading the response body once the headers arrived.
   ///

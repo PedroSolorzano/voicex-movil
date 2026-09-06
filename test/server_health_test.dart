@@ -149,6 +149,44 @@ void main() {
     expect(seen, 2, reason: 'el éxito sigue cacheado');
   }, timeout: const Timeout(Duration(seconds: 30)));
 
+  test('a server marked busy is skipped, even though it would answer ok',
+      () async {
+    var hits = 0;
+    await serve((req) {
+      hits++;
+      req.response
+        ..statusCode = 200
+        ..close();
+    });
+
+    markServerBusy(uri, cooldown: const Duration(milliseconds: 200));
+
+    expect(await probeServer(uri), ServerHealth.unreachable);
+    expect(hits, 0, reason: 'la probe no debe llegar a tocar la red');
+  });
+
+  test('the busy window expires and a real probe runs again', () async {
+    await serve((req) => req.response
+      ..statusCode = 200
+      ..close());
+
+    markServerBusy(uri, cooldown: const Duration(milliseconds: 50));
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+
+    expect(await probeServer(uri), ServerHealth.ok);
+  });
+
+  test('resetServerHealthCache also forgets the busy window', () async {
+    await serve((req) => req.response
+      ..statusCode = 200
+      ..close());
+
+    markServerBusy(uri, cooldown: const Duration(seconds: 30));
+    resetServerHealthCache();
+
+    expect(await probeServer(uri), ServerHealth.ok);
+  });
+
   test('every attempt leaves a line in the on-device ring', () async {
     // The half the proxy log cannot give: a probe that times out on the phone
     // shows up server-side as a clean 200.

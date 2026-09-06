@@ -20,6 +20,7 @@ import '../../tts/chatterbox_tts_provider.dart';
 import '../../tts/kokoro_tts_provider.dart';
 import '../../tts/piper_tts_provider.dart';
 import '../../tts/server_health.dart';
+import '../../tts/tts_endpoint.dart';
 import 'settings_provider.dart';
 
 enum ReaderStatus { idle, synthesizing, playing, paused, error }
@@ -1281,6 +1282,13 @@ class ReaderNotifier extends Notifier<ReaderState> {
     final startedAt = DateTime.now();
     var synthesized = 0;
 
+    // Cuánto tardó Chatterbox de verdad en esta descarga, para calibrar su
+    // propio techo de espera. Vive por descarga y no se persiste: un capítulo
+    // recalibra en los primeros párrafos, y así un cambio de máquina o de
+    // servidor no arrastra una medición vieja.
+    var chatterboxTotal = Duration.zero;
+    var chatterboxSamples = 0;
+
     for (var chapterIdx = from; chapterIdx < last; chapterIdx++) {
       for (final para in chapters[chapterIdx].paragraphs) {
         if (_downloadCancelled) break;
@@ -1309,12 +1317,36 @@ class ReaderNotifier extends Notifier<ReaderState> {
                 downloadEngineNotice: _downloadEngineNotice(dlKind, settings));
           }
           final voice = _cacheKeyFor(dlKind, settings, book);
+
+          // Chatterbox corre en una GPU cualquiera, no en la que se usó para
+          // calibrar los 240 s por defecto: en una tarjeta justa un párrafo
+          // tarda varias veces eso, y rendirse antes de tiempo tira a la
+          // basura una generación que el servidor sí terminó. El techo se
+          // reajusta con lo que esta máquina viene tardando de verdad.
+          if (dlProvider is ChatterboxTtsProvider) {
+            dlProvider.synthesisTimeout = TtsTimeouts.adaptiveSynthesis(
+              measured: chatterboxSamples == 0
+                  ? Duration.zero
+                  : chatterboxTotal ~/ chatterboxSamples,
+              samples: chatterboxSamples,
+            );
+          }
+
+          final paragraphStartedAt = DateTime.now();
           final result = await dlProvider.synthesize(
             text: para.rawText,
             voice: settings.voiceForEngine(dlKind, book.language),
             rate: settings.edgeRate,
             volume: settings.edgeVolume,
           );
+
+          // Solo Chatterbox y solo lo que salió bien: los tiempos de Edge son
+          // un orden de magnitud menores y bajarían el promedio justo cuando
+          // el servidor propio vuelve, dejando el techo demasiado corto.
+          if (dlKind == 'chatterbox') {
+            chatterboxTotal += DateTime.now().difference(paragraphStartedAt);
+            chatterboxSamples++;
+          }
 
           final ext = result.filePath.split('.').last;
           final dest = '${docsDir.path}/dl_${book.id}_${chapterIdx}_'

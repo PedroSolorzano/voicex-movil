@@ -36,9 +36,29 @@ Duration _ttlFor(ServerHealth health) => switch (health) {
 
 final Map<String, ({DateTime at, ServerHealth health})> _cache = {};
 
+/// Until when a server is assumed still busy with a request the client gave
+/// up waiting for, keyed the same way as [_cache].
+final Map<String, DateTime> _busyUntil = {};
+
 /// Forgets every cached verdict, so the next probe really asks the server.
 void resetServerHealthCache() {
   _cache.clear();
+  _busyUntil.clear();
+}
+
+/// Marks the server behind [healthUri] as likely still finishing a synthesis
+/// the client gave up waiting for, so [probeServer] skips the network and
+/// reports [ServerHealth.unreachable] until [cooldown] elapses.
+///
+/// Chatterbox is a single-worker, autoregressive server: a request that blew
+/// through its synthesis timeout is not necessarily dead — it may still be
+/// generating in the background, since nothing tells it to stop when the
+/// client disconnects — and while it does, its own lightweight health
+/// endpoint is blocked too. Without this, every following paragraph of the
+/// same download re-probes health every ~13 s and fails the same way for
+/// minutes (see `docs/bugs/CHATTERBOX_DESCARGAS.md`).
+void markServerBusy(Uri healthUri, {required Duration cooldown}) {
+  _busyUntil[healthUri.toString()] = DateTime.now().add(cooldown);
 }
 
 /// One line of the on-device diagnostic ring.
@@ -117,6 +137,12 @@ Future<ServerHealth> probeServer(
   Duration backoff = TtsTimeouts.probeBackoff,
 }) async {
   final key = uri.toString();
+  final busyUntil = _busyUntil[key];
+  if (busyUntil != null) {
+    if (DateTime.now().isBefore(busyUntil)) return ServerHealth.unreachable;
+    _busyUntil.remove(key);
+  }
+
   final cached = _cache[key];
   if (cached != null &&
       DateTime.now().difference(cached.at) < _ttlFor(cached.health)) {

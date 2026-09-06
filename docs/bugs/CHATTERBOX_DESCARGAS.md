@@ -1,4 +1,4 @@
-# Las descargas con Chatterbox fallan: no es el tamaño del texto, es el nodo intermitente
+# Las descargas con Chatterbox fallan: no es el tamaño del texto, es el propio servidor bloqueándose al generar un párrafo largo
 
 **Reportado:** `docs/bugs/REPORTES_TESTERS.md`, dos entradas del 2026-09-05
 (pedro, La Odisea cap. 0, motor Chatterbox):
@@ -48,28 +48,69 @@ El tamaño del texto tampoco tiene por dónde afectar como se sospechaba:
 
 ## Lo que sí explica el patrón
 
-`docs/context/ACCESO_REMOTO.md:139-176` documenta que Chatterbox corre en una
-laptop con GPU que entra a la tailnet como **nodo intermitente**, sin proxy y
-sin token, y lo anticipa en el propio texto: *"cuando está apagada o dormida,
-el sondeo de salud de la app... falla y el repliegue a Edge es automático y
-silencioso"*. La secuencia observada — un `ok`, luego varios `unreachable`
-seguidos y silencio — es indistinguible de la laptop reconectándose o
-despertando en la tailnet en ese momento.
+Descartada la hipótesis del nodo intermitente: el log del contenedor Docker
+de Chatterbox en `g14` (`docker logs chatterbox-tts-server-cu130`) muestra que
+nunca se reinició (`RestartCount: 0`, arriba desde antes del incidente) y
+reconstruye el minuto a minuto exacto:
+
+- **20:29:55 UTC** (14:29:55 local) llega una petición `/tts` real
+  (`mode='clone'`), que el servidor trocea en 11 chunks internos —coincide
+  con el `ok` de 327ms de las 14:29:53.
+- El **chunk 2 de 11** tarda **70 segundos** en generarse (20:30:21→20:31:31
+  UTC, `EOS token detected... step 637` — una secuencia larga).
+- Los cuatro `unreachable` del diagnóstico (14:31:05, 14:31:14, 14:31:26,
+  14:31:35 local = 20:31:05…20:31:35 UTC) caen **exactamente dentro de esa
+  ventana de 70s**.
+- El trabajo completo (11 chunks) tardó más de **4m37s**, superando
+  `TtsTimeouts.synthesisChatterbox` (240s, `tts_endpoint.dart:39`): el
+  cliente ya había abandonado ese párrafo, pero el servidor lo siguió
+  cocinando de fondo —no hay evidencia de que cancele el trabajo al cortarse
+  la conexión—, y eso bloqueó los health-checks de los párrafos siguientes de
+  la misma descarga.
+
+Chatterbox es un servidor de **un solo worker**: mientras la GPU está
+generando audio no puede atender ninguna otra petición, ni siquiera su propio
+endpoint de salud (`/api/model-info`). No hace falta una laptop dormida ni
+una segunda acción concurrente para producir esta secuencia — `downloadChapters`
+es un loop secuencial (`reader_provider.dart:1242`), así que un solo párrafo
+lento dentro de la misma descarga basta para envenenar los health-checks de
+los que siguen.
 
 ## Veredicto
 
-La hipótesis de "bloques de texto muy grandes" **no explica este incidente
-concreto**: el fallo fue del health check, un endpoint que ningún párrafo
-toca. Es una preocupación válida en general —no hay límite de caracteres del
-lado del cliente para Chatterbox— pero haría falta un párrafo
-extraordinariamente largo (varias veces el promedio medido) para agotar los
-240s de margen, y no hay evidencia de que eso ocurriera acá.
+La hipótesis de "bloques de texto muy grandes" **no explica este incidente**:
+el fallo fue del health check, un endpoint que ningún párrafo toca, y lo que
+alargó el trabajo no fue el tamaño del texto de entrada sino cuánto audio
+decidió generar el modelo para el chunk 2 (step 637, una secuencia larga
+frente a los ~100-200 steps típicos de los otros chunks del mismo párrafo) —
+un comportamiento autoregresivo, no una función del largo del texto que
+manda el cliente. Sigue sin haber límite de caracteres del lado del cliente
+para Chatterbox, y sigue siendo una preocupación válida en general, pero el
+mecanismo de este incidente es contención de un servidor de un solo worker,
+no un bloque de texto desmedido.
 
-## Qué falta para confirmarlo
+## Confirmado
 
-- Confirmar si la laptop (`voicex-laptop` / `g14` en la tailnet) estaba
-  encendida y con Tailscale corriendo entre las 14:29 y 14:31 de ese día.
+- El servidor **nunca estuvo caído ni reiniciado**: `RestartCount: 0`, uptime
+  continuo verificado en el log del contenedor.
+- La causa fue **contención de un solo worker**, no un nodo intermitente:
+  mitigado en `lib/tts/server_health.dart` (`markServerBusy`/`_busyUntil`) y
+  `lib/tts/chatterbox_tts_provider.dart` — al agotar `synthesisTimeout`, el
+  cliente asume que el servidor seguirá ocupado un rato
+  (`TtsTimeouts.busyCooldown`) y salta los health-checks de red durante ese
+  margen en vez de reintentar cada ~13-18s y fallar igual, cascada abajo, en
+  cada párrafo siguiente.
+- **El párrafo abandonado no debería haberse abandonado.** Los 240s por
+  defecto salen de medir ~55-75s por párrafo en otro hardware; en una GPU
+  justa un párrafo tarda varias veces eso, y rendirse antes de tiempo tira a
+  la basura una generación que el servidor sí completó. Durante una descarga
+  el techo ahora se deriva de lo que esa máquina viene tardando de verdad
+  (`TtsTimeouts.adaptiveSynthesis`: cinco veces el promedio medido, con suelo
+  en los 240s de siempre y tope en 20 min), medido solo sobre párrafos de
+  Chatterbox exitosos para que un tramo por Edge no baje el promedio. La
+  lectura en vivo conserva el presupuesto fijo: ahí esperar minutos no sirve
+  de nada, el repliegue rápido es lo correcto.
 - El segundo reporte ("no me parece Chatterbox" en la pantalla de descargas)
-  es un asunto de UI aparte, no diagnosticado acá: falta ver qué motor
-  muestra esa pantalla cuando la descarga cae a Edge por health check
-  fallido, y si el rótulo debería reflejar el repliegue.
+  ya se arregló aparte: la barra de descarga ahora muestra un aviso explícito
+  cuando el motor real difiere del elegido (`downloadEngineNotice`, commit
+  `9e759d2`).
