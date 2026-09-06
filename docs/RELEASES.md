@@ -9,6 +9,45 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## 0.9.1-preview.1 — 2026-09-06
+
+Una descarga que se replegó a Edge ya no termina pareciendo una descarga
+limpia.
+
+### Cómo se descubrió
+
+Un capítulo de 104 párrafos bajado entero, sin un solo error en pantalla, y al
+ponerse a escuchar salió la voz de Edge. El log del servidor F5 lo explicó sin
+lugar a dudas: **la petición nunca llegó**. En toda la vida de ese contenedor
+hubo 25 `POST /tts` —el último tres horas antes de la descarga— cuando un
+capítulo de 104 párrafos deja unos 104. La laptop se había reiniciado y Docker
+Desktop no arranca solo, así que el servidor no existía y la app se replegó a
+Edge desde el primer párrafo.
+
+El repliegue funcionó como debía. Lo que falló es que **no lo dijo**: el aviso
+vivía solo dentro de la barra de progreso
+(`downloadEngineNotice`), y al terminar la barra desaparece. El hallazgo llegó
+horas después, escuchando.
+
+### Lo que cambia
+
+- **Antes de empezar.** El motor se resuelve al pulsar "Descargar", no en el
+  primer párrafo. Si el elegido no está disponible, sale un diálogo que lo dice
+  y deja cancelar — pase lo que pase con el tiempo estimado, porque el problema
+  no es la espera sino que ese audio se guarda bajo otro motor y **no se usará
+  cuando el elegido vuelva**. El estimado, además, se calcula con el motor que
+  realmente va a correr: Edge y F5 no se parecen en tiempo.
+- **Al terminar.** Un mensaje dice con qué se descargó de verdad: "Descargados
+  104 párrafos con F5", o "Descargado con Edge: F5 no estaba disponible, así
+  que este audio no se usará cuando vuelva".
+
+Investigación completa en
+[`docs/bugs/DESCARGA_CON_MOTOR_EQUIVOCADO.md`](bugs/DESCARGA_CON_MOTOR_EQUIVOCADO.md),
+incluido lo que no se arregla con código: Docker Desktop tenía el arranque
+automático desactivado en dos sitios a la vez.
+
+---
+
 ## 0.9.0-preview.1 — 2026-09-06
 
 Dos cosas que se cruzan en la misma pantalla: descargar solo lo que falta, y

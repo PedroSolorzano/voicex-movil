@@ -107,6 +107,15 @@ class ReaderState {
   /// Empty when the download is using the engine the reader actually chose.
   final String downloadEngineNotice;
 
+  /// What the last download ended up doing, written when it finishes.
+  ///
+  /// [downloadEngineNotice] only lives inside the progress bar, so a download
+  /// that fell back to Edge ended looking exactly like a clean one: the
+  /// discovery came hours later, on hearing the wrong voice
+  /// (`docs/bugs/CHATTERBOX_DESCARGAS.md`, incidente del 2026-09-06). This is
+  /// the part that outlives the bar.
+  final String downloadSummary;
+
   const ReaderState({
     this.book,
     this.chapterIndex = 0,
@@ -129,6 +138,7 @@ class ReaderState {
     this.downloadFailed = 0,
     this.downloadSecondsPerParagraph = 0,
     this.downloadEngineNotice = '',
+    this.downloadSummary = '',
   });
 
   ReaderState copyWith({
@@ -154,6 +164,7 @@ class ReaderState {
     int? downloadFailed,
     double? downloadSecondsPerParagraph,
     String? downloadEngineNotice,
+    String? downloadSummary,
   }) =>
       ReaderState(
         book: book ?? this.book,
@@ -179,6 +190,7 @@ class ReaderState {
             downloadSecondsPerParagraph ?? this.downloadSecondsPerParagraph,
         downloadEngineNotice:
             downloadEngineNotice ?? this.downloadEngineNotice,
+        downloadSummary: downloadSummary ?? this.downloadSummary,
       );
 
   /// Estimated seconds left in the current download.
@@ -1251,6 +1263,40 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
   Future<void> downloadChapter() => downloadChapters(state.chapterIndex, 1);
 
+  /// El motor con el que arrancaría una descarga **ahora mismo**.
+  ///
+  /// Sondea exactamente igual que lo haría el primer párrafo, y el veredicto
+  /// queda cacheado, así que preguntarlo antes no cuesta una ida de más a la
+  /// red. Existe para poder avisar antes de empezar: una descarga larga hacia
+  /// el motor equivocado no se descubría hasta ponerse a escuchar.
+  Future<String> resolveDownloadEngine() async {
+    final book = state.book;
+    if (book == null) return _settings.ttsProvider;
+    return _resolveEngineKind(_settings, book.language);
+  }
+
+  /// Cómo terminó la descarga, en una frase.
+  ///
+  /// El repliegue pesa más que los fallos sueltos: unos párrafos que faltan se
+  /// notan y se vuelven a pedir, mientras que un capítulo entero con la voz
+  /// equivocada parece una descarga perfecta hasta que suena.
+  static String _downloadSummaryFor(
+      String dlKind, AppSettings settings, int failed, int done) {
+    final replaced = dlKind != settings.ttsProvider;
+    if (replaced && failed > 0) {
+      return 'Descargado con ${providerLabel(dlKind)} '
+          '(${providerLabel(settings.ttsProvider)} no estaba disponible) y '
+          '$failed párrafos fallaron';
+    }
+    if (replaced) {
+      return 'Descargado con ${providerLabel(dlKind)}: '
+          '${providerLabel(settings.ttsProvider)} no estaba disponible, así '
+          'que este audio no se usará cuando vuelva';
+    }
+    if (failed > 0) return 'Descarga incompleta: $failed párrafos fallaron';
+    return 'Descargados $done párrafos con ${providerLabel(dlKind)}';
+  }
+
   /// True from the moment a download is accepted, not from the moment the bar
   /// appears.
   ///
@@ -1274,9 +1320,11 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// not pay to synthesize what they already read. The following chapters
   /// always start at 0: there is no "where you are" inside a chapter you have
   /// not opened.
-  Future<void> downloadChapters(int from, int count,
+  /// Devuelve `false` si la descarga ni siquiera arrancó porque ya había otra
+  /// en curso: quien la pidió no debe anunciar el resultado de la anterior.
+  Future<bool> downloadChapters(int from, int count,
       {int fromParagraph = 0, bool silent = false}) async {
-    if (_downloading) return;
+    if (_downloading) return false;
     _downloading = true;
     try {
       await _runDownload(from, count,
@@ -1284,6 +1332,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
     } finally {
       _downloading = false;
     }
+    return true;
   }
 
   Future<void> _runDownload(int from, int count,
@@ -1455,14 +1504,23 @@ class ReaderNotifier extends Notifier<ReaderState> {
     unawaited(dlProvider.dispose());
 
     final failed = state.downloadFailed;
+    // `dlKind` es el motor del último párrafo, que es el que importa: si el
+    // servidor se cayó a mitad, lo que quedó guardado lleva el otro nombre.
+    final summary =
+        _downloadSummaryFor(dlKind, settings, failed, state.downloadDone);
     state = state.copyWith(
       isDownloading: false,
-      statusMessage: failed > 0
-          ? 'Descarga incompleta: $failed párrafos fallaron'
-          : state.statusMessage,
+      // Una prelectura no interrumpe: ni mensaje ni resumen. Es el mismo
+      // criterio que ya seguía el resto de `silent`.
+      downloadSummary: silent ? '' : summary,
+      statusMessage: silent ? state.statusMessage : summary,
     );
     if (failed > 0) {
       dev.log('[Reader] Download finished with $failed failures');
+    }
+    if (dlKind != settings.ttsProvider) {
+      dev.log('[Reader] Download finished with $dlKind, not '
+          '${settings.ttsProvider}');
     }
     await refreshDownloadedCount();
   }

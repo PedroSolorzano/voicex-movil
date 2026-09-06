@@ -385,27 +385,47 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             (c == from ? fromParagraph : 0);
       }
     }
-    final estimate =
-        (paragraphs * ReaderNotifier.estimatedSecondsPerParagraph(settings))
-            .round();
+    // Se resuelve el motor **antes** de empezar, no en el primer párrafo: una
+    // descarga larga hacia el motor equivocado no se descubría hasta ponerse a
+    // escuchar, horas después. El sondeo queda cacheado, así que no cuesta una
+    // ida de más a la red.
+    final engine = await notifier.resolveDownloadEngine();
+    final replaced = engine != settings.ttsProvider;
 
-    if (estimate > 120) {
+    // Con el motor real, no con el elegido: Edge es un orden de magnitud más
+    // rápido que F5, y un estimado hecho con el que no va a correr no sirve.
+    final estimate = (paragraphs *
+            ReaderNotifier.estimatedSecondsPerParagraph(
+                settings.copyWith(ttsProvider: engine)))
+        .round();
+
+    final cost = 'Son $paragraphs párrafos: alrededor de '
+        '${_shortDuration(estimate)} de síntesis con ${providerLabel(engine)}, '
+        'y unos ${(paragraphs * 0.25).round()} MB.';
+
+    // Un repliegue siempre se pregunta, dure lo que dure: el problema no es el
+    // tiempo sino que el audio queda guardado bajo otro motor y no se usará
+    // cuando vuelva el elegido.
+    if (replaced || estimate > 120) {
+      if (!context.mounted) return;
       final ok = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
           title: Text('Descargar $label'),
-          content: Text(
-              'Son $paragraphs párrafos: alrededor de ${_shortDuration(estimate)} '
-              'de síntesis con ${providerLabel(settings.ttsProvider)}, y unos '
-              '${(paragraphs * 0.25).round()} MB.\n\n'
-              'Conviene dejar la app abierta mientras tanto.'),
+          content: Text(replaced
+              ? '${providerLabel(settings.ttsProvider)} no está disponible '
+                  'ahora, así que esto se descargaría con '
+                  '${providerLabel(engine)} — otra voz, y guardada aparte: '
+                  'cuando ${providerLabel(settings.ttsProvider)} vuelva, esta '
+                  'descarga no se va a usar.\n\n$cost'
+              : '$cost\n\nConviene dejar la app abierta mientras tanto.'),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(context, false),
                 child: const Text('Cancelar')),
             TextButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('Descargar')),
+                child: Text(replaced ? 'Descargar igual' : 'Descargar')),
           ],
         ),
       );
@@ -413,10 +433,22 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     }
 
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('Descargando $label…')));
-    await notifier.downloadChapters(from, count,
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(SnackBar(content: Text('Descargando $label…')));
+    final ran = await notifier.downloadChapters(from, count,
         fromParagraph: fromParagraph);
+    if (!ran) return;
+
+    // Y al terminar, decir con qué se descargó de verdad. El aviso de repliegue
+    // vivía solo dentro de la barra de progreso, así que una descarga que
+    // cambió de motor terminaba idéntica a una limpia y el hallazgo llegaba
+    // horas después, al escuchar la voz equivocada.
+    final summary = ref.read(readerProvider).downloadSummary;
+    if (summary.isEmpty) return;
+    messenger.showSnackBar(SnackBar(
+      content: Text(summary),
+      duration: Duration(seconds: summary.length > 60 ? 8 : 4),
+    ));
   }
 
   /// Long-pressing a word offers to hear it, define it, or send it elsewhere.

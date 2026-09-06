@@ -189,6 +189,23 @@ Dos niveles sobre la misma tabla, distinguidos por la columna `pinned`.
 | Evicción LRU | Sí, sobre el tope configurado | Nunca |
 | "Limpiar caché" | La borra | No la toca |
 
+`downloadChapters(from, count, fromParagraph:)` recorta el arranque del
+**primer** capítulo del rango: es lo que hace "Desde aquí hasta el final del
+capítulo" en el menú de descargas. Los capítulos siguientes siempre empiezan en
+0, porque no hay "por dónde vas" dentro de un capítulo que no se abrió. El
+contador de capítulos descargados (`downloadedChapterCount()`) solo cuenta los
+que están **completos**, así que una descarga parcial no lo mueve; volver a
+pedir el capítulo entero sintetiza únicamente los párrafos que faltaban, porque
+`isPinnedParagraph` salta lo ya fijado.
+
+El motor de una descarga se resuelve **al pulsarla**, no en el primer párrafo
+(`resolveDownloadEngine()`): si el elegido no está disponible, el diálogo lo
+dice y deja cancelar antes de gastar la síntesis, y al terminar
+`downloadSummary` nombra el motor que realmente la hizo. Los dos avisos existen
+porque un repliegue silencioso deja el audio bajo la clave del otro motor, y la
+reproducción —que busca por el motor seleccionado— no lo encuentra nunca
+(`docs/bugs/DESCARGA_CON_MOTOR_EQUIVOCADO.md`).
+
 **Regla que ninguna función puede romper:** una descarga solo la borra quien la
 pidió, vía `deleteDownloads()`. Ni `pruneExpired()`, ni `evictLruUntilFit()`, ni
 `clearAll()` pueden tocarla. Cubierto por `test/audio_cache_repo_test.dart`.
