@@ -11,6 +11,15 @@ Cerrar los cambios de código con:
 flutter analyze && flutter test
 ```
 
+**Para compilar un APK, `tools/release/compilar.ps1` y nada más.** Nunca
+`flutter build apk` a mano: sin `--dart-define-from-file` la build sale sin
+servidores y en Ajustes quedan dos motores en vez de cinco. No falla, no avisa
+y el APK se instala igual — solo que F5, Kokoro y Piper no existen dentro
+(`lib/config/server_config.dart:26-33`, filtrado en `settings_screen.dart:185`).
+El script pasa los tres `.json` y después comprueba las URLs dentro de
+`libapp.so`, así que un archivo incompleto también se cae ahí. Detalles en
+[`tools/release/README.md`](tools/release/README.md).
+
 ## Cómo se escribe acá
 
 - **El código va en inglés**: identificadores, comentarios y doc-comments `///`.

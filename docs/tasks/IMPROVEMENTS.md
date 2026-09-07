@@ -458,6 +458,46 @@ servidor a internet.
   `audio_session` 0.1→0.2. Van cuatro majors por detrás `go_router` (14→18) y
   `file_picker` (8→12). `flutter_riverpod` 2→3 se aparca: migración de calado
   sin beneficio inmediato. `epubx` frena `archive`, `image` y `xml`.
+- [ ] `medio` 2026-09-06 — **El proyecto está justo en el suelo de versiones que
+  Flutter todavía acepta: Gradle, AGP y Kotlin.** La build de 0.9.1 imprime tres
+  avisos de "will soon be dropped". No es cosmético: el validador de Flutter
+  (`DependencyVersionChecker.kt` en el SDK) tiene dos umbrales por dependencia, y
+  el de abajo **tira `DependencyValidationException` y aborta la compilación**.
+  Las tres versiones del proyecto coinciden **exactamente** con ese umbral de
+  error, no están por encima:
+
+  | Dependencia | Aquí | Falla si es menor que | Avisa si es menor que | Plantilla de Flutter |
+  |---|---|---|---|---|
+  | AGP | 8.11.1 (`android/settings.gradle.kts:24`) | 8.11.1 | 9.0.1 | 9.1.0 |
+  | Kotlin | 2.2.20 (`android/settings.gradle.kts:25`) | 2.2.20 | 2.3.20 | 2.4.0 |
+  | Gradle | 8.14 (`gradle-wrapper.properties`) | 8.14.0 | 9.1.0 | — |
+  | Java | 17 | 17 | 17 | — |
+
+  Con Flutter 3.47.2 eso se traduce en avisos. El día que una stable suba el
+  suelo —y la plantilla de proyecto nuevo ya va en AGP 9.1.0 y Kotlin 2.4.0, dos
+  majors por delante— el mismo `flutter build apk` que hoy funciona deja de
+  compilar. El disparador es `flutter upgrade`, así que el momento lo elegimos
+  nosotros; el riesgo real es descubrirlo con un APK que hay que mandar a un
+  tester esa misma tarde.
+
+  `--android-skip-build-dependency-validation` (lo sugiere el propio aviso)
+  desactiva la comprobación, no el problema: salta el guardia y deja que AGP y
+  Gradle fallen por su cuenta, más abajo y peor explicado. Sirve para
+  desbloquear una release urgente, no como estado permanente.
+
+  Lo que hay que mirar antes de subir, que es donde está el coste de verdad: los
+  plugins traen su propio `compileSdk` congelado y tres van claramente atrasados
+  — `audio_session` 0.1.25 y `just_audio` 0.9.46 en `compileSdk 34` (AGP 8.1.0 y
+  8.5.0 en su `buildscript`), `file_picker` 8.3.7 en 34 con AGP 7.4.2, y
+  `audio_service` 0.18.19 en 35. Son los mismos que el ítem de **Dependencias**
+  de arriba ya marca como "requieren probar la reproducción en el teléfono":
+  conviene hacer las dos cosas en la misma sesión de pruebas en vez de tocar el
+  audio dos veces. Los demás (`flutter_tts`, `record_android`, `wakelock_plus`,
+  `connectivity_plus`) ya están en Kotlin 2.2.x y AGP 8.12+.
+
+  Orden sensato: Gradle primero (solo el wrapper, no toca código), después AGP y
+  Kotlin juntos, y compilar release + instalar en el teléfono en cada paso. Java
+  17 ya cumple el mínimo y no hay que tocarlo.
 - [ ] `bajo` 2026-08-30 — **`main` va por detrás y no hay tags.** `develop`
   acumula toda la historia desde 0.1.0 y `main` sigue en el commit inicial.
   `docs/RELEASES.md` documenta el procedimiento de tag y no se ha aplicado
