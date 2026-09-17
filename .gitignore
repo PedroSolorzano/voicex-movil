@@ -92,3 +92,6 @@ tools/f5/.env
 tools/f5/voices/*
 !tools/f5/voices/.gitkeep
 !tools/f5/voices/sustituciones.json
+
+# Cache de bytecode de las pruebas de tools/reportes
+tools/reportes/__pycache__/
