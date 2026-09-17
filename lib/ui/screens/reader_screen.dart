@@ -1053,14 +1053,6 @@ class _BottomBar extends StatelessWidget {
                   _PlayButton(
                       reader: reader, notifier: notifier, palette: palette),
                   IconButton(
-                    icon: const Icon(Icons.stop),
-                    tooltip: 'Detener',
-                    color: palette.text,
-                    onPressed: reader.status == ReaderStatus.idle
-                        ? null
-                        : notifier.stop,
-                  ),
-                  IconButton(
                     icon: const Icon(Icons.skip_next),
                     tooltip: 'Párrafo siguiente',
                     color: palette.text,
@@ -1080,6 +1072,11 @@ class _BottomBar extends StatelessWidget {
                     palette: palette,
                     onChanged: onSpeedChanged,
                   ),
+                  // Ocupa el hueco que dejó "Detener", que era el único
+                  // control de la fila que ya estaba cubierto por otro: pausar
+                  // hace lo mismo sin perder el sitio dentro del párrafo, y
+                  // parar de verdad sigue estando en la notificación.
+                  _SleepMenu(reader: reader, notifier: notifier, palette: palette),
                 ],
               ),
             ),
@@ -1313,6 +1310,73 @@ class _PlayButton extends StatelessWidget {
           notifier.play();
         }
       },
+    );
+  }
+}
+
+/// Temporizador de apagado: lo primero que se echa en falta escuchando en la
+/// cama, y hasta ahora el audio seguía hasta que se acababa el libro.
+class _SleepMenu extends StatelessWidget {
+  final ReaderState reader;
+  final ReaderNotifier notifier;
+  final ReaderPalette palette;
+
+  const _SleepMenu({
+    required this.reader,
+    required this.notifier,
+    required this.palette,
+  });
+
+  /// `null` es "al final del capítulo"; `Duration.zero`, desactivado.
+  static const _opciones = <(Duration?, String)>[
+    (Duration.zero, 'Desactivado'),
+    (Duration(minutes: 10), '10 minutos'),
+    (Duration(minutes: 20), '20 minutos'),
+    (Duration(minutes: 30), '30 minutos'),
+    (Duration(minutes: 45), '45 minutos'),
+    (Duration(minutes: 60), '1 hora'),
+    (null, 'Al final del capítulo'),
+  ];
+
+  bool get _activo => reader.sleepAt != null || reader.sleepAtChapterEnd;
+
+  String? get _restante {
+    if (reader.sleepAtChapterEnd) return 'cap.';
+    final at = reader.sleepAt;
+    if (at == null) return null;
+    final minutos = at.difference(DateTime.now()).inMinutes + 1;
+    return minutos > 0 ? '${minutos}m' : null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final restante = _restante;
+    return PopupMenuButton<Duration?>(
+      tooltip: 'Temporizador de apagado',
+      onSelected: (d) {
+        if (d == null) {
+          notifier.setSleepAtChapterEnd(true);
+        } else {
+          notifier.setSleepTimer(d == Duration.zero ? null : d);
+        }
+      },
+      itemBuilder: (_) => [
+        for (final (duracion, etiqueta) in _opciones)
+          PopupMenuItem(value: duracion, child: Text(etiqueta)),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(_activo ? Icons.bedtime : Icons.bedtime_outlined,
+                size: 22, color: palette.text),
+            if (restante != null)
+              Text(restante,
+                  style: TextStyle(fontSize: 10, color: palette.muted)),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -88,6 +88,16 @@ class ReaderState {
   /// Repeats the active sentence instead of moving on — the shadowing loop.
   final bool sentenceLoop;
 
+  /// When playback will pause itself, or null when no timer is set.
+  ///
+  /// Held as an instant rather than a remaining duration so the bar can draw
+  /// the countdown without the state being rewritten every second.
+  final DateTime? sleepAt;
+
+  /// Stop at the end of this chapter instead of at a set time — the version
+  /// of the sleep timer that does not cut a sentence in half.
+  final bool sleepAtChapterEnd;
+
   /// Chapters fully downloaded **for the engine currently selected**. Caches
   /// are deliberately separate per engine, so a count that ignored the engine
   /// would promise audio that will not be used.
@@ -132,6 +142,8 @@ class ReaderState {
     this.engineLabel = '',
     this.currentAudioPath,
     this.sentenceLoop = false,
+    this.sleepAt,
+    this.sleepAtChapterEnd = false,
     this.downloadedChapters = 0,
     this.isDownloading = false,
     this.downloadDone = 0,
@@ -158,6 +170,11 @@ class ReaderState {
     String? engineLabel,
     String? currentAudioPath,
     bool? sentenceLoop,
+    DateTime? sleepAt,
+    /// Apagar el temporizador: `sleepAt: null` no se distingue de "no lo
+    /// toques", que es lo que significa omitirlo.
+    bool clearSleepAt = false,
+    bool? sleepAtChapterEnd,
     int? downloadedChapters,
     bool? isDownloading,
     int? downloadDone,
@@ -182,6 +199,8 @@ class ReaderState {
         engineLabel: engineLabel ?? this.engineLabel,
         currentAudioPath: currentAudioPath ?? this.currentAudioPath,
         sentenceLoop: sentenceLoop ?? this.sentenceLoop,
+        sleepAt: clearSleepAt ? null : (sleepAt ?? this.sleepAt),
+        sleepAtChapterEnd: sleepAtChapterEnd ?? this.sleepAtChapterEnd,
         downloadedChapters: downloadedChapters ?? this.downloadedChapters,
         isDownloading: isDownloading ?? this.isDownloading,
         downloadDone: downloadDone ?? this.downloadDone,
@@ -988,9 +1007,45 @@ class ReaderNotifier extends Notifier<ReaderState> {
     state = state.copyWith(status: ReaderStatus.playing);
   }
 
+  Timer? _sleepTimer;
+
+  /// Pausa la reproducción sola al cabo de [d], o la desactiva con null.
+  ///
+  /// Pausa y no para: la posición exacta dentro del párrafo se conserva, que
+  /// es justo lo que hace falta cuando alguien se quedó dormido y al día
+  /// siguiente quiere retomar donde estaba y no donde empezó el párrafo.
+  void setSleepTimer(Duration? d) {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    if (d == null) {
+      state = state.copyWith(clearSleepAt: true, sleepAtChapterEnd: false);
+      return;
+    }
+    _sleepTimer = Timer(d, () {
+      _sleepTimer = null;
+      state = state.copyWith(clearSleepAt: true);
+      unawaited(pause());
+    });
+    state = state.copyWith(
+        sleepAt: DateTime.now().add(d), sleepAtChapterEnd: false);
+  }
+
+  /// La variante sin reloj: parar cuando termine el capítulo en curso.
+  ///
+  /// Existe porque un temporizador de minutos corta a mitad de una frase, y
+  /// el final de un capítulo es un sitio del que se vuelve sin releer.
+  void setSleepAtChapterEnd(bool value) {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    state = state.copyWith(clearSleepAt: true, sleepAtChapterEnd: value);
+  }
+
   /// The Stop button: ends the listening session, so scrolling drives the
   /// position again for silent reading.
-  Future<void> stop() => _stopPlayback(endSession: true);
+  Future<void> stop() {
+    setSleepTimer(null);
+    return _stopPlayback(endSession: true);
+  }
 
   /// Used between paragraphs, where the session must survive.
   Future<void> _stopPlayback({required bool endSession}) async {
@@ -1092,6 +1147,13 @@ class ReaderNotifier extends Notifier<ReaderState> {
     if (state.paragraphIndex < chapter.paragraphs.length - 1) {
       unawaited(navigateParagraph(state.paragraphIndex + 1).then((_) => play()));
     } else if (state.chapterIndex < (state.book?.chapters.length ?? 1) - 1) {
+      if (state.sleepAtChapterEnd) {
+        // Aquí acaba el capítulo, que es donde se pidió parar. `_onEnd` ya
+        // dejó el estado en idle, así que basta con no avanzar.
+        state = state.copyWith(
+            sleepAtChapterEnd: false, statusMessage: 'Fin del capítulo');
+        return;
+      }
       unawaited(
           navigateChapter(state.chapterIndex + 1, paragraph: 0).then((_) => play()));
     } else {
@@ -1652,6 +1714,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
     _connectivitySub = null;
     _connectivityDebounce?.cancel();
     _connectivityDebounce = null;
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
     _listening = false;
     _loadedChapter = -1;
     _loadedParagraph = -1;
