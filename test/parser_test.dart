@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voicex_movil/epub/parser.dart';
 
@@ -71,6 +73,42 @@ void main() {
 
     test('rejects text below the minimum length', () {
       expect(isMeaningfulShortBlock('a.'), isFalse);
+    });
+  });
+
+  group('readEpubBytes', () {
+    // Cualquier app del teléfono puede mandar un "EPUB" por el intent de
+    // compartir, y el archivo se lee entero a memoria antes de descomprimirlo.
+    // El tope es lo único que separa un archivo malformado de que el sistema
+    // mate la app.
+    late File archivo;
+
+    setUp(() {
+      archivo = File(
+          '${Directory.systemTemp.createTempSync('voicex').path}/libro.epub')
+        ..writeAsBytesSync(List.filled(1024, 0));
+    });
+
+    test('refuses a file larger than the ceiling', () {
+      expect(
+        () => readEpubBytes(archivo.path, maxBytes: 100),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('the refusal says so in Spanish, because the reader sees it', () async {
+      try {
+        await readEpubBytes(archivo.path, maxBytes: 100);
+        fail('debería haber lanzado');
+      } on FormatException catch (e) {
+        expect(e.message, contains('demasiado grande'));
+      }
+    });
+
+    test('a file under the ceiling is read whole', () async {
+      final bytes = await readEpubBytes(archivo.path, maxBytes: 4096);
+
+      expect(bytes.length, 1024);
     });
   });
 }

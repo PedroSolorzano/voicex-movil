@@ -4,14 +4,38 @@ import 'package:flutter/foundation.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'models.dart';
 
+/// Anything past this is not a book.
+///
+/// The file is read whole into memory and then unzipped, so nothing else bounds
+/// how much memory an import can ask for. Any app on the phone can send this
+/// one an "EPUB" through the share intent, which makes the ceiling the
+/// difference between rejecting a malformed archive and being killed by the
+/// system. Generous on purpose: a heavily illustrated novel runs to a few tens
+/// of megabytes.
+const maxEpubBytes = 200 * 1024 * 1024;
+
 /// Parses off the UI isolate. A full novel takes hundreds of milliseconds to
 /// unzip and walk, which visibly janks the reader on open when done inline.
 Future<Book> parseEpubInBackground(String path) => compute(_parseEpubIsolate, path);
 
 Future<Book> _parseEpubIsolate(String path) => parseEpub(path);
 
-Future<Book> parseEpub(String path) async {
-  final bytes = await File(path).readAsBytes();
+/// Reads the archive, refusing anything too large to be a book.
+///
+/// [maxBytes] is a parameter so a test can prove the refusal without building
+/// a 200 MB fixture.
+Future<Uint8List> readEpubBytes(String path, {int maxBytes = maxEpubBytes}) async {
+  final file = File(path);
+  final size = await file.length();
+  if (size > maxBytes) {
+    throw const FormatException(
+        'El archivo es demasiado grande para ser un EPUB.');
+  }
+  return file.readAsBytes();
+}
+
+Future<Book> parseEpub(String path, {int maxBytes = maxEpubBytes}) async {
+  final bytes = await readEpubBytes(path, maxBytes: maxBytes);
   final epub = await EpubReader.readBook(bytes);
 
   final title = epub.Title ?? 'Sin título';
@@ -281,8 +305,9 @@ class EpubExtras {
   });
 }
 
-Future<EpubExtras> extractEpubExtras(String path) async {
-  final bytes = await File(path).readAsBytes();
+Future<EpubExtras> extractEpubExtras(String path,
+    {int maxBytes = maxEpubBytes}) async {
+  final bytes = await readEpubBytes(path, maxBytes: maxBytes);
   final epub = await EpubReader.readBook(bytes);
 
   // ── Cover image ───────────────────────────────────────────────────────────

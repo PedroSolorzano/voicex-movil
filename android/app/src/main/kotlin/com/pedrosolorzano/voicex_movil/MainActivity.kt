@@ -94,17 +94,57 @@ class MainActivity : AudioServiceActivity() {
         return uri?.let { copyToCache(it) }
     }
 
-    private fun copyToCache(uri: Uri): String? = try {
-        val name = displayName(uri) ?: "compartido.epub"
-        val safe = if (name.endsWith(".epub", true)) name else "$name.epub"
-        val dest = File(cacheDir, "shared_${System.currentTimeMillis()}_$safe")
-        contentResolver.openInputStream(uri)?.use { input ->
-            dest.outputStream().use { output -> input.copyTo(output) }
+    /**
+     * Copies the incoming stream into cacheDir, refusing anything too large to
+     * be a book.
+     *
+     * Any app on the phone can send this one a file through the share intent,
+     * and the previous copyTo() had no ceiling at all: whatever arrived was
+     * written to disk in full, and then read whole into memory by the parser.
+     */
+    private fun copyToCache(uri: Uri): String? {
+        return try {
+            val name = displayName(uri) ?: "compartido.epub"
+            val withExt = if (name.endsWith(".epub", true)) name else "$name.epub"
+            val dest = File(cacheDir, "shared_${System.currentTimeMillis()}_${sanitize(withExt)}")
+            var copied = 0L
+            var tooBig = false
+            contentResolver.openInputStream(uri)?.use { input ->
+                dest.outputStream().use { output ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        copied += read
+                        if (copied > MAX_EPUB_BYTES) {
+                            tooBig = true
+                            break
+                        }
+                        output.write(buffer, 0, read)
+                    }
+                }
+            }
+            when {
+                tooBig -> {
+                    dest.delete()
+                    null
+                }
+                dest.length() > 0 -> dest.absolutePath
+                else -> null
+            }
+        } catch (e: Exception) {
+            null
         }
-        if (dest.length() > 0) dest.absolutePath else null
-    } catch (e: Exception) {
-        null
     }
+
+    /**
+     * The sending app chooses the display name, so it is untrusted text that
+     * ends up inside a path. The timestamp prefix already makes "../" harmless,
+     * but that is a coincidence of the naming scheme rather than a defence, and
+     * the next person to simplify the prefix would remove it without noticing.
+     */
+    private fun sanitize(name: String): String =
+        name.replace(Regex("[^A-Za-z0-9._-]"), "_").takeLast(80)
 
     private fun displayName(uri: Uri): String? = try {
         contentResolver.query(uri, null, null, null, null)?.use { cursor ->
@@ -113,5 +153,10 @@ class MainActivity : AudioServiceActivity() {
         }
     } catch (e: Exception) {
         null
+    }
+
+    companion object {
+        /** Mirrors `maxEpubBytes` in lib/epub/parser.dart. */
+        private const val MAX_EPUB_BYTES = 200L * 1024 * 1024
     }
 }

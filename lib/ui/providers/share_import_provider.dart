@@ -1,4 +1,5 @@
 import 'dart:developer' as dev;
+import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'library_provider.dart';
@@ -46,6 +47,18 @@ class ShareImportNotifier extends Notifier<String?> {
     } catch (e) {
       dev.log('[Share] import failed: $e');
       state = 'No se pudo agregar el libro: $e';
+    } finally {
+      // MainActivity copied the incoming content:// URI here so Dart could read
+      // it, and the library has its own copy by now. Nothing else would ever
+      // remove this one. A file the reader picked with the file picker is not
+      // ours to delete, and never arrives through this path.
+      if (path.contains('/cache/')) {
+        try {
+          await File(path).delete();
+        } catch (e) {
+          dev.log('[Share] no se pudo borrar la copia temporal: $e');
+        }
+      }
     }
   }
 
