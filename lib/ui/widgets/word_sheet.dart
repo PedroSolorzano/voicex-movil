@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../epub/models.dart';
+import '../../epub/text_align.dart';
 import '../../services/dictionary.dart';
 
 /// Bridges to MainActivity for handing a word to another app (a translator,
@@ -29,12 +31,22 @@ class WordSheet extends StatefulWidget {
   /// long press is nobody's accident.
   final VoidCallback onReadFromHere;
 
+  /// The paragraph the word came from, for the actions that act on a passage
+  /// rather than on the word.
+  final Paragraph paragraph;
+
+  /// Where the word starts inside `paragraph.rawText`, which is what says
+  /// which sentence "this one" means.
+  final int offset;
+
   const WordSheet({
     super.key,
     required this.word,
     required this.language,
     required this.onPronounce,
     required this.onReadFromHere,
+    required this.paragraph,
+    required this.offset,
   });
 
   @override
@@ -72,6 +84,30 @@ class _WordSheetState extends State<WordSheet> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('No hay audio para esta palabra todavía.'),
       ));
+    }
+  }
+
+  /// La oración que contiene la palabra pulsada.
+  String get _oracion => sentenceAt(widget.paragraph, widget.offset);
+
+  Future<void> _copiar(String texto, String aviso) async {
+    // El mensajero se toma antes de cerrar: después, este `context` ya no
+    // está montado y no encuentra ninguno.
+    final messenger = ScaffoldMessenger.of(context);
+    await Clipboard.setData(ClipboardData(text: texto));
+    if (!mounted) return;
+    Navigator.pop(context);
+    messenger.showSnackBar(SnackBar(content: Text(aviso)));
+  }
+
+  Future<void> _compartir() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await _textChannel.invokeMethod('shareText', _oracion);
+      if (mounted) Navigator.pop(context);
+    } on PlatformException catch (e) {
+      messenger.showSnackBar(
+          SnackBar(content: Text('No se pudo compartir: ${e.message}')));
     }
   }
 
@@ -151,14 +187,35 @@ class _WordSheetState extends State<WordSheet> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                icon: const Icon(Icons.play_circle_outline),
-                label: const Text('Leer desde este párrafo'),
-                onPressed: widget.onReadFromHere,
-              ),
+            const SizedBox(height: 4),
+            // Lo que actúa sobre el pasaje y no sobre la palabra. Copiar una
+            // cita no se podía: los párrafos son `Text` plano y no hay
+            // selección en ninguna parte de la app.
+            Wrap(
+              spacing: 4,
+              children: [
+                TextButton.icon(
+                  icon: const Icon(Icons.play_circle_outline, size: 18),
+                  label: const Text('Leer desde aquí'),
+                  onPressed: widget.onReadFromHere,
+                ),
+                TextButton.icon(
+                  icon: const Icon(Icons.format_quote, size: 18),
+                  label: const Text('Copiar oración'),
+                  onPressed: () => _copiar(_oracion, 'Oración copiada'),
+                ),
+                TextButton.icon(
+                  icon: const Icon(Icons.notes, size: 18),
+                  label: const Text('Copiar párrafo'),
+                  onPressed: () =>
+                      _copiar(widget.paragraph.rawText, 'Párrafo copiado'),
+                ),
+                TextButton.icon(
+                  icon: const Icon(Icons.share_outlined, size: 18),
+                  label: const Text('Compartir'),
+                  onPressed: _compartir,
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             if (_loading)

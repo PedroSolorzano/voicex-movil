@@ -297,7 +297,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                           settings: settings,
                           palette: palette,
                           onWordLongPress: (word) => _showWordSheet(
-                              context, word, book.language, i),
+                              context, word, book.language, i, para),
                         );
                       },
                     ),
@@ -502,8 +502,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   /// Long-pressing a word offers to hear it, define it, or send it elsewhere.
-  Future<void> _showWordSheet(BuildContext context,
-      ({String text, int offset}) word, String language, int paragraphIndex) {
+  Future<void> _showWordSheet(
+      BuildContext context,
+      ({String text, int offset}) word,
+      String language,
+      int paragraphIndex,
+      Paragraph para) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -511,6 +515,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       builder: (_) => WordSheet(
         word: word.text,
         language: language,
+        paragraph: para,
+        offset: word.offset,
         onPronounce: () => _pronounceWord(word),
         onReadFromHere: () {
           Navigator.pop(context);

@@ -157,4 +157,38 @@ void main() {
       expect(sentenceAtOffset([], 5), -1);
     });
   });
+
+  group('sentenceAt', () {
+    // Lo que se copia al pedir "copiar oración" desde la hoja de palabra.
+    final paragraph = Paragraph(
+      rawText: 'Primera oración. Segunda oración aquí.',
+      sentences: [
+        Sentence(text: 'Primera oración.', index: 0),
+        Sentence(text: 'Segunda oración aquí.', index: 1),
+      ],
+      index: 0,
+    );
+
+    test('devuelve la oración que contiene el offset', () {
+      // 'Primera' empieza en 0; 'Segunda' en 17.
+      expect(sentenceAt(paragraph, 0), 'Primera oración.');
+      expect(sentenceAt(paragraph, 17), 'Segunda oración aquí.');
+    });
+
+    test('el último carácter de una oración sigue siendo suyo', () {
+      expect(sentenceAt(paragraph, 15), 'Primera oración.');
+    });
+
+    test('entre dos oraciones cae al párrafo entero, no a nada', () {
+      // El espacio del índice 16 no pertenece a ninguna de las dos.
+      expect(sentenceAt(paragraph, 16), paragraph.rawText);
+    });
+
+    test('un párrafo sin oraciones devuelve su propio texto', () {
+      final suelto =
+          Paragraph(rawText: 'Un título', sentences: const [], index: 0);
+
+      expect(sentenceAt(suelto, 3), 'Un título');
+    });
+  });
 }

@@ -53,6 +53,18 @@ class MainActivity : AudioServiceActivity() {
                         result.success(processText(word))
                     }
                 }
+                // Sends a passage to the share sheet. PROCESS_TEXT above is a
+                // different intent: that one hands a word to an app that will
+                // act on it (a translator) and is not offered by messaging
+                // apps, which is where a quote from a book wants to go.
+                "shareText" -> {
+                    val text = call.arguments as? String
+                    if (text.isNullOrBlank()) {
+                        result.error("EMPTY", "Texto vacío", null)
+                    } else {
+                        result.success(shareText(text))
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
@@ -78,6 +90,19 @@ class MainActivity : AudioServiceActivity() {
         val chooser = Intent.createChooser(intent, "Buscar \"$word\" en")
         return try {
             startActivity(chooser)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun shareText(text: String): Boolean {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, text)
+        }
+        return try {
+            startActivity(Intent.createChooser(intent, "Compartir"))
             true
         } catch (e: Exception) {
             false

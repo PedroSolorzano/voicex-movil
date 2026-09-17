@@ -64,6 +64,21 @@ List<SentenceRange> buildSentenceRanges(Paragraph paragraph) {
   return ranges;
 }
 
+/// The sentence of [paragraph] containing [offset].
+///
+/// Falls back to the whole paragraph when the offset lands between sentences —
+/// the ranges come from searching each sentence back in the raw text, so the
+/// space after a full stop belongs to neither. Returning the paragraph there
+/// beats returning nothing: whoever asked for this wants something to copy.
+String sentenceAt(Paragraph paragraph, int offset) {
+  for (final range in buildSentenceRanges(paragraph)) {
+    if (offset >= range.start && offset < range.end) {
+      return paragraph.rawText.substring(range.start, range.end);
+    }
+  }
+  return paragraph.rawText;
+}
+
 /// Index of the word being spoken at [elapsedMs], or -1 before the first word.
 /// Marks are ordered by time, so a binary search keeps the 50 ms tick cheap
 /// even for long paragraphs.
