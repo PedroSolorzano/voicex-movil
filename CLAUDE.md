@@ -82,9 +82,17 @@ Cinco invariantes que ya causaron bugs y conviene no romper:
   con base64 en Kokoro ≥ v0.8, audio crudo si no. Un intermediario que conteste
   200 con HTML cae por la rama de "audio crudo" y rompe el parseo aunque el
   servidor esté bien.
-- Ningún provider manda cabeceras de autenticación. Kokoro y Piper **no tienen
-  auth**: por eso el acceso remoto va por Tailscale y no por un túnel público
-  (`docs/context/ACCESO_REMOTO.md`).
+- **Los providers sí mandan credencial, y quien la valida nunca es el motor.**
+  `applyRequestHeaders` (`lib/tts/tts_endpoint.dart`) pone `Authorization:
+  Bearer` en la síntesis, el sondeo y el catálogo. Kokoro y Piper no saben
+  autenticar —la "API key" de Kokoro es la cadena literal `not-needed`—, así
+  que escuchan solo en loopback y quien comprueba el token es el proxy de
+  `tools/proxy`. F5 es el caso aparte: no tiene proxy delante y valida su
+  propio `F5_TOKEN` (`tools/f5/server.py`), distinto del anterior, por eso la
+  credencial se elige con `settings.tokenFor(engine)` y no con un campo único.
+  Quitar esas cabeceras razonando que "los motores no autentican" deja fuera
+  justamente a quien sí lo hace. El acceso remoto sigue yendo por Tailscale y
+  no por un túnel público (`docs/context/ACCESO_REMOTO.md`).
 
 ## Detalles del entorno
 
