@@ -126,5 +126,22 @@ void main() {
 
       expect(total, 50);
     });
+
+    test('un reporte descartado por cola llena no deja la nota de voz tirada',
+        () async {
+      // El archivo lo escribe la pantalla de reportes y lo borra quien lo
+      // sube. Si el reporte nunca se encola, no queda nadie que lo limpie.
+      for (var i = 0; i < 50; i++) {
+        await Reporter.recordCrash(TimeoutException('$i'), null);
+      }
+      final nota = File(
+          '${Directory.systemTemp.createTempSync('voicex').path}/nota.m4a')
+        ..writeAsBytesSync([0, 1, 2]);
+
+      await Reporter.recordFeedback(
+          tipo: 'bug', texto: 'no sonaba', audioPath: nota.path);
+
+      expect(nota.existsSync(), isFalse);
+    });
   });
 }

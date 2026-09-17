@@ -35,6 +35,11 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
   String _tipo = 'bug';
   bool _grabando = false;
   String? _notaPath;
+
+  /// Dónde está escribiendo el grabador ahora mismo. Aparte de [_notaPath],
+  /// que solo se rellena cuando la grabación termina bien: sin esto, cerrar la
+  /// pantalla a mitad de una grabación dejaba el archivo tirado.
+  String? _enCurso;
   int _segundos = 0;
   Timer? _cronometro;
   bool _enviado = false;
@@ -43,7 +48,17 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
   void dispose() {
     _cronometro?.cancel();
     _texto.dispose();
-    unawaited(_grabador.dispose());
+    // Salir sin enviar deja la nota sin dueño: nadie va a subirla y nadie la
+    // va a borrar. Se espera a que el grabador suelte el archivo antes de
+    // borrarlo, porque puede estar escribiéndolo todavía.
+    final huerfanas = _enviado
+        ? const <String>[]
+        : [_notaPath, _enCurso].whereType<String>().toList();
+    unawaited(_grabador.dispose().then((_) async {
+      for (final path in huerfanas) {
+        await Reporter.deleteNoteQuietly(path);
+      }
+    }));
     super.dispose();
   }
 
@@ -55,6 +70,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
       setState(() {
         _grabando = false;
         _notaPath = path;
+        _enCurso = null;
       });
       return;
     }
@@ -83,6 +99,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
       _grabando = true;
       _segundos = 0;
       _notaPath = null;
+      _enCurso = path;
     });
     _cronometro = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) return;

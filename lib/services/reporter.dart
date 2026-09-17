@@ -129,6 +129,18 @@ class Reporter {
     return sanitize(frames);
   }
 
+  /// Removes a voice note that has lost its report, never throwing: this runs
+  /// on paths that are already handling a failure.
+  static Future<void> deleteNoteQuietly(String? path) async {
+    if (path == null) return;
+    try {
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+    } catch (e) {
+      dev.log('[Reporter] no se pudo borrar la nota de voz: $e');
+    }
+  }
+
   static Future<void> _enqueue(Map<String, Object?> body,
       {String? audioPath}) async {
     final db = await getDatabase();
@@ -137,6 +149,10 @@ class Reporter {
         0;
     if (queued >= _maxQueued) {
       dev.log('[Reporter] cola llena ($queued), se descarta el reporte');
+      // The note belonged to a report that will now never be sent. Nothing
+      // else knows about that file, so leaving it behind means an orphan in
+      // the cache directory that no code path will ever clean up.
+      await deleteNoteQuietly(audioPath);
       return;
     }
     await db.insert('reports', {
