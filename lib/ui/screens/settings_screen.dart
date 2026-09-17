@@ -487,6 +487,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ]),
 
+          _Section(title: 'Pantalla', children: [
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Mantener la pantalla encendida'),
+              subtitle: const Text(
+                  'Leyendo en silencio la pantalla se apagaba sola a los pocos '
+                  'segundos. Solo mientras el libro está abierto.'),
+              value: s.keepScreenOn,
+              onChanged: (v) => _update(s.copyWith(keepScreenOn: v)),
+            ),
+          ]),
+
           _Section(title: 'Tema de la app', children: [
             SegmentedButton<String>(
               segments: const [
@@ -580,30 +592,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ]),
 
-          const SizedBox(height: 24),
-          Center(
-            child: Text(
-              'Los cambios se guardan solos.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withValues(alpha: 0.5),
-                  ),
-            ),
-          ),
-          _Section(title: 'Pantalla', children: [
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Mantener la pantalla encendida'),
-              subtitle: const Text(
-                  'Leyendo en silencio la pantalla se apagaba sola a los pocos '
-                  'segundos. Solo mientras el libro está abierto.'),
-              value: s.keepScreenOn,
-              onChanged: (v) => _update(s.copyWith(keepScreenOn: v)),
-            ),
-          ]),
-
           _Section(title: 'Contar un problema', children: [
             Row(
               children: [
@@ -630,6 +618,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           // allí como un 200 impecable, porque lo que se perdió fue la vuelta.
           _DiagnosticsSection(version: _packageInfo),
 
+          const SizedBox(height: 24),
+          Center(
+            child: Text(
+              'Los cambios se guardan solos.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.5),
+                  ),
+            ),
+          ),
           const SizedBox(height: 32),
           if (_packageInfo != null)
             Center(
