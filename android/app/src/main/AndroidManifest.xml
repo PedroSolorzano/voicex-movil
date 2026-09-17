@@ -21,9 +21,17 @@
          como peligroso por venir de fuera de Play. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
+    <!-- allowBackup es true por defecto, y eso mandaba a la copia de Google la
+         base de datos entera: qué libros tiene cada persona, por dónde va
+         leyendo, sus marcadores y la cola de reportes sin enviar. Nada de eso
+         tiene por qué salir del teléfono. No se pierde una restauración útil:
+         los EPUB viven en el almacenamiento de la app y pesan bastante más que
+         el límite de 25 MB de la copia automática, así que una reinstalación
+         nunca recuperaba la biblioteca de verdad. -->
     <application
         android:label="VoiceX"
         android:name="${applicationName}"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
