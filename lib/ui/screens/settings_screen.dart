@@ -88,7 +88,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       'piper' =>
         await PiperTtsProvider.healthOf(url, token: _settings.serverToken),
       'f5' => await F5TtsProvider.healthOf(url,
-          token: _settings.serverToken),
+          token: _settings.tokenFor('f5')),
       _ =>
         await KokoroTtsProvider.healthOf(url, token: _settings.serverToken),
     };

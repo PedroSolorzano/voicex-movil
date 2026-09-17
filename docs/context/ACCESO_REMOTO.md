@@ -169,9 +169,21 @@ real (ver [`tools/f5/README.md`](../../tools/f5/README.md)).
 responde 200 con el modelo cargado. La dirección vive en
 [`tools/release/f5.json`](../../tools/release/f5.json) como
 `F5_URL` — a diferencia de `KOKORO_URL`/`PIPER_URL`, ese archivo **sí
-está trackeado en git**: sin proxy y sin token no hay nada que revocar, y la
-tailnet ya es la barrera de seguridad. Si la IP cambia (reinicio de
-Tailscale, reinstalación), hay que actualizar ese archivo y recompilar.
+está trackeado en git**: la dirección no es el secreto. Si la IP cambia
+(reinicio de Tailscale, reinstalación), hay que actualizar ese archivo y
+recompilar.
+
+**La tailnet dejó de ser la única barrera (2026-09-17).** El argumento de
+"sin proxy y sin token" valía para una máquina que no se mueve, y ésta es una
+laptop: en la WiFi de una cafetería o de una oficina, ese puerto 8005 —que
+escucha en todas las interfaces— lo alcanza cualquiera de esa red, tanto para
+pedir síntesis como para leer en `/health` los nombres de las voces clonadas,
+que son grabaciones de personas reales. El servidor ahora valida su propio
+`F5_TOKEN` (`tools/f5/server.py`), distinto del `TTS_TOKEN` del proxy porque
+lo comprueba otra máquina, y acota lo que acepta en `/tts` para que un texto
+desmedido no ocupe la GPU durante horas. Sigue siendo opcional: arrancado sin
+`F5_TOKEN`, el servidor se comporta como antes. Ver
+[`tools/f5/README.md`](../../tools/f5/README.md).
 
 Esta laptop es un nodo **intermitente**, no un servidor 24/7: cuando está
 apagada o dormida, el sondeo de salud de la app (`F5TtsProvider.healthOf`)

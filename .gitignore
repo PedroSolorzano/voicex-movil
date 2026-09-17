@@ -83,6 +83,10 @@ tools/release/*.json
 # es el token, que se queda en el .json personal (ver tools/release/README.md).
 !tools/release/kokoro.json
 
+# Token del servidor de F5: lo lee su docker-compose y lo valida el propio
+# servidor, que no tiene proxy delante (ver tools/f5/README.md)
+tools/f5/.env
+
 # Voces clonadas para F5: son grabaciones de personas reales, no van a git.
 # El servidor las lee de aquí (ver tools/f5/README.md).
 tools/f5/voices/*

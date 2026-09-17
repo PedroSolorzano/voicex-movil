@@ -5,5 +5,8 @@
   "TTS_TOKEN": "el-token-de-esta-persona-sacado-de-tools-proxy-tokens-conf",
 
   "_piper": "Piper solo en tu propia compilación: devuelve WAV sin comprimir, ~159 MB por hora, y eso no se le manda al plan de datos de otra persona. Borra la línea para los probadores.",
-  "PIPER_URL": "https://voicex-server.tu-tailnet.ts.net/piper"
+  "PIPER_URL": "https://voicex-server.tu-tailnet.ts.net/piper",
+
+  "_f5": "Token del servidor de F5, distinto de TTS_TOKEN: a ese lo valida el proxy, y a éste el propio servidor (tools/f5/server.py), que no tiene proxy delante. Tiene que coincidir con el F5_TOKEN del .env de tools/f5. Deja la cadena vacía si tu servidor arranca sin token.",
+  "F5_TOKEN": "el-mismo-valor-que-tools-f5-punto-env"
 }

@@ -22,8 +22,10 @@ TTSProvider getProvider(AppSettings settings, {String lang = 'es'}) {
       return PiperTtsProvider(settings.piperBaseUrl,
           lengthScale: settings.piperLengthScale, token: settings.serverToken);
     case 'f5':
-      // Servidor directo por Tailscale, sin proxy: sin token.
-      return F5TtsProvider(settings.f5BaseUrl);
+      // Servidor directo por Tailscale, sin proxy: el token es suyo, no el
+      // que valida nginx para Kokoro y Piper.
+      return F5TtsProvider(settings.f5BaseUrl,
+          token: settings.tokenFor('f5'));
     case 'edge':
     default:
       return EdgeTtsProvider();

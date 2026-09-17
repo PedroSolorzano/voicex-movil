@@ -55,12 +55,38 @@ apareció ningún otro error en español.
 sayer" y mejora escrito `Yac Sóyer`, pero eso depende del libro y no del
 motor; este archivo es solo para defectos del checkpoint.
 
+## Token
+
+A diferencia de Kokoro y Piper —que escuchan en loopback y solo se alcanzan por
+el proxy de `tools/proxy`, que es quien autentica—, este servidor publica su
+puerto en todas las interfaces y no tiene proxy delante. Mientras la máquina no
+se mueva, la tailnet hace de barrera; pero **ésta es una laptop**, y en la WiFi
+de una cafetería o de una oficina cualquiera de esa red llega a `/tts` y al
+listado de voces clonadas de `/health`, que son grabaciones de personas reales.
+
+Generá uno y ponelo en un `.env` junto a este compose (gitignorado):
+
+```bash
+openssl rand -base64 32 | tr -d '=+/'
+echo 'F5_TOKEN=el-token-generado' > tools/f5/.env
+```
+
+El mismo valor va como `F5_TOKEN` en tu `.json` personal de `tools/release/`,
+que es de donde la app lo compila. Sin `F5_TOKEN` el servidor sigue abierto,
+igual que antes: útil para probar en casa, no para llevarse la laptop.
+
 ## La API
 
 | Ruta | Qué hace |
 |---|---|
 | `GET /health` | Sondeo barato. No toca la GPU. |
 | `POST /tts` | `{"text", "voice", "speed", "nfe_step"}` → MP3 |
+
+Las dos piden `Authorization: Bearer <token>` cuando hay token configurado, y
+responden 401 sin él. `/tts` acota lo que acepta —texto hasta 8.000 caracteres,
+`speed` entre 0,5 y 2, `nfe_step` entre 16 y 96— porque la GPU es una sola y se
+toma con un candado global: un texto desmedido la ocupa durante horas y deja
+sin servicio a quien está leyendo.
 
 `/health` **sigue contestando en milisegundos con una síntesis en curso**
 (medido: 4-9 ms mientras la GPU trabajaba 25 s). No es un detalle: Chatterbox

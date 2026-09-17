@@ -115,4 +115,23 @@ void main() {
       expect(settings.piperLengthScale, 1.25);
     });
   });
+
+  group('tokenFor', () {
+    // Dos secretos y no uno, porque los valida gente distinta: el del proxy lo
+    // comprueba nginx delante de Kokoro y Piper; el de F5, el propio servidor.
+    // Mandarle a F5 el del proxy no falla ruidosamente -- solo entrega una
+    // credencial a una máquina que no tiene por qué verla.
+    test('F5 recibe el suyo, no el del proxy', () {
+      final settings = AppSettings();
+
+      expect(settings.tokenFor('f5'), TtsServerConfig.f5Token);
+    });
+
+    test('Kokoro y Piper siguen compartiendo el del proxy', () {
+      final settings = AppSettings();
+
+      expect(settings.tokenFor('kokoro'), settings.serverToken);
+      expect(settings.tokenFor('piper'), settings.serverToken);
+    });
+  });
 }

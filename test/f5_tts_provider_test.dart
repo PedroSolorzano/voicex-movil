@@ -113,4 +113,58 @@ void main() {
     expect(await F5TtsProvider.healthOf(baseUrl), ServerHealth.busy);
     expect(healthHits, 0);
   });
+
+  group('token', () {
+    // Este servidor no tiene proxy delante: el token lo valida él mismo, y
+    // hasta 0.9.1 la app no le mandaba ninguno en la síntesis.
+    test('la síntesis se identifica ante el servidor', () async {
+      String? recibido;
+      // Contesta 200 sin cuerpo: alcanza para leer la cabecera y corta antes
+      // de escribir el MP3, que necesitaría el directorio temporal del
+      // teléfono y no hay ninguno bajo `flutter test`.
+      await serve((req) {
+        recibido = req.headers.value(HttpHeaders.authorizationHeader);
+        req.response
+          ..statusCode = 200
+          ..close();
+      });
+
+      await expectLater(
+        F5TtsProvider(baseUrl, token: 'abc').synthesize(
+            text: 'hola', voice: 'esposa', rate: '1.0', volume: '1.0'),
+        throwsA(isA<HttpException>()),
+      );
+
+      expect(recibido, 'Bearer abc');
+    });
+
+    test('el sondeo también, o el 401 se leería como servidor caído', () async {
+      String? recibido;
+      await serve((req) {
+        recibido = req.headers.value(HttpHeaders.authorizationHeader);
+        req.response
+          ..statusCode = 200
+          ..close();
+      });
+
+      await F5TtsProvider.healthOf(baseUrl, token: 'abc');
+
+      expect(recibido, 'Bearer abc');
+    });
+
+    test('sin token no se manda cabecera: el servidor puede no pedirla',
+        () async {
+      String? recibido = 'sin tocar';
+      await serve((req) {
+        recibido = req.headers.value(HttpHeaders.authorizationHeader);
+        req.response
+          ..statusCode = 200
+          ..close();
+      });
+
+      await F5TtsProvider.healthOf(baseUrl);
+
+      expect(recibido, isNull);
+    });
+  });
 }

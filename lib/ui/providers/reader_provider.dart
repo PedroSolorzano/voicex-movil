@@ -642,7 +642,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
               'piper' => await PiperTtsProvider.healthOf(url,
                   token: settings.serverToken),
               'f5' => await F5TtsProvider.healthOf(url,
-                  token: settings.serverToken),
+                  token: settings.tokenFor('f5')),
               _ => ServerHealth.ok,
             };
       if (!_lastHealth.isUsable) {
@@ -1599,7 +1599,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
           token: settings.serverToken),
       'f5' => await F5TtsProvider.isReachable(
           settings.selfHostedUrl,
-          token: settings.serverToken),
+          token: settings.tokenFor('f5')),
       _ => false,
     };
     if (!reachable) {

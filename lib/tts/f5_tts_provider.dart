@@ -32,7 +32,12 @@ const _uuid = Uuid();
 class F5TtsProvider implements TTSProvider {
   final String baseUrl;
 
-  /// Empty: this server is reached directly, no proxy token involved.
+  /// This server's own credential, not the proxy's.
+  ///
+  /// Kokoro and Piper share the token nginx validates for them; F5 has no
+  /// proxy in front and checks its own (`tools/f5/server.py`). Empty is a
+  /// valid setup — a server started without `F5_TOKEN` asks for nothing — so
+  /// the header is simply omitted then.
   final String token;
 
   /// Overridable so a test can force a timeout without waiting the full budget.

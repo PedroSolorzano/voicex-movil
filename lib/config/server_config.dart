@@ -29,8 +29,21 @@ class TtsServerConfig {
   static const token = String.fromEnvironment('TTS_TOKEN');
 
   /// F5-TTS vive en una laptop personal con GPU, alcanzada directo por
-  /// Tailscale — no detrás del proxy, así que no lleva token.
+  /// Tailscale — no detrás del proxy de `tools/proxy`, así que [token] no
+  /// sirve aquí: quien valida es el propio servidor.
   static const f5Url = String.fromEnvironment('F5_URL');
+
+  /// Credencial del servidor de F5, distinta de [token].
+  ///
+  /// Son dos secretos y no uno porque los valida gente distinta: [token] lo
+  /// comprueba nginx delante de Kokoro y Piper, y éste lo comprueba F5 en su
+  /// propio código (`tools/f5/server.py`). Mandarle a uno el del otro no
+  /// falla ruidosamente — simplemente entrega una credencial a una máquina
+  /// que no tiene por qué verla.
+  ///
+  /// Vacío es válido: el servidor arrancado sin `F5_TOKEN` no pide nada, que
+  /// es como funcionó hasta 0.9.1.
+  static const f5Token = String.fromEnvironment('F5_TOKEN');
 
   /// Base del proxy para los reportes: la URL de un motor sin su prefijo.
   ///

@@ -2,11 +2,14 @@
 #
 #   docker compose -f tools/f5/docker-compose.yml up -d --build
 #
-# Escucha en todas las interfaces, no en loopback como Kokoro y Piper. La
-# diferencia es deliberada y la misma que tenía Chatterbox: este servidor vive
-# en la laptop con GPU y el teléfono lo alcanza directo por la tailnet, sin
-# proxy y sin token, porque no se reparte a probadores (ver
-# docs/context/ACCESO_REMOTO.md, segundo nodo).
+# Escucha en todas las interfaces, no en loopback como Kokoro y Piper: este
+# servidor vive en la laptop con GPU y el teléfono lo alcanza directo por la
+# tailnet, sin proxy delante (ver docs/context/ACCESO_REMOTO.md, segundo nodo).
+#
+# Por eso mismo lleva su propio token. La tailnet basta mientras la máquina no
+# se mueva, y ésta es una portátil: en la WiFi de una cafetería, ese puerto lo
+# alcanza cualquiera de esa red. Poné F5_TOKEN en un .env junto a este archivo
+# -gitignorado- y el mismo valor en tu .json de tools/release.
 services:
   f5:
     build:
@@ -27,6 +30,8 @@ services:
       # 64 y no el 32 por defecto de F5: con 32 aparecen tartamudeos
       # ("trabajo" -> "trabajo abajo"). Ver el docstring de server.py.
       F5_NFE: "64"
+      # Vacío deja el servidor abierto, como estaba. Sale del .env de al lado.
+      F5_TOKEN: "${F5_TOKEN:-}"
     deploy:
       resources:
         reservations:
@@ -37,7 +42,12 @@ services:
     healthcheck:
       # /health no toca la GPU, así que sigue contestando en milisegundos aun
       # con una síntesis en curso -- justo lo que Chatterbox no hacía.
-      test: ["CMD", "curl", "-fs", "http://localhost:8005/health"]
+      #
+      # CMD-SHELL y no CMD porque hace falta expandir la variable. El $$ es un
+      # $ literal para el shell del contenedor: con uno solo, compose lo
+      # sustituiría él mismo al leer el archivo.
+      test: ["CMD-SHELL",
+             "curl -fs -H \"Authorization: Bearer $$F5_TOKEN\" http://localhost:8005/health"]
       interval: 30s
       timeout: 5s
       retries: 3

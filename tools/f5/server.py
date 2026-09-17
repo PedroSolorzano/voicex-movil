@@ -22,6 +22,7 @@ Sale MP3, no el WAV nativo de 24 kHz: el WAV sin comprimir es la razón medida
 por la que Piper nunca se repartió a probadores (159 MB/hora, ver
 `docs/context/ACCESO_REMOTO.md`).
 """
+import hmac
 import io
 import json
 import os
@@ -33,9 +34,9 @@ from pathlib import Path
 
 import numpy as np
 import soundfile as sf
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 VOCES = Path(os.environ.get("F5_VOICES", "/voices"))
 CKPT = os.environ.get("F5_CKPT", "/models/model.safetensors")
@@ -45,8 +46,32 @@ NFE_POR_DEFECTO = int(os.environ.get("F5_NFE", "64"))
 # Checkpoint español, CC0. La arquitectura es F5TTS_Base, verificada contra
 # el transformer_config.yaml del propio repo (dim 1024, depth 22, heads 16).
 REPO_HF = os.environ.get("F5_REPO", "jpgallegoar/F5-Spanish")
+# Vacío = sin autenticación, que es como nació este servidor. Ver exigir_token.
+TOKEN = os.environ.get("F5_TOKEN", "")
 
 app = FastAPI(title="VoiceX F5-TTS")
+
+
+def exigir_token(authorization: str | None = Header(default=None)) -> None:
+    """Puerta de entrada, opcional a propósito.
+
+    Sin `F5_TOKEN` el servidor se comporta como siempre, porque hay
+    despliegues -el de casa, sobre la tailnet- donde la red ya es la barrera.
+
+    Con token deja de depender de en qué red esté la máquina, que es lo que
+    aquí importa: a diferencia de Kokoro y Piper, que viven en un servidor fijo
+    y escuchan solo en loopback detrás del proxy, este publica su puerto en
+    todas las interfaces de una **laptop**. En la WiFi de una cafetería o de
+    una oficina, cualquiera en esa red llega a `/tts` y a las voces clonadas
+    que `/health` enumera, que son grabaciones de personas reales.
+    """
+    if not TOKEN:
+        return
+    esperado = f"Bearer {TOKEN}"
+    # compare_digest y no `==`: lo que tarda una comparación normal en fallar
+    # delata cuántos caracteres acertó quien está probando.
+    if authorization is None or not hmac.compare_digest(authorization, esperado):
+        raise HTTPException(401, "token inválido o ausente")
 
 _tts = None
 _voces: dict[str, tuple[str, str]] = {}
@@ -129,13 +154,22 @@ def arrancar() -> None:
 
 
 class Peticion(BaseModel):
-    text: str
-    voice: str | None = None
-    speed: float = 1.0
-    nfe_step: int | None = None
+    """Lo que se acepta, con topes.
+
+    No los había, y la GPU es una sola y se toma con un candado global
+    (`_turno`): un texto de un megabyte o un `nfe_step` de 10.000 la ocupan
+    durante horas y dejan sin servicio a quien está leyendo. El párrafo más
+    largo medido ronda los 2.100 caracteres, así que 8.000 deja margen de sobra
+    y sigue significando "un párrafo, no un libro".
+    """
+
+    text: str = Field(max_length=8000)
+    voice: str | None = Field(default=None, max_length=100)
+    speed: float = Field(default=1.0, ge=0.5, le=2.0)
+    nfe_step: int | None = Field(default=None, ge=16, le=96)
 
 
-@app.get("/health")
+@app.get("/health", dependencies=[Depends(exigir_token)])
 def salud() -> dict:
     """Sondeo barato: no toca la GPU ni espera a que termine una síntesis."""
     return {
@@ -147,7 +181,7 @@ def salud() -> dict:
     }
 
 
-@app.post("/tts")
+@app.post("/tts", dependencies=[Depends(exigir_token)])
 def sintetizar(p: Peticion) -> Response:
     if _tts is None:
         raise HTTPException(503, "el modelo todavía está cargando")
