@@ -17,11 +17,16 @@ import 'reader_theme.dart';
 ///
 /// La hoja se queda a media pantalla a propósito: el texto sigue visible detrás
 /// y cada cambio se aplica al instante sobre él.
-Future<void> showTypographySheet(BuildContext context) => showModalBottomSheet(
+/// [theme] llega desde el lector, derivado de la paleta de la página: sin él
+/// la hoja tomaría el tema de la app y saldría oscura sobre un fondo sepia.
+Future<void> showTypographySheet(BuildContext context, {ThemeData? theme}) =>
+    showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const _TypographySheet(),
+      builder: (_) => theme == null
+          ? const _TypographySheet()
+          : Theme(data: theme, child: const _TypographySheet()),
     );
 
 class _TypographySheet extends ConsumerStatefulWidget {

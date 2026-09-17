@@ -62,6 +62,24 @@ class ReaderPalette {
       };
 }
 
+/// Material theme derived from the reading palette.
+///
+/// Everything that opens on top of the book — the table of contents, the
+/// bookmarks list, the typography sheet, the overflow menu — read
+/// `Theme.of(context)`, which is the *app* theme. With the reader in sepia and
+/// the app in dark mode, those came up dark over a cream page. Deriving one
+/// theme from the palette fixes all of them in a single place instead of
+/// dressing each sheet by hand.
+ThemeData readerThemeData(ReaderPalette palette) => ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        // La misma semilla que `app.dart`: lo que cambia es el fondo sobre el
+        // que se dibujan los acentos, no los acentos.
+        seedColor: const Color(0xFF7B5EA7),
+        brightness: ThemeData.estimateBrightnessForColor(palette.background),
+      ),
+    );
+
 /// Android resolves the generic families 'serif' and 'sans-serif' to Noto Serif
 /// and Roboto, so a real book face is available without bundling a font.
 /// The previous code asked for 'Georgia', which does not exist on Android and

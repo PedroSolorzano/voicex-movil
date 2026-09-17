@@ -78,6 +78,18 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   final _wordPlayer = ja.AudioPlayer();
   int _lastParagraphIndex = -1;
 
+  /// La paleta del último build, para vestir lo que se abre encima del libro.
+  ReaderPalette _palette = ReaderPalette.sepia;
+
+  /// Envuelve el contenido de una hoja con el tema del lector.
+  ///
+  /// `showModalBottomSheet` captura los InheritedWidget que hay entre el
+  /// contexto que recibe y el Navigator, y el contexto de este State está por
+  /// encima del `Theme` del lector. Envolver el contenido es más directo que
+  /// andar buscando un contexto más abajo.
+  Widget _themed(Widget child) =>
+      Theme(data: readerThemeData(_palette), child: child);
+
   @override
   void initState() {
     super.initState();
@@ -184,6 +196,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
     final palette = ReaderPalette.of(
         settings.readerTheme, MediaQuery.platformBrightnessOf(context));
+    _palette = palette;
 
     ref.listen<ReaderState>(readerProvider, (prev, next) {
       final startedPlaying = prev?.status != next.status &&
@@ -254,7 +267,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final chapter = reader.currentChapter;
     final paragraphs = chapter?.paragraphs ?? const <Paragraph>[];
 
-    return Scaffold(
+    final scaffold = Scaffold(
       backgroundColor: palette.background,
       body: Stack(
         children: [
@@ -317,7 +330,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               palette: palette,
               onBack: () => context.pop(),
               onToc: () => _showToc(context),
-              onTypography: () => showTypographySheet(context),
+              onTypography: () =>
+                  showTypographySheet(context, theme: readerThemeData(palette)),
               isDownloading: reader.isDownloading,
               onAction: _onTopAction,
             ),
@@ -344,6 +358,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         ],
       ),
     );
+
+    // Viste lo que se dibuja dentro del lector -- los menús desplegables, que
+    // sí capturan el tema desde su sitio en el árbol. Las hojas van aparte con
+    // `_themed`: se abren con el contexto de este State, que está por encima.
+    return Theme(data: readerThemeData(palette), child: scaffold);
   }
 
   void _onTopAction(_TopAction action) {
@@ -370,7 +389,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final settings = ref.read(settingsProvider).valueOrNull ?? AppSettings();
     showModalBottomSheet(
       context: context,
-      builder: (ctx) => SafeArea(
+      builder: (ctx) => _themed(SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -403,7 +422,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               ),
           ],
         ),
-      ),
+      )),
     );
   }
 
@@ -515,7 +534,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: false,
-      builder: (_) => WordSheet(
+      builder: (_) => _themed(WordSheet(
         word: word.text,
         language: language,
         paragraph: para,
@@ -525,7 +544,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           Navigator.pop(context);
           unawaited(_readFromParagraph(paragraphIndex));
         },
-      ),
+      )),
     );
   }
 
@@ -634,7 +653,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     if (!context.mounted) return;
     showModalBottomSheet(
       context: context,
-      builder: (_) => _BookmarksSheet(
+      builder: (_) => _themed(_BookmarksSheet(
         bookmarks: bookmarks,
         chapters: ref.read(readerProvider).book?.chapters ?? const [],
         onJump: (b) {
@@ -648,7 +667,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         onDelete: (id) => ref.read(readerProvider.notifier).deleteBookmark(id),
         onEditNote: (b) => _editBookmarkNote(
             context, b['id'] as int, b['note'] as String?),
-      ),
+      )),
     );
   }
 
@@ -669,7 +688,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         minChildSize: 0.4,
         maxChildSize: 0.95,
         expand: false,
-        builder: (ctx, scrollCtrl) => _SearchSheet(
+        builder: (ctx, scrollCtrl) => _themed(_SearchSheet(
           book: book,
           scrollController: scrollCtrl,
           onSelect: (hit) {
@@ -680,7 +699,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 hit.chapterIndex,
                 paragraph: hit.paragraphIndex));
           },
-        ),
+        )),
       ),
     );
   }
@@ -700,7 +719,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         minChildSize: 0.3,
         maxChildSize: 0.92,
         expand: false,
-        builder: (ctx, scrollCtrl) => _TocSheet(
+        builder: (ctx, scrollCtrl) => _themed(_TocSheet(
           chapters: book.chapters,
           currentIndex: reader.chapterIndex,
           scrollController: scrollCtrl,
@@ -708,7 +727,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             Navigator.pop(context);
             ref.read(readerProvider.notifier).navigateChapter(idx);
           },
-        ),
+        )),
       ),
     );
   }
