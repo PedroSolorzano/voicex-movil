@@ -7,10 +7,11 @@ import '../../services/dictionary.dart';
 /// declares the matching `<queries>` block.
 const _textChannel = MethodChannel('voicex/shared_epub');
 
-/// Actions for a single word: hear it, look it up, or send it elsewhere.
+/// Actions for a single word: hear it, look it up, or send it elsewhere — plus
+/// the ones that act on the paragraph it came from.
 ///
-/// Shown on long-press rather than tap, so it does not compete with the
-/// existing tap gestures for paragraph navigation and hiding the chrome.
+/// Shown on long press. Tapping the page is what shows and hides the chrome,
+/// the way every other reader behaves, so everything else lives here.
 class WordSheet extends StatefulWidget {
   final String word;
 
@@ -20,11 +21,20 @@ class WordSheet extends StatefulWidget {
   /// Plays the word. Returns false when no audio could be produced.
   final Future<bool> Function() onPronounce;
 
+  /// Starts reading aloud from the paragraph this word came from.
+  ///
+  /// This used to be the paragraph's own `onTap`, which made it the easiest
+  /// gesture in the app to trigger by accident — a thumb brushing the page
+  /// while the book was playing stopped it and moved the saved position. A
+  /// long press is nobody's accident.
+  final VoidCallback onReadFromHere;
+
   const WordSheet({
     super.key,
     required this.word,
     required this.language,
     required this.onPronounce,
+    required this.onReadFromHere,
   });
 
   @override
@@ -141,7 +151,16 @@ class _WordSheetState extends State<WordSheet> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                icon: const Icon(Icons.play_circle_outline),
+                label: const Text('Leer desde este párrafo'),
+                onPressed: widget.onReadFromHere,
+              ),
+            ),
+            const SizedBox(height: 8),
             if (_loading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 12),

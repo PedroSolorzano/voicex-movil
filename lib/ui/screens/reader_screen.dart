@@ -296,11 +296,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                           wordRange: isActive ? reader.activeWord : null,
                           settings: settings,
                           palette: palette,
-                          onTap: () => ref
-                              .read(readerProvider.notifier)
-                              .navigateParagraph(i),
-                          onWordLongPress: (word) =>
-                              _showWordSheet(context, word, book.language),
+                          onWordLongPress: (word) => _showWordSheet(
+                              context, word, book.language, i),
                         );
                       },
                     ),
@@ -505,8 +502,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   /// Long-pressing a word offers to hear it, define it, or send it elsewhere.
-  Future<void> _showWordSheet(
-      BuildContext context, ({String text, int offset}) word, String language) {
+  Future<void> _showWordSheet(BuildContext context,
+      ({String text, int offset}) word, String language, int paragraphIndex) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -515,8 +512,23 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         word: word.text,
         language: language,
         onPronounce: () => _pronounceWord(word),
+        onReadFromHere: () {
+          Navigator.pop(context);
+          unawaited(_readFromParagraph(paragraphIndex));
+        },
       ),
     );
+  }
+
+  /// Lleva la lectura a un párrafo y la arranca ahí.
+  ///
+  /// Vive detrás de la pulsación larga, no del toque. Como toque era el gesto
+  /// más fácil de hacer sin querer: un roce con el pulgar mientras sonaba el
+  /// libro lo callaba y reescribía la posición guardada.
+  Future<void> _readFromParagraph(int index) async {
+    final notifier = ref.read(readerProvider.notifier);
+    await notifier.navigateParagraph(index);
+    await notifier.play();
   }
 
   /// Prefers the clip already on disk — instant and offline — and only asks the
@@ -678,7 +690,6 @@ class _ParagraphTile extends StatefulWidget {
   final (int, int)? wordRange;
   final AppSettings settings;
   final ReaderPalette palette;
-  final VoidCallback onTap;
   final ValueChanged<({String text, int offset})> onWordLongPress;
 
   const _ParagraphTile({
@@ -688,7 +699,6 @@ class _ParagraphTile extends StatefulWidget {
     required this.wordRange,
     required this.settings,
     required this.palette,
-    required this.onTap,
     required this.onWordLongPress,
   });
 
@@ -747,12 +757,16 @@ class _ParagraphTileState extends State<_ParagraphTile> {
     }
 
     return Semantics(
-      button: true,
       label: para.isHeading ? 'Título: ${para.rawText}' : null,
       child: GestureDetector(
-        onTap: widget.onTap,
         onLongPressStart: _handleLongPress,
-        behavior: HitTestBehavior.opaque,
+        // Sin `onTap` y translúcido para que el toque llegue al detector de
+        // fondo, que es el que muestra y oculta los controles. Con `opaque`
+        // más un `onTap` propio, este widget ganaba la arena de gestos: tocar
+        // texto no alternaba nunca la barra -sólo acertarle a los márgenes o
+        // al hueco entre párrafos- y encima movía la lectura y callaba el
+        // audio, que es lo contrario de lo que hace cualquier otro lector.
+        behavior: HitTestBehavior.translucent,
         child: Container(
           width: double.infinity,
           margin: const EdgeInsets.only(bottom: 14),
