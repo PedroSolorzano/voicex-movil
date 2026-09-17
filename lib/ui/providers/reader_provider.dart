@@ -1219,17 +1219,24 @@ class ReaderNotifier extends Notifier<ReaderState> {
     );
   }
 
-  Future<void> addBookmark() async {
+  /// Guarda un marcador y devuelve su id, o null si no había libro abierto.
+  ///
+  /// El id lo necesita quien quiera anotarlo después: la nota se escribe
+  /// aparte para que guardar un marcador siga siendo una sola pulsación.
+  Future<int?> addBookmark() async {
     final book = state.book;
-    if (book?.id == null) return;
+    if (book?.id == null) return null;
     final sentenceIdx = state.highlightedSentence < 0 ? 0 : state.highlightedSentence;
-    await _bookmarkRepo.add(
+    return _bookmarkRepo.add(
       book!.id!,
       state.chapterIndex,
       state.paragraphIndex,
       sentenceIndex: sentenceIdx,
     );
   }
+
+  Future<void> updateBookmarkNote(int id, String? note) =>
+      _bookmarkRepo.updateNote(id, note);
 
   Future<List<Map<String, dynamic>>> getBookmarks() async {
     final book = state.book;

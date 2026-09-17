@@ -498,10 +498,61 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   Future<void> _addBookmark(BuildContext context) async {
-    await ref.read(readerProvider.notifier).addBookmark();
+    final id = await ref.read(readerProvider.notifier).addBookmark();
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Marcador guardado')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: const Text('Marcador guardado'),
+      // Guardar sigue siendo una sola pulsación; la nota es opcional y llega
+      // después, que es cuando alguien sabe si tiene algo que decir.
+      action: id == null
+          ? null
+          : SnackBarAction(
+              label: 'Añadir nota',
+              onPressed: () {
+                unawaited(_editBookmarkNote(context, id, null));
+              },
+            ),
+    ));
+  }
+
+  /// Pide el texto de una nota y lo guarda contra [id].
+  ///
+  /// Devuelve si se guardó y con qué texto, para que la hoja de marcadores
+  /// pueda mostrarlo sin recargar la lista entera.
+  Future<(bool, String?)> _editBookmarkNote(
+      BuildContext context, int id, String? actual) async {
+    final controller = TextEditingController(text: actual ?? '');
+    final nota = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nota del marcador'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 280,
+          maxLines: 3,
+          minLines: 1,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(
+            hintText: 'Por qué marcaste este pasaje',
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, controller.text),
+              child: const Text('Guardar')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (nota == null) return (false, actual);
+    final limpia = nota.trim();
+    final guardada = limpia.isEmpty ? null : limpia;
+    await ref.read(readerProvider.notifier).updateBookmarkNote(id, guardada);
+    return (true, guardada);
   }
 
   Future<void> _showBookmarks(BuildContext context) async {
@@ -521,6 +572,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               );
         },
         onDelete: (id) => ref.read(readerProvider.notifier).deleteBookmark(id),
+        onEditNote: (b) => _editBookmarkNote(
+            context, b['id'] as int, b['note'] as String?),
       ),
     );
   }
@@ -1241,11 +1294,15 @@ class _BookmarksSheet extends StatefulWidget {
   final ValueChanged<Map<String, dynamic>> onJump;
   final ValueChanged<int> onDelete;
 
+  /// Devuelve si la nota se guardó y con qué texto.
+  final Future<(bool, String?)> Function(Map<String, dynamic>) onEditNote;
+
   const _BookmarksSheet({
     required this.bookmarks,
     required this.chapters,
     required this.onJump,
     required this.onDelete,
+    required this.onEditNote,
   });
 
   @override
@@ -1336,10 +1393,27 @@ class _BookmarksSheetState extends State<_BookmarksSheet> {
                           ],
                         ),
                   isThreeLine: fragmento != null && (nota?.isNotEmpty ?? false),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    tooltip: 'Eliminar marcador',
-                    onPressed: () => _delete(b),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit_note),
+                        tooltip: nota == null ? 'Añadir nota' : 'Editar nota',
+                        onPressed: () async {
+                          final (guardada, texto) = await widget.onEditNote(b);
+                          // La fila se reescribe entera en vez de tocar el mapa
+                          // que devolvió sqflite, que es de solo lectura.
+                          if (guardada && mounted) {
+                            setState(() => _bookmarks[i] = {...b, 'note': texto});
+                          }
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline),
+                        tooltip: 'Eliminar marcador',
+                        onPressed: () => _delete(b),
+                      ),
+                    ],
                   ),
                   onTap: () => widget.onJump(b),
                 );

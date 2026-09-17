@@ -165,6 +165,16 @@ class BookmarkRepo {
         where: 'book_id = ?', whereArgs: [bookId], orderBy: 'created_at DESC');
   }
 
+  /// Sets or clears the note on an existing bookmark.
+  ///
+  /// Separate from [add] because the note is written after the fact: saving a
+  /// bookmark has to stay one tap, so the text comes later if it comes at all.
+  Future<void> updateNote(int id, String? note) async {
+    final db = await _db;
+    await db.update('bookmarks', {'note': note?.trim()},
+        where: 'id = ?', whereArgs: [id]);
+  }
+
   Future<void> delete(int id) async {
     final db = await _db;
     await db.delete('bookmarks', where: 'id = ?', whereArgs: [id]);
