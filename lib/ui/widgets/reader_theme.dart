@@ -23,7 +23,10 @@ class ReaderPalette {
   static const sepia = ReaderPalette(
     background: Color(0xFFF5E6C8),
     text: Color(0xFF3E2723),
-    muted: Color(0xFF7A6A5A),
+    // Darker than it looks like it needs to be: `muted` carries the status
+    // line at 11 px, and the previous #7A6A5A gave 4.2:1 on this cream — under
+    // the 4.5:1 that WCAG AA asks of small text. This one measures 5.3:1.
+    muted: Color(0xFF6B5B4B),
     activeParagraph: Color(0x33FFB300),
     activeSentence: Color(0xFFFFD54F),
     onActiveSentence: Color(0xFF2B1A12),
