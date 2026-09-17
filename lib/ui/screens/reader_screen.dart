@@ -1018,7 +1018,7 @@ class _BottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = reader.progressFraction;
-    final remaining = _remainingLabel(reader, settings);
+    final remaining = _remainingLabel(notifier.charsRemaining, settings);
 
     return Material(
       color: palette.background,
@@ -1181,18 +1181,13 @@ class _BottomBar extends StatelessWidget {
   }
 
   /// Estimated listening time left, derived from remaining characters.
-  static String _remainingLabel(ReaderState reader, AppSettings settings) {
-    final book = reader.book;
-    if (book == null) return '';
-    var chars = 0;
-    for (var c = reader.chapterIndex; c < book.chapters.length; c++) {
-      final paras = book.chapters[c].paragraphs;
-      final from = c == reader.chapterIndex ? reader.paragraphIndex : 0;
-      for (var p = from; p < paras.length; p++) {
-        chars += paras[p].rawText.length;
-      }
-    }
-    if (chars == 0) return '';
+  ///
+  /// [chars] llega ya calculado (`ReaderNotifier.charsRemaining`): contarlo
+  /// aquí significaba recorrer todos los párrafos que faltaban del libro en
+  /// cada reconstrucción, y esta barra se reconstruye con cada palabra que se
+  /// resalta.
+  static String _remainingLabel(int chars, AppSettings settings) {
+    if (chars <= 0) return '';
     final seconds = chars / (_charsPerSecond * settings.playbackSpeed);
     final hours = seconds ~/ 3600;
     final minutes = (seconds % 3600) ~/ 60;

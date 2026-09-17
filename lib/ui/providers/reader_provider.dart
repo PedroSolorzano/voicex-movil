@@ -65,6 +65,25 @@ bool isLikelyMetered(List<ConnectivityResult> connection) =>
     connection.contains(ConnectivityResult.none) ||
     connection.isEmpty;
 
+/// Running totals of characters, one entry per global paragraph plus a final
+/// one with the book's total.
+///
+/// `prefix[i]` is everything before paragraph `i`, so what is left from there
+/// is `prefix.last - prefix[i]` — a subtraction instead of a walk over the
+/// rest of the book. Built once when the book loads, because the caller asking
+/// for it runs several times a second.
+List<int> buildCharsPrefix(Book book) {
+  final prefix = <int>[0];
+  var total = 0;
+  for (final chapter in book.chapters) {
+    for (final paragraph in chapter.paragraphs) {
+      total += paragraph.rawText.length;
+      prefix.add(total);
+    }
+  }
+  return prefix;
+}
+
 class ReaderState {
   final Book? book;
   final int chapterIndex;
@@ -366,6 +385,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
       }
       // Parsing a large EPUB is CPU-heavy; keep it off the UI isolate.
       final book = await parseEpubInBackground(path);
+      _charsPrefix = buildCharsPrefix(book);
       final progress = await _progressRepo.get(bookId);
       final bookWithId = book.copyWith(id: bookId);
       final maxChapter = book.chapters.isEmpty ? 0 : book.chapters.length - 1;
@@ -412,6 +432,22 @@ class ReaderNotifier extends Notifier<ReaderState> {
       book.chapters.fold<int>(0, (sum, c) => sum + c.paragraphs.length);
 
   /// Absolute paragraph index across the whole book.
+  /// Sumas acumuladas de caracteres, una por párrafo global. Ver
+  /// [charsRemaining].
+  List<int> _charsPrefix = const [];
+
+  /// Caracteres que quedan desde donde va la lectura hasta el final del libro.
+  ///
+  /// Con sumas acumuladas en vez de recorrer lo que falta: `_BottomBar` se
+  /// reconstruye cada vez que cambia la palabra resaltada —varias veces por
+  /// segundo— y hasta ahora cada una de esas reconstrucciones sumaba la
+  /// longitud de todos los párrafos que quedaban del libro.
+  int get charsRemaining {
+    if (_charsPrefix.isEmpty) return 0;
+    final at = _globalIndex().clamp(0, _charsPrefix.length - 1);
+    return _charsPrefix.last - _charsPrefix[at];
+  }
+
   int _globalIndex() {
     final book = state.book;
     if (book == null) return 0;
