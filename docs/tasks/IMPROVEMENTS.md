@@ -7,6 +7,10 @@ Formato: `- [ ] [prioridad] YYYY-MM-DD — descripción`
 Lo que ya se entregó vive en [`docs/RELEASES.md`](../RELEASES.md), con su causa
 y su arreglo. Aquí solo queda lo que no está hecho.
 
+La auditoría del 2026-09-17 ([`PLAN_AUDITORIA_2026-09-17.md`](PLAN_AUDITORIA_2026-09-17.md))
+cerró 23 hallazgos que en su mayoría no estaban en esta lista. Su bitácora
+dice qué queda por verificar en el teléfono y en el servidor.
+
 ---
 
 ## Pendiente de decisión
@@ -281,6 +285,11 @@ atendido.
   `addBookmark` (`reader_provider.dart:990-1000`) la omite, y la hoja de
   marcadores la mostraría si estuviera (`reader_screen.dart:1090`). Falta:
   rango de caracteres y color en el esquema, y una UI para crear el subrayado.
+
+  **La mitad muerta se despertó el 2026-09-17**: `addBookmark` devuelve el id,
+  hay `BookmarkRepo.updateNote`, y tanto el aviso de "marcador guardado" como
+  cada fila de la hoja permiten escribir la nota. Lo que sigue pendiente es el
+  subrayado en sí: rango de caracteres y color en el esquema.
 - [ ] `alto` 2026-09-02 — **Seleccionar texto.** No se puede: los párrafos son
   `Text` plano (`reader_screen.dart:568,580`) y no hay `SelectableText`,
   `SelectionArea` ni `Clipboard` en todo `lib/`. La pulsación larga resuelve
@@ -288,6 +297,12 @@ atendido.
   (`reader_screen.dart:539-552`) y ofrece pronunciar, diccionario y "otra app".
   No hay copiar una cita, ni compartirla, ni seleccionar una frase. Es el
   cimiento del subrayado: conviene hacerlo antes.
+
+  **Medio hecho el 2026-09-17**: copiar la oración, copiar el párrafo y
+  compartir ya están, desde la hoja de la pulsación larga. Falta la selección
+  libre, que es lo que queda de este ítem y sigue necesitando decidir cómo
+  convive con esa misma pulsación larga, que es como se resuelve una palabra
+  para el diccionario.
 - [ ] `medio` 2026-09-03 — **La app solo habla español.** Toda la interfaz está
   en castellano y escrita a mano en los widgets: no hay `flutter_localizations`,
   ni ficheros ARB, ni `AppLocalizations`. Cambiar de idioma hoy significa editar
@@ -335,10 +350,14 @@ atendido.
   anotado para no perderlo de vista. Si algún día entra, el orden sensato es
   TXT primero —que valida la interfaz común con casi ningún esfuerzo— y PDF el
   último, o nunca.
-- [ ] `medio` 2026-09-02 — **Buscar dentro del libro.** No existe. La única
+- [x] `medio` 2026-09-02 — **Buscar dentro del libro.** No existe. La única
   búsqueda es por título y autor en la biblioteca
   (`library_screen.dart:59-82`). Con el libro ya troceado en párrafos y
   oraciones en memoria, buscar y saltar al resultado es barato.
+
+  Hecho el 2026-09-17 (`lib/epub/search.dart`). Ignora tildes en los dos
+  sentidos pero **no pliega la eñe**: es otra letra, y plegarla haría que
+  "ano" sacara "año".
 - [x] `medio` 2026-09-02 — **La barra de progreso no se puede arrastrar.** Es un
   `LinearProgressIndicator` (`reader_screen.dart:740-744`), un indicador y no un
   control: para moverte por el libro solo queda el índice de capítulos o ir

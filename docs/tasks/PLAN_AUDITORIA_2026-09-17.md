@@ -107,7 +107,7 @@ pueden quedarse esperando.
 
 ## 3. Severidad alta
 
-### - [ ] A-01 · Seguridad · El servidor de F5 no autentica ni limita nada, y vive en una laptop que sale de casa `[servidor]`
+### - [x] A-01 · Seguridad · El servidor de F5 no autentica ni limita nada, y vive en una laptop que sale de casa `[servidor]`
 
 **Evidencia.**
 - `tools/f5/docker-compose.yml:16-17` publica `"8005:8005"` en todas las
@@ -189,7 +189,7 @@ la Bitácora para que el dueño lo pruebe con `docker compose up -d --build` y
 
 ---
 
-### - [ ] A-02 · Interfaz · Tocar el texto mueve la lectura y corta el audio; ocultar los controles es casi imposible `[decisión]` `[teléfono]`
+### - [x] A-02 · Interfaz · Tocar el texto mueve la lectura y corta el audio; ocultar los controles es casi imposible `[decisión]` `[teléfono]`
 
 **Evidencia.**
 - `reader_screen.dart:262-264`: el `GestureDetector` de fondo alterna los
@@ -231,7 +231,7 @@ de rápido que antes.
 
 ---
 
-### - [ ] A-03 · Interfaz · La prueba de voz del motor "Teléfono" se queda colgada para siempre
+### - [x] A-03 · Interfaz · La prueba de voz del motor "Teléfono" se queda colgada para siempre
 
 Ya investigado en [`docs/bugs/ANDROID_TTS_PREVIEW.md`](../bugs/ANDROID_TTS_PREVIEW.md)
 y anotado como `alto` en `IMPROVEMENTS.md` desde el 2026-09-03; sigue sin
@@ -263,7 +263,7 @@ de 30 s en el provider", y añade una nota al final de
 
 ---
 
-### - [ ] A-04 · Funcionalidad · No se puede seleccionar ni copiar texto `[decisión]` `[teléfono]`
+### - [x] A-04 · Funcionalidad · No se puede seleccionar ni copiar texto `[decisión]` `[teléfono]`
 
 Anotado en `IMPROVEMENTS.md` ("Seleccionar texto", `alto`, 2026-09-02). Es el
 cimiento de subrayar y de compartir citas, y hoy no existe `SelectionArea` ni
@@ -291,7 +291,7 @@ arriba, con un test de la función pura que mapea `offset → oración` en
 
 ## 4. Severidad media
 
-### - [ ] M-01 · Seguridad · Importar un EPUB no tiene ningún límite
+### - [x] M-01 · Seguridad · Importar un EPUB no tiene ningún límite
 
 **Evidencia.**
 - Cualquier app del teléfono puede mandarle un "EPUB" a VoiceX: los
@@ -333,7 +333,7 @@ app personal.
 
 ---
 
-### - [ ] M-02 · Seguridad · Privacidad: los fallos se mandan solos y el texto sale a terceros sin que la app lo diga
+### - [x] M-02 · Seguridad · Privacidad: los fallos se mandan solos y el texto sale a terceros sin que la app lo diga
 
 **Evidencia.**
 - `main.dart:16` y `:37` + `reporter.dart:43-58`: todo error no capturado se
@@ -366,7 +366,7 @@ app personal.
 
 ---
 
-### - [ ] M-03 · Seguridad · Lo que escribe un tester entra sin filtrar a documentos que después leen agentes de IA `[servidor]`
+### - [x] M-03 · Seguridad · Lo que escribe un tester entra sin filtrar a documentos que después leen agentes de IA `[servidor]`
 
 **Evidencia.** `tools/reportes/procesar.py` vuelca `reporte.texto` y la
 transcripción de la nota de voz directamente como Markdown:
@@ -396,7 +396,7 @@ máquina. Si no lo hay, dilo en la Bitácora.
 
 ---
 
-### - [ ] M-04 · Interfaz · La barra superior del lector tiene siete botones y el título no cabe
+### - [x] M-04 · Interfaz · La barra superior del lector tiene siete botones y el título no cabe
 
 **Evidencia.** `reader_screen.dart:705-782`: volver, índice, descargar, agregar
 marcador, ver marcadores, tipografía y ajustes. Son 7 × 48 dp = 336 dp fijos. En
@@ -425,7 +425,7 @@ antes siguen siendo alcanzables. `flutter analyze` sin avisos nuevos.
 
 ---
 
-### - [ ] M-05 · Interfaz · Borrar un marcador no lo quita de la lista, y los marcadores no dicen qué marcan
+### - [x] M-05 · Interfaz · Borrar un marcador no lo quita de la lista, y los marcadores no dicen qué marcan
 
 **Evidencia.**
 - `_BookmarksSheet` es un `StatelessWidget` que recibe la lista ya cargada
@@ -452,7 +452,7 @@ de rango con marcadores viejos.
 
 ---
 
-### - [ ] M-06 · Interfaz · "Contar un problema" da las gracias aunque el reporte no vaya a salir nunca
+### - [x] M-06 · Interfaz · "Contar un problema" da las gracias aunque el reporte no vaya a salir nunca
 
 **Evidencia.** `Reporter.flush` sale en silencio si no hay token o no hay URL
 (`reporter.dart:158-160`). Pero la sección de Ajustes
@@ -472,7 +472,7 @@ Edge— el reporte se queda en la tabla `reports` para siempre.
 
 ---
 
-### - [ ] M-07 · Interfaz · Importar un libro no muestra progreso, y los errores salen como objetos de Dart
+### - [x] M-07 · Interfaz · Importar un libro no muestra progreso, y los errores salen como objetos de Dart
 
 **Evidencia.**
 - `library_screen.dart:166-182` (`_pickEpub`): entre elegir el archivo y que
@@ -505,7 +505,7 @@ síntesis. No lo fusiones ni lo muevas: fuera de alcance.
 
 ---
 
-### - [ ] M-08 · Funcionalidad · Buscar dentro del libro
+### - [x] M-08 · Funcionalidad · Buscar dentro del libro
 
 Anotado en `IMPROVEMENTS.md` (`medio`, 2026-09-02). El libro ya está en memoria
 troceado en párrafos (`reader.book.chapters[].paragraphs[].rawText`), así que es
@@ -538,7 +538,7 @@ provisional y anótalo.
 
 ---
 
-### - [ ] M-09 · Funcionalidad · Marcadores con nota
+### - [x] M-09 · Funcionalidad · Marcadores con nota
 
 La mitad ya existe y está muerta: la columna `bookmarks.note`, el parámetro en
 `BookmarkRepo.add` y el subtítulo en la hoja (`reader_screen.dart:1274`). Falta
@@ -561,7 +561,7 @@ quien la rellene (`reader_provider.dart:1218-1228` la omite).
 
 ---
 
-### - [ ] M-10 · Funcionalidad · Temporizador de apagado `[teléfono]`
+### - [x] M-10 · Funcionalidad · Temporizador de apagado `[teléfono]`
 
 No está en el backlog y es lo primero que se echa en falta en una app de
 **escuchar** libros: todas las de audiolibros lo tienen, porque se escucha en la
@@ -595,7 +595,7 @@ en primer plano mantiene vivo el proceso; hay que confirmarlo).
 
 ## 5. Severidad baja
 
-### - [ ] B-01 · Seguridad · La copia de seguridad de Android se lleva la base de datos
+### - [x] B-01 · Seguridad · La copia de seguridad de Android se lleva la base de datos
 `AndroidManifest.xml:24-27` no declara `android:allowBackup`, que por defecto es
 `true`: biblioteca, marcadores y la cola de reportes acaban en la copia de
 Google del usuario. **Paso:** añade `android:allowBackup="false"` y
@@ -603,26 +603,26 @@ Google del usuario. **Paso:** añade `android:allowBackup="false"` y
 `RELEASES.md` explicando que reinstalar ya no restaura nada (tampoco lo hacía de
 forma fiable: los EPUB pesan más que el límite de 25 MB).
 
-### - [ ] B-02 · Seguridad · Notas de voz huérfanas en el almacenamiento temporal
+### - [x] B-02 · Seguridad · Notas de voz huérfanas en el almacenamiento temporal
 `reporter.dart:138-141`: si la cola está llena el reporte se descarta, pero el
 `.m4a` de `audioPath` se queda en disco. Igual si el usuario graba, no envía y
 sale de la pantalla (`report_screen.dart:43-48`). **Pasos:** borra el archivo en
 ambos casos (en `_enqueue` antes del `return`; en `dispose` si `_notaPath !=
 null && !_enviado`). Test en `reporter_test.dart` para el primero.
 
-### - [ ] B-03 · Interfaz · El pie de Ajustes está en medio de la pantalla
+### - [x] B-03 · Interfaz · El pie de Ajustes está en medio de la pantalla
 `settings_screen.dart:583-594`: "Los cambios se guardan solos." va seguido de
 tres secciones más (Pantalla, Contar un problema, Diagnóstico), añadidas después
 sin mover el pie. **Paso:** mueve "Pantalla" (líneas 595-605) a continuación de
 "Lectura", y deja el pie justo antes del número de versión.
 
-### - [ ] B-04 · Interfaz · El texto secundario en sepia no llega a contraste AA
+### - [x] B-04 · Interfaz · El texto secundario en sepia no llega a contraste AA
 `reader_theme.dart:26`: `muted` `#7A6A5A` sobre `#F5E6C8` da **4,2:1**, y se usa
 a 11 px en la barra inferior (`reader_screen.dart:933`, `:942`). AA pide 4,5:1
 para texto pequeño. **Paso:** cámbialo a `Color(0xFF6B5B4B)` (5,3:1). No toques
 las otras paletas.
 
-### - [ ] B-05 · Interfaz · Las hojas del lector ignoran la paleta del lector
+### - [x] B-05 · Interfaz · Las hojas del lector ignoran la paleta del lector
 Con lector en sepia y app en tema oscuro, índice, marcadores, tipografía y menús
 salen oscuros sobre una página crema: usan `Theme.of(context)`
 (`reader_screen.dart:1184`, `:1204`). **Paso:** envuelve el `Scaffold` del lector
@@ -631,7 +631,7 @@ de `app.dart:62` y `brightness` según si `palette.background` es claro u oscuro
 `ThemeData.estimateBrightnessForColor`). Un solo punto de cambio, sin tocar cada
 hoja. `[teléfono]` para el visto bueno visual.
 
-### - [ ] B-06 · Interfaz · La barra inferior recorre el libro entero en cada palabra resaltada
+### - [x] B-06 · Interfaz · La barra inferior recorre el libro entero en cada palabra resaltada
 `_remainingLabel` (`reader_screen.dart:974-991`) suma los caracteres de todos
 los párrafos que faltan, y `_BottomBar` se reconstruye con cada cambio de
 `activeWord`. **Paso:** calcula una vez por libro un arreglo de sumas
@@ -639,7 +639,7 @@ acumuladas de caracteres por párrafo global (en `loadBook`, guardado en el
 notifier y expuesto como `int charsRemaining`), y que la etiqueta lo use. Test
 unitario de la suma acumulada.
 
-### - [ ] B-07 · Seguridad (docs) · `CLAUDE.md` afirma algo que el código ya no hace
+### - [x] B-07 · Seguridad (docs) · `CLAUDE.md` afirma algo que el código ya no hace
 El quinto invariante dice "Ningún provider manda cabeceras de autenticación".
 Falso desde 0.7.0: `tts_endpoint.dart:152-154` (`authHeaders`) y
 `applyRequestHeaders` mandan `Authorization: Bearer` en síntesis, sondeo y
@@ -650,7 +650,7 @@ autenticar por sí mismos y por eso escuchan solo en loopback. Si A-01 está
 hecha, menciona el token propio de F5. **Pide confirmación al dueño antes de
 editar `CLAUDE.md`.**
 
-### - [ ] B-08 · Funcionalidad · El mismo EPUB se puede importar dos veces
+### - [x] B-08 · Funcionalidad · El mismo EPUB se puede importar dos veces
 `_importToAppStorage` (`library_provider.dart:29-37`) guarda con un UUID nuevo,
 así que la restricción de `file_path` único nunca salta. **Pasos:** calcula el
 SHA-256 del archivo (`crypto` ya es dependencia) y compáralo con una columna
@@ -660,7 +660,7 @@ TEXT`, siguiendo el patrón de las líneas 127-131. Los libros viejos quedan con
 `NULL` y no se comparan. Si hay duplicado: `StateError` con mensaje en español
 que `friendlyError` (M-07) deje pasar. Test en `library_provider_test.dart`.
 
-### - [ ] B-09 · Funcionalidad · "Localizar" un libro perdido guarda una ruta que caduca
+### - [x] B-09 · Funcionalidad · "Localizar" un libro perdido guarda una ruta que caduca
 `relocateBook` (`library_provider.dart:167-170`) guarda la ruta que devuelve el
 selector, que es una entrada de caché del sistema; `addBook` aprendió a copiar
 el archivo a `voicex_books/` y este camino no. **Paso:** que `relocateBook` pase
@@ -691,8 +691,55 @@ algo que compila y no sirve:
 
 ## 7. Bitácora
 
-El modelo que ejecute anota aquí, con fecha: bloqueos, cosas que no pudo
-verificar, problemas nuevos que vio y no tocó, y qué debe probar el dueño en el
-teléfono o en el servidor.
+**2026-09-17 — ejecutado entero en la rama `mejoras/auditoria-2026-09-17`.**
+Las 23 tareas cerradas, una por commit. A-02 y A-04 se ejecutaron con
+aprobación explícita del dueño; de A-04 se hizo la opción barata (copiar y
+compartir desde la hoja de palabra), no la selección libre.
 
-- _(vacío)_
+Desviaciones del plan, todas a mejor:
+
+- **M-07**: el ayudante quedó en `lib/errors.dart` y no en `lib/ui/`, porque
+  también lo usan el parser y los providers, que no deben importar de `ui/`. Y
+  en vez de adivinar por las tildes si un mensaje ya estaba escrito en español
+  —que fallaba justo con "El archivo es demasiado grande para ser un EPUB", que
+  no lleva ninguna— se marcan con un tipo, `ReadableError`.
+- **A-03**: el plazo va en el provider, no en `_preview()`. En la pantalla
+  habría curado el síntoma visible dejando el mismo cuelgue en la lectura.
+- **M-09**: `_editBookmarkNote` devuelve `(bool, String?)` para que la hoja
+  refresque la fila sin recargar la lista entera.
+- **M-10**: se quitó el botón "Detener" de la fila, como preveía el plan.
+- **B-05**: además del `Theme` sobre el `Scaffold` hizo falta vestir cada hoja
+  por separado: `showModalBottomSheet` captura los `InheritedWidget` del
+  contexto que recibe, y el del `State` está por encima del `Theme`.
+- **B-08**: el hash se calcula por trozos (`sha256.bind(openRead())`) en vez de
+  leer el archivo entero otra vez.
+
+**Lo que no se pudo verificar desde esta PC y hay que probar:**
+
+1. `[servidor]` **A-01, F5.** El contenedor no se levantó aquí. Probar:
+   `docker compose -f tools/f5/docker-compose.yml up -d --build` con un
+   `tools/f5/.env` que traiga `F5_TOKEN`, y confirmar que
+   `curl -i http://localhost:8005/health` responde **401** sin cabecera y 200
+   con ella. Después recompilar el APK con `F5_TOKEN` en el `.json` personal
+   (`tools/release/compilar.ps1`) y comprobar que F5 sigue sonando.
+2. `[servidor]` **M-03.** `python -m unittest test_procesar` sí corrió (7 en
+   verde), pero no la corrida completa del cron con Whisper.
+3. `[teléfono]` **A-02.** Que tocar la página no pelee con el scroll y que la
+   pulsación larga siga abriendo la hoja igual de rápido.
+4. `[teléfono]` **M-10.** Que el temporizador dispare con la pantalla apagada.
+5. `[teléfono]` **A-04.** Que "Compartir" abra el selector del sistema — es un
+   `Intent` nuevo en `MainActivity`, sin cobertura automática.
+6. `[teléfono]` **B-01 y B-08.** `allowBackup="false"` y la migración de
+   esquema a la versión 8 solo se ven instalando sobre una instalación previa.
+7. `[teléfono]` **B-05.** El visto bueno visual con el lector en sepia y la app
+   en modo oscuro.
+
+**Visto y no tocado**, por estar fuera del alcance:
+
+- El repo **no sigue `dart format`** (tres archivos sin tocar cambiarían). Se
+  revirtió un formateo accidental de `reader_screen.dart` para no meter 400
+  líneas de ruido en un commit de comportamiento. Si algún día se decide
+  formatear, que sea en un commit propio y solo.
+- `reader_provider.dart` tiene su propio `_friendlyError` con consejos
+  específicos de la síntesis. Solo se le añadió el caso de `ReadableError`; no
+  se fusionó con `friendlyError`, como decía el plan.

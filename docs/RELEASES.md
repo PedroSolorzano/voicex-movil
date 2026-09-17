@@ -13,6 +13,116 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 Lo que salió de la auditoría del 2026-09-17
 ([`docs/tasks/PLAN_AUDITORIA_2026-09-17.md`](tasks/PLAN_AUDITORIA_2026-09-17.md)).
+No hubo ningún hallazgo crítico; lo que sigue son 23 arreglos y funciones
+agrupados por lo que cambian.
+
+### Tocar la página hace lo que hace en cualquier otro lector
+
+Cada párrafo traía su propio detector de gestos opaco con `onTap`, y por eso
+ganaba la arena: **tocar el texto no mostraba ni ocultaba la barra** —solo
+funcionaba acertarle a los márgenes o al hueco entre párrafos— y encima movía
+la lectura y callaba el audio. Un roce con el pulgar mientras sonaba el libro
+te sacaba de sitio.
+
+Ahora tocar alterna los controles, y "Leer desde este párrafo" vive en la hoja
+de la pulsación larga, que nadie hace por accidente. Esa misma hoja gana
+**copiar la oración, copiar el párrafo y compartir**: hasta ahora no había
+forma de sacar una cita de un libro, porque los párrafos son texto plano sin
+selección.
+
+### Buscar dentro del libro, y un temporizador para escuchar en la cama
+
+La única búsqueda era por título y autor en la biblioteca. Ahora se busca en el
+libro abierto, ignorando tildes en los dos sentidos —nadie las escribe en el
+teléfono— pero **sin plegar la eñe**, que en español es otra letra: si se
+plegara, buscar "ano" sacaría "año".
+
+Y el temporizador de apagado, que es lo primero que se echa en falta en una app
+de escuchar libros: hasta ahora el audio seguía hasta que se acababa el libro o
+la batería. Pausa en vez de parar, para no perder el sitio dentro del párrafo, y
+tiene la opción **"al final del capítulo"** porque un temporizador de minutos
+corta a mitad de frase. Ocupa el hueco del botón "Detener", el único de esa fila
+que ya estaba cubierto por otro.
+
+### El título del capítulo vuelve a caber en la pantalla
+
+Siete botones a 48 dp ocupaban 336 fijos: en un teléfono de 360 al título le
+quedaban **24**, y el nombre del capítulo salía como "Ca…". Se quedan fuera del
+menú solo los tres que se tocan a mitad de lectura.
+
+### Los marcadores dicen qué marcan
+
+Borrar uno no lo quitaba de la lista hasta cerrarla, y tocarlo entonces saltaba
+a un marcador que ya no existía. Además cada fila decía solo "Cap. 3 · Pár. 12",
+que con más de tres no distingue ninguno: ahora llevan el título del capítulo y
+las primeras palabras del pasaje.
+
+Y se les puede **escribir una nota**, que era media función muerta: la columna
+existía desde el primer esquema y la hoja la habría mostrado, pero nadie la
+rellenaba nunca.
+
+### La app dice qué sale de tu teléfono
+
+Nada de esto es nuevo —los fallos se mandaban solos y con Edge el texto de cada
+párrafo viaja a Microsoft, que es el precio de esas voces—, pero en ningún sitio
+se decía. El riesgo no era de fuga: lo que se envía va saneado y tiene tests
+propios. Era de confianza, en un APK que Android ya marca como de origen
+desconocido. Hay una sección **Privacidad** que lo enumera y un interruptor para
+los informes automáticos, que no toca lo que alguien escribe a propósito.
+
+En la misma línea, la copia de seguridad de Google ya no se lleva la base de
+datos —qué libros tienes, por dónde vas, tus marcadores—, y donde no hay
+servidor configurado ya no se ofrece un formulario de reporte que prometía un
+envío imposible.
+
+### Un archivo enorme ya no puede tumbar la app
+
+Cualquier app del teléfono puede mandarle un "EPUB" por el intent de compartir,
+y no había tope en ningún lado: se copiaba entero a caché y después se leía
+entero a memoria para descomprimirlo. Ahora hay techo de 200 MB en los dos
+lados, y el nombre que declara la otra app se sanea antes de entrar en una ruta.
+
+De paso, **el mismo libro ya no entra dos veces**: se compara la huella del
+contenido, porque la restricción de ruta única nunca podía saltar —cada
+importación copia con un nombre nuevo—. Y "Localizar" un libro perdido ya no
+vuelve a perderlo a los pocos días: guardaba la ruta del selector, que es una
+entrada de caché que el sistema puede limpiar.
+
+### La app deja de contestar con el objeto de Dart
+
+Cuatro pantallas interpolaban la excepción en un aviso, así que lo que leía un
+tester era `FormatException: Could not find end of central directory`. Ahora hay
+un mensaje que dice qué hacer, y los que ya estaban escritos para el lector
+llegan intactos. Agregar un EPUB además **muestra progreso**: descomprimir tarda
+segundos y no se veía nada, así que lo natural era volver a pulsar.
+
+### Detalles de lectura
+
+- Lo que se abre encima del libro —índice, marcadores, tipografía, menús— ya no
+  sale con el tema de la app: con el lector en sepia y la app en oscuro salían
+  oscuros sobre una página crema.
+- El gris del modo sepia subió de 4,2:1 a 5,3:1 de contraste; a 11 px estaba por
+  debajo del mínimo que pide WCAG AA.
+- "Faltan ~41 min" se calcula con sumas acumuladas en vez de recorrer todo el
+  libro que queda, que se hacía **varias veces por segundo** mientras se resalta
+  cada palabra.
+- El pie "los cambios se guardan solos" vuelve al final de Ajustes, donde se
+  entiende.
+
+### Fuera de la app
+
+El servidor de F5 publicaba su puerto en todas las interfaces sin autenticar
+nada, y el argumento de "la tailnet es la barrera" valía para una máquina que no
+se mueve: **ésta es una laptop**, y en la red de una cafetería cualquiera
+alcanzaba la síntesis y los nombres de las voces clonadas, que son grabaciones
+de personas reales. Ahora valida su propio token —distinto del que valida el
+proxy, porque lo comprueba otra máquina— y acota lo que acepta, que no tenía
+tope y podía ocupar la GPU durante horas.
+
+Y el volcado de reportes escapa lo que escribe un probador antes de meterlo en
+`REPORTES_TESTERS.md` e `IMPROVEMENTS.md`: son los dos archivos que después lee
+un agente para decidir qué hacer, y un salto de línea con un encabezado bastaba
+para que una cita pareciera una instrucción nuestra.
 
 ### El motor del teléfono podía dejar la app muda para siempre
 
