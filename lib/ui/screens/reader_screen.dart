@@ -11,6 +11,7 @@ import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../config/settings.dart';
 import '../../tts/tts_factory.dart';
 import '../../epub/models.dart';
+import '../../epub/search.dart';
 import '../../epub/text_align.dart';
 import '../providers/reader_provider.dart';
 import '../providers/settings_provider.dart';
@@ -347,6 +348,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
   void _onTopAction(_TopAction action) {
     switch (action) {
+      case _TopAction.search:
+        _showSearch(context);
       case _TopAction.addBookmark:
         unawaited(_addBookmark(context));
       case _TopAction.bookmarks:
@@ -649,6 +652,39 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     );
   }
 
+  /// Buscar dentro del libro, que hasta ahora solo se podía por título y autor
+  /// en la biblioteca. El libro ya está troceado en párrafos en memoria, así
+  /// que recorrerlo es barato.
+  void _showSearch(BuildContext context) {
+    final book = ref.read(readerProvider).book;
+    if (book == null) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.8,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (ctx, scrollCtrl) => _SearchSheet(
+          book: book,
+          scrollController: scrollCtrl,
+          onSelect: (hit) {
+            Navigator.pop(context);
+            // Sin arrancar el audio, igual que un marcador: buscar algo no
+            // es pedir que te lo lean.
+            unawaited(ref.read(readerProvider.notifier).navigateChapter(
+                hit.chapterIndex,
+                paragraph: hit.paragraphIndex));
+          },
+        ),
+      ),
+    );
+  }
+
   void _showToc(BuildContext context) {
     final reader = ref.read(readerProvider);
     final book = reader.book;
@@ -796,7 +832,14 @@ class _ParagraphTileState extends State<_ParagraphTile> {
 
 /// Lo que se puede pedir desde la barra superior sin ser uno de los tres
 /// botones que se quedaron fuera del menú.
-enum _TopAction { addBookmark, bookmarks, download, cancelDownload, settings }
+enum _TopAction {
+  search,
+  addBookmark,
+  bookmarks,
+  download,
+  cancelDownload,
+  settings
+}
 
 class _TopBar extends StatelessWidget {
   final String title;
@@ -868,6 +911,16 @@ class _TopBar extends StatelessWidget {
               tooltip: 'Más opciones',
               onSelected: onAction,
               itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: _TopAction.search,
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.search),
+                    title: Text('Buscar en el libro'),
+                  ),
+                ),
+                const PopupMenuDivider(),
                 const PopupMenuItem(
                   value: _TopAction.addBookmark,
                   child: ListTile(
@@ -1369,6 +1422,134 @@ class _TocSheet extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SearchSheet extends StatefulWidget {
+  final Book book;
+  final ScrollController scrollController;
+  final ValueChanged<SearchHit> onSelect;
+
+  const _SearchSheet({
+    required this.book,
+    required this.scrollController,
+    required this.onSelect,
+  });
+
+  @override
+  State<_SearchSheet> createState() => _SearchSheetState();
+}
+
+class _SearchSheetState extends State<_SearchSheet> {
+  final _controller = TextEditingController();
+  Timer? _debounce;
+  List<SearchHit> _hits = const [];
+  bool _buscado = false;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String value) {
+    _debounce?.cancel();
+    // Buscar en cada tecla recorre el libro entero por pulsación; con un
+    // libro grande eso se nota en el teclado.
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      setState(() {
+        _hits = searchBook(widget.book, value);
+        _buscado = value.trim().length >= 2;
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      // El teclado tapa el campo si no se le hace sitio.
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: Column(
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.outlineVariant,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: TextField(
+              controller: _controller,
+              autofocus: true,
+              textInputAction: TextInputAction.search,
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: 'Buscar en este libro…',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+              onChanged: _onChanged,
+            ),
+          ),
+          if (_buscado)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  _hits.isEmpty
+                      ? 'Sin coincidencias'
+                      : '${_hits.length} coincidencia(s)',
+                  style: theme.textTheme.labelSmall,
+                ),
+              ),
+            ),
+          const SizedBox(height: 4),
+          Expanded(
+            child: ListView.builder(
+              controller: widget.scrollController,
+              itemCount: _hits.length,
+              itemBuilder: (_, i) {
+                final hit = _hits[i];
+                final capitulo = widget.book.chapters[hit.chapterIndex].title;
+                return ListTile(
+                  title: Text(
+                    capitulo.isEmpty
+                        ? 'Capítulo ${hit.chapterIndex + 1}'
+                        : capitulo,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall
+                        ?.copyWith(color: theme.colorScheme.primary),
+                  ),
+                  subtitle: Text.rich(
+                    TextSpan(children: [
+                      TextSpan(text: hit.snippet.substring(0, hit.matchStart)),
+                      TextSpan(
+                        text: hit.snippet
+                            .substring(hit.matchStart, hit.matchEnd),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(text: hit.snippet.substring(hit.matchEnd)),
+                    ]),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: () => widget.onSelect(hit),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
