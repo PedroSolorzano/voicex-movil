@@ -319,15 +319,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               palette: palette,
               onBack: () => context.pop(),
               onToc: () => _showToc(context),
-              onBookmarks: () => _showBookmarks(context),
-              onAddBookmark: () => _addBookmark(context),
-              onSettings: () => context.push('/settings'),
               onTypography: () => showTypographySheet(context),
               isDownloading: reader.isDownloading,
-              canDownloadFromHere: reader.paragraphIndex > 0,
-              onCancelDownload:
-                  ref.read(readerProvider.notifier).cancelDownload,
-              onDownload: (scope) => _download(context, scope, settings),
+              onAction: _onTopAction,
             ),
           ),
 
@@ -350,6 +344,65 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _onTopAction(_TopAction action) {
+    switch (action) {
+      case _TopAction.addBookmark:
+        unawaited(_addBookmark(context));
+      case _TopAction.bookmarks:
+        unawaited(_showBookmarks(context));
+      case _TopAction.download:
+        _showDownloadSheet(context);
+      case _TopAction.cancelDownload:
+        ref.read(readerProvider.notifier).cancelDownload();
+      case _TopAction.settings:
+        context.push('/settings');
+    }
+  }
+
+  /// Las opciones de descarga, en una hoja y no en un submenú: Material no
+  /// anida un menú dentro de otro sin que el de fuera se cierre antes.
+  void _showDownloadSheet(BuildContext context) {
+    final reader = ref.read(readerProvider);
+    final settings = ref.read(settingsProvider).valueOrNull ?? AppSettings();
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text('Descargar para escuchar sin conexión',
+                  style: Theme.of(ctx).textTheme.titleMedium),
+            ),
+            const Divider(height: 1),
+            for (final opcion in <(_DownloadScope, String)>[
+              (_DownloadScope.chapter, 'Este capítulo (completo)'),
+              // En el párrafo 0, "desde aquí" y "este capítulo" son la misma
+              // descarga: ofrecer las dos solo obliga a elegir entre opciones
+              // idénticas.
+              if (reader.paragraphIndex > 0)
+                (
+                  _DownloadScope.fromHere,
+                  'Desde aquí hasta el final del capítulo'
+                ),
+              (_DownloadScope.ahead, 'Los próximos capítulos'),
+              (_DownloadScope.book, 'Libro completo'),
+            ])
+              ListTile(
+                leading: const Icon(Icons.download_outlined),
+                title: Text(opcion.$2),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  unawaited(_download(context, opcion.$1, settings));
+                },
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -721,32 +774,25 @@ class _ParagraphTileState extends State<_ParagraphTile> {
 
 // ─── Top bar ─────────────────────────────────────────────────────────────────
 
+/// Lo que se puede pedir desde la barra superior sin ser uno de los tres
+/// botones que se quedaron fuera del menú.
+enum _TopAction { addBookmark, bookmarks, download, cancelDownload, settings }
+
 class _TopBar extends StatelessWidget {
   final String title;
   final ReaderPalette palette;
-  final VoidCallback onBack, onToc, onBookmarks, onAddBookmark, onSettings;
-  final VoidCallback onTypography;
-  final ValueChanged<_DownloadScope> onDownload;
-  final VoidCallback onCancelDownload;
+  final VoidCallback onBack, onToc, onTypography;
+  final ValueChanged<_TopAction> onAction;
   final bool isDownloading;
-
-  /// En el párrafo 0, "desde aquí" y "este capítulo" son la misma descarga:
-  /// ofrecer las dos solo obliga a elegir entre opciones idénticas.
-  final bool canDownloadFromHere;
 
   const _TopBar({
     required this.title,
     required this.palette,
     required this.onBack,
     required this.onToc,
-    required this.onBookmarks,
-    required this.onAddBookmark,
-    required this.onSettings,
     required this.onTypography,
-    required this.onDownload,
-    required this.onCancelDownload,
+    required this.onAction,
     required this.isDownloading,
-    required this.canDownloadFromHere,
   });
 
   @override
@@ -764,6 +810,10 @@ class _TopBar extends StatelessWidget {
               color: palette.text,
               onPressed: onBack,
             ),
+            // Siete botones ocupaban 336 dp fijos, así que en un teléfono de
+            // 360 al título le quedaban 24: el nombre del capítulo -lo único
+            // que dice dónde estás- se reducía a "Ca…". Se quedan fuera del
+            // menú solo los tres que se tocan a mitad de lectura.
             Expanded(
               child: Text(
                 title,
@@ -772,65 +822,82 @@ class _TopBar extends StatelessWidget {
                     color: palette.text, fontWeight: FontWeight.w600),
               ),
             ),
+            // Una descarga en curso tiene que verse sin abrir el menú.
+            if (isDownloading)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Icon(Icons.downloading,
+                    size: 20, color: palette.muted),
+              ),
             IconButton(
               icon: const Icon(Icons.toc),
               tooltip: 'Índice',
               color: palette.text,
               onPressed: onToc,
             ),
-            if (isDownloading)
-              IconButton(
-                icon: const Icon(Icons.cancel_outlined),
-                tooltip: 'Cancelar descarga',
-                color: palette.text,
-                onPressed: onCancelDownload,
-              )
-            else
-              PopupMenuButton<_DownloadScope>(
-                icon: Icon(Icons.download_outlined, color: palette.text),
-                tooltip: 'Descargar para escuchar sin conexión',
-                onSelected: onDownload,
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                      value: _DownloadScope.chapter,
-                      child: Text('Este capítulo (completo)')),
-                  if (canDownloadFromHere)
-                    const PopupMenuItem(
-                        value: _DownloadScope.fromHere,
-                        child: Text('Desde aquí hasta el final del capítulo')),
-                  const PopupMenuItem(
-                      value: _DownloadScope.ahead,
-                      child: Text('Los próximos capítulos')),
-                  const PopupMenuItem(
-                      value: _DownloadScope.book,
-                      child: Text('Libro completo')),
-                ],
-              ),
-            IconButton(
-              icon: const Icon(Icons.bookmark_add_outlined),
-              tooltip: 'Agregar marcador',
-              color: palette.text,
-              onPressed: onAddBookmark,
-            ),
-            IconButton(
-              icon: const Icon(Icons.bookmarks_outlined),
-              tooltip: 'Ver marcadores',
-              color: palette.text,
-              onPressed: onBookmarks,
-            ),
-            // Delante de Ajustes a propósito: es lo que más se toca, y hasta
-            // ahora obligaba a salir del libro para llegar a ello.
+            // Lo que más se toca de todo: hasta 0.9.0 obligaba a salir del
+            // libro para llegar a ello.
             IconButton(
               icon: const Icon(Icons.text_fields),
               tooltip: 'Letra y márgenes',
               color: palette.text,
               onPressed: onTypography,
             ),
-            IconButton(
-              icon: const Icon(Icons.settings_outlined),
-              tooltip: 'Ajustes',
-              color: palette.text,
-              onPressed: onSettings,
+            PopupMenuButton<_TopAction>(
+              icon: Icon(Icons.more_vert, color: palette.text),
+              tooltip: 'Más opciones',
+              onSelected: onAction,
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: _TopAction.addBookmark,
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.bookmark_add_outlined),
+                    title: Text('Agregar marcador'),
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: _TopAction.bookmarks,
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.bookmarks_outlined),
+                    title: Text('Ver marcadores'),
+                  ),
+                ),
+                const PopupMenuDivider(),
+                if (isDownloading)
+                  const PopupMenuItem(
+                    value: _TopAction.cancelDownload,
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.cancel_outlined),
+                      title: Text('Cancelar descarga'),
+                    ),
+                  )
+                else
+                  const PopupMenuItem(
+                    value: _TopAction.download,
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.download_outlined),
+                      title: Text('Descargar para escuchar…'),
+                    ),
+                  ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: _TopAction.settings,
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.settings_outlined),
+                    title: Text('Ajustes'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
