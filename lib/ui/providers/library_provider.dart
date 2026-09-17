@@ -164,8 +164,16 @@ class LibraryNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
     ref.invalidateSelf();
   }
 
+  /// Points a book at the file the reader located again after the stored path
+  /// went stale.
+  ///
+  /// The picked file is copied into app storage first, exactly like an import.
+  /// Storing the picker's own path is what put the book in this state to begin
+  /// with: that path is a cache entry the system is free to clear, so without
+  /// the copy the book goes missing again a few days later.
   Future<void> relocateBook(int id, String newPath) async {
-    await _libraryRepo.updateFilePath(id, newPath);
+    final stored = await _importToAppStorage(newPath);
+    await _libraryRepo.updateFilePath(id, stored);
     ref.invalidateSelf();
   }
 }
