@@ -110,6 +110,15 @@ class AppSettings {
   /// Leyendo en silencio, sin tocar nada, se apagaba a los pocos segundos.
   bool keepScreenOn;
 
+  /// Enviar solo los fallos que la app no supo manejar.
+  ///
+  /// Lo que viaja es el tipo de excepción y unas pocas líneas de pila, nunca
+  /// texto del libro (ver `Reporter.sanitize`, que tiene tests propios). Aun
+  /// así se puede apagar: la app manda esto sola, sin que nadie lo pida, y
+  /// eso merece un interruptor y una frase que lo cuente antes que una
+  /// promesa de que el contenido está bien filtrado.
+  bool sendCrashReports;
+
   AppSettings({
     this.ttsProvider = 'edge',
     this.gender = 'female',
@@ -142,6 +151,7 @@ class AppSettings {
     this.androidVoiceEs = '',
     this.androidVoiceEn = '',
     this.keepScreenOn = true,
+    this.sendCrashReports = true,
   });
 
   /// Voice id for [lang] under the engine currently selected.
@@ -276,6 +286,7 @@ class AppSettings {
       androidVoiceEs: prefs.getString('androidVoiceEs') ?? '',
       androidVoiceEn: prefs.getString('androidVoiceEn') ?? '',
       keepScreenOn: prefs.getBool('keepScreenOn') ?? true,
+      sendCrashReports: prefs.getBool('sendCrashReports') ?? true,
     );
   }
 
@@ -309,6 +320,7 @@ class AppSettings {
     await prefs.setString('androidVoiceEs', androidVoiceEs);
     await prefs.setString('androidVoiceEn', androidVoiceEn);
     await prefs.setBool('keepScreenOn', keepScreenOn);
+    await prefs.setBool('sendCrashReports', sendCrashReports);
   }
 
   AppSettings copyWith({
@@ -343,6 +355,7 @@ class AppSettings {
     String? androidVoiceEs,
     String? androidVoiceEn,
     bool? keepScreenOn,
+    bool? sendCrashReports,
   }) =>
       AppSettings(
         ttsProvider: ttsProvider ?? this.ttsProvider,
@@ -376,5 +389,6 @@ class AppSettings {
         androidVoiceEs: androidVoiceEs ?? this.androidVoiceEs,
         androidVoiceEn: androidVoiceEn ?? this.androidVoiceEn,
         keepScreenOn: keepScreenOn ?? this.keepScreenOn,
+        sendCrashReports: sendCrashReports ?? this.sendCrashReports,
       );
 }

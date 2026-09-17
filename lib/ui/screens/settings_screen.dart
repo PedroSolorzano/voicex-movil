@@ -595,6 +595,42 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ]),
 
+          // Nada de esto es nuevo: la app ya mandaba los fallos sola y ya
+          // sintetizaba con Edge. Lo que faltaba era decirlo. Un lector tiene
+          // derecho a saber qué sale de su teléfono mientras lee, sobre todo
+          // en un APK que Android ya marca como de origen desconocido.
+          _Section(title: 'Privacidad', children: [
+            if (Reporter.canDeliver) ...[
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Enviar informes de fallos automáticamente'),
+                subtitle: const Text(
+                    'Cuando algo se rompe, manda el tipo de error y la versión '
+                    'de la app. Nunca el texto del libro.'),
+                value: s.sendCrashReports,
+                onChanged: (v) => _update(s.copyWith(sendCrashReports: v)),
+              ),
+              const SizedBox(height: 8),
+            ],
+            Text(
+              'Lo que sale de este teléfono mientras lees:',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '• Con Edge, el texto de cada párrafo viaja a los servidores de '
+              'Microsoft, que son los que generan la voz. Es el precio de esas '
+              'voces.\n'
+              '• Con Kokoro, Piper o F5 va a la computadora de casa, y con '
+              '"Teléfono" no sale nada: ese motor lee sin red.\n'
+              '• El diccionario consulta Wikcionario con la palabra que tocas, '
+              'y solo con esa.\n'
+              '• Tus libros, tu progreso y tus marcadores se quedan aquí: no '
+              'hay cuenta, ni sincronización, ni copia en la nube.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ]),
+
           // Solo si esta compilación tiene a dónde mandarlo. Sin servidor, el
           // reporte se queda encolado para siempre y la pantalla de gracias
           // promete un envío que no va a ocurrir nunca.

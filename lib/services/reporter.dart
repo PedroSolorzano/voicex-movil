@@ -37,6 +37,17 @@ class Reporter {
 
   static bool _installed = false;
 
+  /// Whether an uncaught failure may be queued and sent.
+  ///
+  /// A plain static, mirrored from [AppSettings.sendCrashReports] by whoever
+  /// loads and saves settings: this class is reached from
+  /// `FlutterError.onError` and from `runZonedGuarded`, which run outside any
+  /// provider scope and sometimes with the app already broken — reading
+  /// Riverpod from there would be one more thing that can throw while handling
+  /// a throw. Defaults to true so a crash during startup, before settings are
+  /// read, is not lost.
+  static bool crashReportsEnabled = true;
+
   /// Routes uncaught Flutter and platform errors here.
   ///
   /// Called once at startup; [runZonedGuarded] in `main` covers the rest.
@@ -90,6 +101,10 @@ class Reporter {
   /// become a second crash.
   static Future<void> recordCrash(Object error, StackTrace? stack,
       {String? context}) async {
+    // Solo los automáticos. Lo que alguien escribe a propósito
+    // (`recordFeedback`) no pasa por aquí: apagar el envío de fallos no puede
+    // silenciar un reporte que la persona sí quiso mandar.
+    if (!crashReportsEnabled) return;
     try {
       await _enqueue({
         'tipo': 'crash',

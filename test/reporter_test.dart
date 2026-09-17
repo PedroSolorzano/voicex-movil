@@ -20,6 +20,7 @@ void main() {
     await useDatabaseAt(inMemoryDatabasePath);
     final db = await getDatabase();
     await db.delete('reports');
+    Reporter.crashReportsEnabled = true;
   });
 
   group('saneo', () {
@@ -125,6 +126,27 @@ void main() {
       final total = (await db.query('reports')).length;
 
       expect(total, 50);
+    });
+
+    test('apagado, un fallo no se encola siquiera', () async {
+      Reporter.crashReportsEnabled = false;
+
+      await Reporter.recordCrash(TimeoutException('x'), null);
+
+      final db = await getDatabase();
+      expect((await db.query('reports')), isEmpty);
+    });
+
+    test('apagarlo no silencia lo que una persona escribió a propósito',
+        () async {
+      // Son dos cosas distintas: el interruptor es sobre lo que la app manda
+      // sola, no sobre el formulario de "Contar un problema".
+      Reporter.crashReportsEnabled = false;
+
+      await Reporter.recordFeedback(tipo: 'mejora', texto: 'una idea');
+
+      final db = await getDatabase();
+      expect((await db.query('reports')).length, 1);
     });
 
     test('un reporte descartado por cola llena no deja la nota de voz tirada',
