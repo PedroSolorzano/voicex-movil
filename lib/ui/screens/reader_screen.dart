@@ -511,6 +511,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       context: context,
       builder: (_) => _BookmarksSheet(
         bookmarks: bookmarks,
+        chapters: ref.read(readerProvider).book?.chapters ?? const [],
         onJump: (b) {
           Navigator.pop(context);
           ref.read(readerProvider.notifier).jumpToBookmark(
@@ -1232,16 +1233,58 @@ class _TocSheet extends StatelessWidget {
   }
 }
 
-class _BookmarksSheet extends StatelessWidget {
+class _BookmarksSheet extends StatefulWidget {
   final List<Map<String, dynamic>> bookmarks;
+
+  /// Para poder decir qué marca cada marcador, y no solo dónde está.
+  final List<Chapter> chapters;
   final ValueChanged<Map<String, dynamic>> onJump;
   final ValueChanged<int> onDelete;
 
   const _BookmarksSheet({
     required this.bookmarks,
+    required this.chapters,
     required this.onJump,
     required this.onDelete,
   });
+
+  @override
+  State<_BookmarksSheet> createState() => _BookmarksSheetState();
+}
+
+class _BookmarksSheetState extends State<_BookmarksSheet> {
+  /// Copia propia: la hoja recibía la lista ya cargada y nada la volvía a
+  /// construir, así que un marcador borrado seguía en pantalla hasta cerrar
+  /// — y tocarlo saltaba a un marcador que ya no existía.
+  late final List<Map<String, dynamic>> _bookmarks = List.of(widget.bookmarks);
+
+  void _delete(Map<String, dynamic> bookmark) {
+    setState(() => _bookmarks.remove(bookmark));
+    widget.onDelete(bookmark['id'] as int);
+  }
+
+  /// Título del capítulo y las primeras palabras de lo marcado.
+  ///
+  /// "Cap. 3 · Pár. 12" no distingue un marcador de otro en cuanto hay más de
+  /// tres. Los índices pueden haber quedado fuera de rango —el libro se
+  /// reimportó, el EPUB cambió— así que ahí se vuelve a la forma antigua en
+  /// lugar de reventar.
+  (String, String?) _describe(Map<String, dynamic> bookmark) {
+    final c = bookmark['chapter_index'] as int;
+    final p = bookmark['paragraph_index'] as int;
+    final posicion = 'Cap. ${c + 1} · Pár. ${p + 1}';
+
+    if (c < 0 || c >= widget.chapters.length) return (posicion, null);
+    final chapter = widget.chapters[c];
+    final titulo = chapter.title.isEmpty ? posicion : chapter.title;
+
+    if (p < 0 || p >= chapter.paragraphs.length) return (titulo, null);
+    final texto = chapter.paragraphs[p].rawText;
+    return (
+      titulo,
+      texto.length > 90 ? '${texto.substring(0, 90)}…' : texto,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1255,7 +1298,7 @@ class _BookmarksSheet extends StatelessWidget {
         ),
         // Previously both the empty message and the list were rendered, giving
         // two Expanded siblings fighting for the same space.
-        if (bookmarks.isEmpty)
+        if (_bookmarks.isEmpty)
           const Padding(
             padding: EdgeInsets.fromLTRB(24, 0, 24, 40),
             child: Text('No hay marcadores guardados'),
@@ -1264,20 +1307,41 @@ class _BookmarksSheet extends StatelessWidget {
           Flexible(
             child: ListView.builder(
               shrinkWrap: true,
-              itemCount: bookmarks.length,
+              itemCount: _bookmarks.length,
               itemBuilder: (ctx, i) {
-                final b = bookmarks[i];
+                final b = _bookmarks[i];
+                final (titulo, fragmento) = _describe(b);
+                final nota = b['note'] as String?;
                 return ListTile(
                   leading: const Icon(Icons.bookmark),
-                  title: Text('Cap. ${(b['chapter_index'] as int) + 1}'
-                      ' · Pár. ${(b['paragraph_index'] as int) + 1}'),
-                  subtitle: b['note'] != null ? Text(b['note'] as String) : null,
+                  title: Text(titulo,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: fragmento == null && nota == null
+                      ? null
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (fragmento != null)
+                              Text(fragmento,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis),
+                            if (nota != null && nota.isNotEmpty)
+                              Text(nota,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                          fontStyle: FontStyle.italic)),
+                          ],
+                        ),
+                  isThreeLine: fragmento != null && (nota?.isNotEmpty ?? false),
                   trailing: IconButton(
                     icon: const Icon(Icons.delete_outline),
                     tooltip: 'Eliminar marcador',
-                    onPressed: () => onDelete(b['id'] as int),
+                    onPressed: () => _delete(b),
                   ),
-                  onTap: () => onJump(b),
+                  onTap: () => widget.onJump(b),
                 );
               },
             ),
