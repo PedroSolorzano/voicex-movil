@@ -132,7 +132,7 @@ y su arreglo. Aquí solo queda lo que no está hecho.
     Piper por consumo de datos—, `F5TtsProvider` nuevo, y **borrar
     `ChatterboxTtsProvider`** de `lib/tts/`, `tts_factory.dart`,
     `settings.dart`, `reader_provider.dart` y `server_config.dart`.
-- [ ] `alto` 2026-09-03 — **La previsualización de voz del motor Teléfono se
+- [x] `alto` 2026-09-03 — **La previsualización de voz del motor Teléfono se
   cuelga para siempre tras el primer fallo del motor nativo.** Reportado por
   un tester: *"no me funcionan los previos de las voces, solo me funcionó
   como 10 veces y después dejaron de funcionar"*
@@ -146,6 +146,10 @@ y su arreglo. Aquí solo queda lo que no está hecho.
   `.timeout(...)` alrededor de esa síntesis para que el cuelgue caiga por el
   mismo `catch` que ya maneja los demás fallos. Sin reproducir en banco
   todavía, solo rastreado por código.
+
+  Hecho el 2026-09-17, con el plazo en el provider y no en `_preview()`: así
+  cubre también la lectura normal, que se colgaba igual pero sin guardián
+  global que lo hiciera evidente.
 - [x] `alto` 2026-09-06 — **`resetServerHealthCache` borra `_busyUntil` junto
   con el caché de red, y sigue pasando con F5.** Detectado en la recaída del
   2026-09-06 de `docs/bugs/CHATTERBOX_DESCARGAS.md` (dos reportes desde la

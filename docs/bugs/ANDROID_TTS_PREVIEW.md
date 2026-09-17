@@ -116,6 +116,19 @@ hay un guardián global bloqueando el resto de la app.
 
 ---
 
+## Resuelto (2026-09-17)
+
+El arreglo fue el que anticipaba la sección anterior, pero un piso más abajo:
+el `.timeout(30 s)` va en `android_tts_provider.dart`, alrededor del propio
+`synthesizeToFile`, no en `_preview()`. Poniéndolo en la pantalla de ajustes
+se habría curado el síntoma visible —el botón mudo— dejando intacto el mismo
+cuelgue en la lectura normal, que es el camino que de verdad importa. Al
+agotarse el plazo se intenta un `stop()` (a título de mejor esfuerzo, porque
+el motor puede estar atascado) y se lanza una excepción con texto en español,
+que es la que ya saben mostrar tanto `_preview()` como el lector.
+
+---
+
 ## Reporte relacionado, sin diagnóstico propio
 
 La entrada anterior del mismo tester (2026-09-03 21:31, Alice cap. 1, motor

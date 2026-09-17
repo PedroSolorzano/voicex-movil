@@ -9,6 +9,28 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## Sin publicar
+
+Lo que salió de la auditoría del 2026-09-17
+([`docs/tasks/PLAN_AUDITORIA_2026-09-17.md`](tasks/PLAN_AUDITORIA_2026-09-17.md)).
+
+### El motor del teléfono podía dejar la app muda para siempre
+
+`flutter_tts` solo resuelve el `Future` de `synthesizeToFile` desde su
+callback `onDone`. Cuando el motor nativo reportaba un error, ese `await` se
+quedaba esperando sin valor y sin excepción, así que el guardián de reentrada
+de la previsualización nunca se liberaba y **todos** los botones de "escuchar
+prueba" quedaban mudos hasta reiniciar la app — justo lo que reportó un tester
+el 2026-09-03: *"solo me funcionó como 10 veces y después dejaron de
+funcionar"*. El mismo cuelgue paraba la lectura normal con ese motor.
+
+Ahora la síntesis tiene un techo de 30 s y, al agotarse, sale por el mismo
+camino de error que ya existía, con un mensaje que dice qué revisar en los
+ajustes de Android. Investigación en
+[`docs/bugs/ANDROID_TTS_PREVIEW.md`](bugs/ANDROID_TTS_PREVIEW.md).
+
+---
+
 ## 0.9.1-preview.1 — 2026-09-06
 
 Una descarga que se replegó a Edge ya no termina pareciendo una descarga

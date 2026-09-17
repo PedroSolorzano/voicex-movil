@@ -29,6 +29,14 @@ const _uuid = Uuid();
 /// sistema usa su predeterminada, que en un Samsung suele ser la de Google y no
 /// la buena.
 class AndroidTtsProvider implements TTSProvider {
+  /// Ceiling for one `synthesizeToFile` call.
+  ///
+  /// Generous on purpose: this engine runs on the phone, where a cold start of
+  /// the system TTS service after an OS update is the slow case worth waiting
+  /// for. What it is really guarding against is not slowness but a future that
+  /// never completes at all — see [synthesize].
+  static const _synthesisTimeout = Duration(seconds: 30);
+
   final FlutterTts _tts = FlutterTts();
   final String langCode;
   bool _initialized = false;
@@ -79,7 +87,29 @@ class AndroidTtsProvider implements TTSProvider {
     // en una URI propia que no coincide con lo que este código comprueba
     // después -- el motor sintetiza bien, pero el archivo nunca aparece donde
     // se lo espera y la síntesis se reporta como fallida.
-    await _tts.synthesizeToFile(text, filePath, true);
+    //
+    // The timeout is not about slowness. `flutter_tts` completes this future
+    // from its `onDone` handler only, so a failure reported by the native
+    // engine leaves it pending forever: no value, no exception, and every
+    // caller's reentrancy guard stays raised. That is how one bad preview
+    // silenced the preview button for the rest of the session
+    // (docs/bugs/ANDROID_TTS_PREVIEW.md), and the same hang stalls playback.
+    // A ceiling routes it into the failure path the callers already handle.
+    try {
+      await _tts
+          .synthesizeToFile(text, filePath, true)
+          .timeout(_synthesisTimeout);
+    } on TimeoutException {
+      // Best effort: the engine may be wedged, and failing to stop it must not
+      // replace the useful message with a platform exception.
+      try {
+        await _tts.stop();
+      } catch (_) {}
+      throw Exception(
+          'El motor de voz del teléfono no respondió. Vuelve a intentarlo; si '
+          'se repite, revisa en los ajustes de Android que el motor de voz '
+          'esté instalado.');
+    }
 
     final file = File(filePath);
     if (!await file.exists() || await file.length() == 0) {
