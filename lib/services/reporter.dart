@@ -169,11 +169,19 @@ class Reporter {
 
   static bool _flushing = false;
 
+  /// Whether this build has anywhere to send a report at all.
+  ///
+  /// An APK handed to somebody with no server of ours behind it — Edge only —
+  /// carries neither token nor address, so [flush] returns immediately and
+  /// everything queued stays queued forever. The screens ask this before
+  /// offering a form that promises delivery.
+  static bool get canDeliver =>
+      TtsServerConfig.token.isNotEmpty && TtsServerConfig.reportUrl.isNotEmpty;
+
   /// Delivers everything queued, oldest first. Silent by design.
   static Future<void> flush() async {
-    if (_flushing || TtsServerConfig.token.isEmpty) return;
+    if (_flushing || !canDeliver) return;
     final base = TtsServerConfig.reportUrl;
-    if (base.isEmpty) return;
 
     _flushing = true;
     try {

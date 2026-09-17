@@ -8,6 +8,7 @@ import 'package:just_audio/just_audio.dart' as ja;
 import 'package:package_info_plus/package_info_plus.dart';
 import '../../errors.dart';
 import '../../config/server_config.dart';
+import '../../services/reporter.dart';
 import '../../config/settings.dart';
 import '../../storage/repositories.dart';
 import '../../tts/tts_factory.dart';
@@ -594,31 +595,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ]),
 
-          _Section(title: 'Contar un problema', children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Si algo falla o se te ocurre una mejora, cuéntalo. Puedes '
-                    'escribirlo o grabar una nota de voz.',
-                    style: Theme.of(context).textTheme.bodySmall,
+          // Solo si esta compilación tiene a dónde mandarlo. Sin servidor, el
+          // reporte se queda encolado para siempre y la pantalla de gracias
+          // promete un envío que no va a ocurrir nunca.
+          if (Reporter.canDeliver)
+            _Section(title: 'Contar un problema', children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Si algo falla o se te ocurre una mejora, cuéntalo. '
+                      'Puedes escribirlo o grabar una nota de voz.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.tonalIcon(
-                  icon: const Icon(Icons.feedback_outlined, size: 18),
-                  label: const Text('Escribir'),
-                  onPressed: () => context.push('/report'),
-                ),
-              ],
-            ),
-          ]),
+                  const SizedBox(width: 8),
+                  FilledButton.tonalIcon(
+                    icon: const Icon(Icons.feedback_outlined, size: 18),
+                    label: const Text('Escribir'),
+                    onPressed: () => context.push('/report'),
+                  ),
+                ],
+              ),
+            ]),
 
           // Plegada: no estorba a quien solo quiere leer, y convierte un "no me
           // funciona" en cinco líneas con números. Es la mitad que el log del
           // servidor no puede dar — un sondeo que expira en el teléfono se ve
           // allí como un 200 impecable, porque lo que se perdió fue la vuelta.
-          _DiagnosticsSection(version: _packageInfo),
+          _DiagnosticsSection(
+              version: _packageInfo, puedeEnviar: Reporter.canDeliver),
 
           const SizedBox(height: 24),
           Center(
@@ -1110,9 +1116,14 @@ class _Section extends StatelessWidget {
 
 /// Últimos sondeos medidos en el teléfono, listos para compartir.
 class _DiagnosticsSection extends StatefulWidget {
-  const _DiagnosticsSection({required this.version});
+  const _DiagnosticsSection({required this.version, required this.puedeEnviar});
 
   final PackageInfo? version;
+
+  /// Cuando es falso, esta sección es la única forma de que un fallo salga del
+  /// teléfono, y el texto lo dice en vez de dar por hecho que hay un botón de
+  /// "Contar un problema" más arriba.
+  final bool puedeEnviar;
 
   @override
   State<_DiagnosticsSection> createState() => _DiagnosticsSectionState();
@@ -1163,8 +1174,12 @@ class _DiagnosticsSectionState extends State<_DiagnosticsSection> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Si algo falla, copia esto y mándalo: dice cuánto tardó cada intento '
-          'y en qué acabó.',
+          widget.puedeEnviar
+              ? 'Si algo falla, copia esto y mándalo: dice cuánto tardó cada '
+                  'intento y en qué acabó.'
+              : 'Esta versión de la app no tiene a dónde enviar reportes. Si '
+                  'algo falla, copia esto y mándalo por mensaje: dice cuánto '
+                  'tardó cada intento y en qué acabó.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
