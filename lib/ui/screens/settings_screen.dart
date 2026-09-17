@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:developer' as dev;
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 import 'package:package_info_plus/package_info_plus.dart';
+import '../../errors.dart';
 import '../../config/server_config.dart';
 import '../../config/settings.dart';
 import '../../storage/repositories.dart';
@@ -812,9 +814,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       await _previewPlayer.setSpeed(s.playbackSpeed);
       await _previewPlayer.play();
     } catch (e) {
+      dev.log('[Ajustes] la prueba de voz falló: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('No se pudo reproducir la prueba: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(friendlyError(e))));
       }
     } finally {
       await tts.dispose();

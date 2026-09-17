@@ -6,6 +6,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../errors.dart';
 import 'models.dart';
 import 'tts_provider.dart';
 
@@ -105,7 +106,7 @@ class AndroidTtsProvider implements TTSProvider {
       try {
         await _tts.stop();
       } catch (_) {}
-      throw Exception(
+      throw const ReadableError(
           'El motor de voz del teléfono no respondió. Vuelve a intentarlo; si '
           'se repite, revisa en los ajustes de Android que el motor de voz '
           'esté instalado.');
@@ -113,7 +114,7 @@ class AndroidTtsProvider implements TTSProvider {
 
     final file = File(filePath);
     if (!await file.exists() || await file.length() == 0) {
-      throw Exception(
+      throw const ReadableError(
           'El motor de voz del teléfono no generó audio. Comprueba en los '
           'ajustes de Android que haya un motor instalado y con el idioma '
           'descargado.');

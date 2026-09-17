@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voicex_movil/epub/parser.dart';
+import 'package:voicex_movil/errors.dart';
 
 void main() {
   group('splitSentences', () {
@@ -92,16 +93,19 @@ void main() {
     test('refuses a file larger than the ceiling', () {
       expect(
         () => readEpubBytes(archivo.path, maxBytes: 100),
-        throwsA(isA<FormatException>()),
+        throwsA(isA<ReadableError>()),
       );
     });
 
-    test('the refusal says so in Spanish, because the reader sees it', () async {
+    test('the refusal is already written for the reader', () async {
       try {
         await readEpubBytes(archivo.path, maxBytes: 100);
         fail('debería haber lanzado');
-      } on FormatException catch (e) {
+      } on ReadableError catch (e) {
         expect(e.message, contains('demasiado grande'));
+        // Y llega intacto a la pantalla, sin que friendlyError lo reemplace
+        // por el mensaje genérico.
+        expect(friendlyError(e), e.message);
       }
     });
 

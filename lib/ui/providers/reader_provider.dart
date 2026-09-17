@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../audio/audio_player.dart';
 import '../../config/settings.dart';
+import '../../errors.dart';
 import '../../epub/models.dart';
 import '../../epub/parser.dart';
 import '../../epub/text_align.dart';
@@ -888,6 +889,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
   }
 
   String _friendlyError(Object e) {
+    // Un mensaje ya escrito para quien lee -- el del motor del teléfono, por
+    // ejemplo -- se muestra tal cual, en vez de acabar detrás de "Error:".
+    if (e is ReadableError) return e.message;
     final s = e.toString();
     if (s.contains('SocketException') ||
         s.contains('Failed host lookup') ||

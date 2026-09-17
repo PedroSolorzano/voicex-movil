@@ -1,8 +1,10 @@
+import 'dart:developer' as dev;
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../errors.dart';
 import '../providers/app_info_provider.dart';
 import '../providers/library_provider.dart';
 import '../providers/share_import_provider.dart';
@@ -18,6 +20,10 @@ class LibraryScreen extends ConsumerStatefulWidget {
 
 class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   bool _searching = false;
+
+  /// Descomprimir una novela lleva segundos, y hasta ahora no se veía nada
+  /// mientras tanto: la reacción natural era volver a pulsar "Agregar".
+  bool _importing = false;
   final _searchController = TextEditingController();
 
   @override
@@ -122,13 +128,19 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        icon: const Icon(Icons.add),
-        label: const Text('Agregar EPUB'),
-        onPressed: () => _pickEpub(context),
+        icon: _importing
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.add),
+        label: Text(_importing ? 'Agregando…' : 'Agregar EPUB'),
+        onPressed: _importing ? null : () => _pickEpub(context),
       ),
       body: entriesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => Center(child: Text(friendlyError(e))),
         data: (entries) {
           if (entries.isEmpty) {
             final searching =
@@ -169,15 +181,19 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       allowedExtensions: ['epub'],
     );
     if (result == null || result.files.single.path == null) return;
+    setState(() => _importing = true);
     try {
       await ref
           .read(libraryProvider.notifier)
           .addBook(result.files.single.path!);
     } catch (e) {
+      dev.log('[Library] import failed: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error al agregar: $e')));
+            .showSnackBar(SnackBar(content: Text(friendlyError(e))));
       }
+    } finally {
+      if (mounted) setState(() => _importing = false);
     }
   }
 

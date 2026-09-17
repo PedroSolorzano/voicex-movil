@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:epubx/epubx.dart';
 import 'package:flutter/foundation.dart';
 import 'package:html/parser.dart' as html_parser;
+import '../errors.dart';
 import 'models.dart';
 
 /// Anything past this is not a book.
@@ -28,7 +29,7 @@ Future<Uint8List> readEpubBytes(String path, {int maxBytes = maxEpubBytes}) asyn
   final file = File(path);
   final size = await file.length();
   if (size > maxBytes) {
-    throw const FormatException(
+    throw const ReadableError(
         'El archivo es demasiado grande para ser un EPUB.');
   }
   return file.readAsBytes();

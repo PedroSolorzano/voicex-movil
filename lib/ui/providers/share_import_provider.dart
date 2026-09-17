@@ -2,6 +2,7 @@ import 'dart:developer' as dev;
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../errors.dart';
 import 'library_provider.dart';
 
 /// Bridges the native side of "Abrir con VoiceX" / share-to-app.
@@ -46,7 +47,7 @@ class ShareImportNotifier extends Notifier<String?> {
       state = 'Libro agregado a la biblioteca';
     } catch (e) {
       dev.log('[Share] import failed: $e');
-      state = 'No se pudo agregar el libro: $e';
+      state = friendlyError(e);
     } finally {
       // MainActivity copied the incoming content:// URI here so Dart could read
       // it, and the library has its own copy by now. Nothing else would ever
