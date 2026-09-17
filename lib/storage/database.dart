@@ -9,7 +9,7 @@ Future<Database> getDatabase() async {
   if (_db != null) return _db!;
   _db = await openDatabase(
     _pathOverride ?? join(await getDatabasesPath(), 'voicex.db'),
-    version: 7,
+    version: 8,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onConfigure: _onConfigure,
@@ -50,7 +50,8 @@ Future<void> _onCreate(Database db, int version) async {
       publisher      TEXT,
       published_date TEXT,
       subject        TEXT,
-      total_paragraphs INTEGER NOT NULL DEFAULT 0
+      total_paragraphs INTEGER NOT NULL DEFAULT 0,
+      content_hash   TEXT
     )
   ''');
 
@@ -156,5 +157,16 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
   }
   if (oldVersion < 7) {
     await db.execute(_reportsTable);
+  }
+  if (oldVersion < 8) {
+    // Huella del archivo, para reconocer el mismo libro importado dos veces.
+    // La restricción UNIQUE de `file_path` nunca saltaba: cada importación
+    // copia a almacenamiento propio con un UUID nuevo, así que dos copias del
+    // mismo EPUB tenían rutas distintas.
+    //
+    // Sin backfill a propósito: calcularlo exigiría leer entero cada libro ya
+    // importado en el arranque. Los antiguos quedan en NULL y no se comparan,
+    // que es el comportamiento de siempre.
+    await db.execute('ALTER TABLE books ADD COLUMN content_hash TEXT');
   }
 }

@@ -66,4 +66,53 @@ void main() {
         .toList();
     expect(notas.where((n) => n != null).length, 1);
   });
+
+  group('huella del contenido', () {
+    // La restricción UNIQUE de file_path nunca podía saltar: cada importación
+    // copia el EPUB con un UUID nuevo, así que dos copias del mismo libro
+    // tenían rutas distintas y entraban las dos.
+    late LibraryRepo libros;
+
+    setUp(() => libros = LibraryRepo());
+
+    test('encuentra un libro ya importado por su huella', () async {
+      await libros.add(
+        title: 'La Odisea',
+        author: 'Homero',
+        language: 'es',
+        filePath: '/tmp/copia-1.epub',
+        contentHash: 'abc123',
+      );
+
+      final encontrado = await libros.findByContentHash('abc123');
+
+      expect(encontrado?['title'], 'La Odisea');
+    });
+
+    test('una huella distinta no coincide', () async {
+      await libros.add(
+        title: 'La Odisea',
+        author: 'Homero',
+        language: 'es',
+        filePath: '/tmp/copia-1.epub',
+        contentHash: 'abc123',
+      );
+
+      expect(await libros.findByContentHash('otra'), isNull);
+    });
+
+    test('los libros de antes de la columna no coinciden con nada', () async {
+      // Quedan con NULL y no se rellenan: hacerlo exigiría leer entero cada
+      // libro ya importado al arrancar. Tratar "no sé" como "igual" habría
+      // impedido importar cualquier cosa después del primero.
+      await libros.add(
+        title: 'Viejo',
+        author: 'Nadie',
+        language: 'es',
+        filePath: '/tmp/viejo.epub',
+      );
+
+      expect(await libros.findByContentHash('lo que sea'), isNull);
+    });
+  });
 }

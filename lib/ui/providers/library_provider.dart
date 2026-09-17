@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../../epub/parser.dart';
+import '../../errors.dart';
 import '../../storage/repositories.dart';
 
 final _libraryRepo = LibraryRepo();
@@ -34,6 +36,16 @@ Future<String> _importToAppStorage(String sourcePath) async {
   final dest = '${booksDir.path}/${_uuid.v4()}.epub';
   await File(sourcePath).copy(dest);
   return dest;
+}
+
+/// SHA-256 of the file, read in chunks.
+///
+/// Streamed rather than read whole: an EPUB can be tens of megabytes and this
+/// runs while the reader waits, so there is no reason to hold a second copy in
+/// memory next to the one the parser already made.
+Future<String> _hashOf(String path) async {
+  final digest = await sha256.bind(File(path).openRead()).first;
+  return digest.toString();
 }
 
 class LibraryNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
@@ -88,6 +100,17 @@ class LibraryNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
     // Parse first: a malformed EPUB should fail before anything is copied.
     // Off the UI isolate, since unzipping a novel janks the list otherwise.
     final book = await parseEpubInBackground(filePath);
+
+    // La huella del archivo, no su ruta: cada importación copia con un UUID
+    // nuevo, así que la restricción UNIQUE de `file_path` nunca podía saltar
+    // y el mismo libro entraba tantas veces como se agregara.
+    final contentHash = await _hashOf(filePath);
+    final yaEsta = await _libraryRepo.findByContentHash(contentHash);
+    if (yaEsta != null) {
+      throw ReadableError(
+          '"${yaEsta['title']}" ya está en tu biblioteca.');
+    }
+
     final storedPath = await _importToAppStorage(filePath);
 
     final int id;
@@ -97,6 +120,7 @@ class LibraryNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
         author: book.author,
         language: book.language,
         filePath: storedPath,
+        contentHash: contentHash,
       );
     } catch (e) {
       // Duplicate file_path or any insert failure: do not leave the copy behind.

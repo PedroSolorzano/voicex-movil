@@ -17,6 +17,7 @@ class LibraryRepo {
     String? publisher,
     String? publishedDate,
     String? subject,
+    String? contentHash,
   }) async {
     final db = await _db;
     return db.insert('books', {
@@ -29,7 +30,20 @@ class LibraryRepo {
       'publisher': publisher,
       'published_date': publishedDate,
       'subject': subject,
+      'content_hash': contentHash,
     });
+  }
+
+  /// The book with this content hash, if it is already in the library.
+  ///
+  /// Null hashes never match: books imported before the column existed have
+  /// none, and treating "unknown" as "equal" would refuse to import anything
+  /// after the first.
+  Future<Map<String, dynamic>?> findByContentHash(String hash) async {
+    final db = await _db;
+    final rows = await db.query('books',
+        where: 'content_hash = ?', whereArgs: [hash], limit: 1);
+    return rows.isEmpty ? null : rows.first;
   }
 
   Future<void> updateMeta(
