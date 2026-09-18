@@ -156,6 +156,120 @@ class ProgressRepo {
   }
 }
 
+// ─── Reading log ─────────────────────────────────────────────────────────────
+
+/// What was read and listened to, day by day, plus which books were finished.
+///
+/// Everything the reader ranks and the progress screen show comes from here.
+/// It records amounts, never text: nothing in it says what a book contained.
+class ReadingLogRepo {
+  Future<Database> get _db => getDatabase();
+
+  /// Local calendar day as stored: `YYYY-MM-DD`.
+  static String dayOf(DateTime t) =>
+      '${t.year.toString().padLeft(4, '0')}-'
+      '${t.month.toString().padLeft(2, '0')}-'
+      '${t.day.toString().padLeft(2, '0')}';
+
+  /// Adds to [day]'s row, creating it the first time.
+  ///
+  /// UPDATE-then-INSERT rather than `INSERT … ON CONFLICT DO UPDATE`: upsert
+  /// needs SQLite 3.24, and Android 9 ships 3.22.
+  Future<void> credit(String day,
+      {int readChars = 0, int listenedChars = 0, int paragraphs = 0}) async {
+    if (readChars <= 0 && listenedChars <= 0) return;
+    final db = await _db;
+    await db.transaction((txn) async {
+      final changed = await txn.rawUpdate('''
+        UPDATE reading_days SET
+          read_chars     = read_chars + ?,
+          listened_chars = listened_chars + ?,
+          paragraphs     = paragraphs + ?
+        WHERE day = ?
+      ''', [readChars, listenedChars, paragraphs, day]);
+      if (changed == 0) {
+        await txn.insert('reading_days', {
+          'day': day,
+          'read_chars': readChars,
+          'listened_chars': listenedChars,
+          'paragraphs': paragraphs,
+        });
+      }
+    });
+  }
+
+  Future<({int readChars, int listenedChars, int paragraphs})> totals() async {
+    final db = await _db;
+    final r = (await db.rawQuery('''
+      SELECT COALESCE(SUM(read_chars), 0)     AS r,
+             COALESCE(SUM(listened_chars), 0) AS l,
+             COALESCE(SUM(paragraphs), 0)     AS p
+      FROM reading_days
+    ''')).first;
+    return (
+      readChars: r['r'] as int,
+      listenedChars: r['l'] as int,
+      paragraphs: r['p'] as int,
+    );
+  }
+
+  /// Characters read or heard on each of the [n] days ending [today], oldest
+  /// first. Days without reading are there with 0, so a chart of them has no
+  /// gaps to explain.
+  Future<List<({String day, int chars})>> lastDays(int n,
+      {DateTime? today}) async {
+    final end = today ?? DateTime.now();
+    final days = [
+      for (var i = n - 1; i >= 0; i--)
+        dayOf(DateTime(end.year, end.month, end.day - i)),
+    ];
+    final db = await _db;
+    final rows = await db.query('reading_days',
+        where: 'day >= ? AND day <= ?', whereArgs: [days.first, days.last]);
+    final byDay = {
+      for (final r in rows)
+        r['day'] as String:
+            (r['read_chars'] as int) + (r['listened_chars'] as int),
+    };
+    return [for (final d in days) (day: d, chars: byDay[d] ?? 0)];
+  }
+
+  /// The single day with the most reading, or null before the first one.
+  Future<({String day, int chars})?> bestDay() async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT day, read_chars + listened_chars AS c
+      FROM reading_days ORDER BY c DESC, day DESC LIMIT 1
+    ''');
+    if (rows.isEmpty || (rows.first['c'] as int) <= 0) return null;
+    return (day: rows.first['day'] as String, chars: rows.first['c'] as int);
+  }
+
+  /// Records that [bookId] was finished. Only the first time counts: reading
+  /// the last page again must not move the date, or finish it twice.
+  ///
+  /// Returns true when this call is the one that marked it.
+  Future<bool> markFinished(int bookId, DateTime at) async {
+    final db = await _db;
+    final changed = await db.update(
+      'books',
+      {'finished_at': at.toIso8601String()},
+      where: 'id = ? AND finished_at IS NULL',
+      whereArgs: [bookId],
+    );
+    return changed > 0;
+  }
+
+  /// Finished books, most recent first.
+  Future<List<Map<String, dynamic>>> finishedBooks() async {
+    final db = await _db;
+    return db.query('books',
+        columns: ['id', 'title', 'author', 'total_paragraphs', 'finished_at'],
+        where: 'finished_at IS NOT NULL',
+        orderBy: 'finished_at DESC');
+  }
+}
+
 // ─── Bookmarks ───────────────────────────────────────────────────────────────
 
 class BookmarkRepo {

@@ -9,7 +9,7 @@ Future<Database> getDatabase() async {
   if (_db != null) return _db!;
   _db = await openDatabase(
     _pathOverride ?? join(await getDatabasesPath(), 'voicex.db'),
-    version: 8,
+    version: 9,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onConfigure: _onConfigure,
@@ -51,7 +51,8 @@ Future<void> _onCreate(Database db, int version) async {
       published_date TEXT,
       subject        TEXT,
       total_paragraphs INTEGER NOT NULL DEFAULT 0,
-      content_hash   TEXT
+      content_hash   TEXT,
+      finished_at    TEXT
     )
   ''');
 
@@ -98,7 +99,24 @@ Future<void> _onCreate(Database db, int version) async {
   ''');
 
   await db.execute(_reportsTable);
+  await db.execute(_readingDaysTable);
 }
+
+/// One row per calendar day of reading or listening.
+///
+/// Per day rather than per event: crediting a paragraph is an upsert that adds
+/// to the day's row, so the table grows by one row a day however much is read,
+/// and every figure the progress screen shows comes out of a single query.
+/// Characters rather than paragraphs, because a line of dialogue and a page of
+/// description are both one paragraph.
+const _readingDaysTable = '''
+  CREATE TABLE reading_days (
+    day            TEXT PRIMARY KEY,
+    read_chars     INTEGER NOT NULL DEFAULT 0,
+    listened_chars INTEGER NOT NULL DEFAULT 0,
+    paragraphs     INTEGER NOT NULL DEFAULT 0
+  )
+''';
 
 /// Reports waiting to be delivered.
 ///
@@ -168,5 +186,12 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     // importado en el arranque. Los antiguos quedan en NULL y no se comparan,
     // que es el comportamiento de siempre.
     await db.execute('ALTER TABLE books ADD COLUMN content_hash TEXT');
+  }
+  if (oldVersion < 9) {
+    // Registro de lectura para los rangos. Sin backfill: la posición guardada
+    // de cada libro dice hasta dónde se llegó, no cuándo, y repartirla en un
+    // día inventado falsearía las estadísticas desde el primer momento.
+    await db.execute(_readingDaysTable);
+    await db.execute('ALTER TABLE books ADD COLUMN finished_at TEXT');
   }
 }
