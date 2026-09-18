@@ -382,6 +382,28 @@ atendido.
 
 ---
 
+## Biblioteca
+
+- [ ] `bajo` 2026-09-17 — **Considerar modernizar la pantalla de biblioteca.**
+  Hoy es una sola columna de `ListView.builder` (`library_screen.dart:152`)
+  con `BookCard` en fila: portada fija de 70×100
+  (`book_card.dart:130-131`), título, autor, barra de progreso y tres botones
+  de ícono. Es la única vista que existe -- no hay grilla de portadas ni forma
+  de alternar entre las dos -- aunque la extracción de portada ya funciona
+  (`extractEpubExtras`, `library_provider.dart:138`) y con varios libros la
+  portada es lo que más rápido se reconoce de un vistazo. Kindle, Play Books y
+  Moon+ Reader muestran grilla de portadas por defecto y dejan la lista como
+  alternativa, no al revés.
+
+  Es una idea para evaluar, no una tarea decidida: falta pensar el diseño (qué
+  tan grande la portada, qué información entra sin texto, cómo se ve un libro
+  sin portada) antes de tocar código. `BookCard` ya separa el dato
+  (`libraryEntriesProvider`, con progreso y metadata resueltos) de cómo se
+  dibuja, así que una vista nueva puede reusar el mismo provider sin tocar la
+  carga de datos.
+
+---
+
 ## Acceso remoto a Kokoro y Piper
 
 Análisis completo en [`docs/context/ACCESO_REMOTO.md`](../context/ACCESO_REMOTO.md).
