@@ -276,7 +276,16 @@ List<Sentence> splitSentences(String text) {
 
 String? _stripHtml(String? raw) {
   if (raw == null || raw.isEmpty) return raw;
-  return html_parser.parse(raw).body?.text.trim();
+  // `body.text` joins blocks with nothing between them: two paragraphs came
+  // out as "deshabitado.Encuentran". A space where each block ends.
+  final spaced = raw.replaceAll(
+      RegExp(r'</(p|div|li|h[1-6])\s*>|<br\s*/?>', caseSensitive: false), ' ');
+  return html_parser
+      .parse(spaced)
+      .body
+      ?.text
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
 }
 
 String _detectLanguage(List<String?>? languages) {
