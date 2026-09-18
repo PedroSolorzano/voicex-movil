@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'classic_card_parts.dart';
 
 class BookInfoSheet extends StatelessWidget {
   final Map<String, dynamic> book;
@@ -12,11 +13,7 @@ class BookInfoSheet extends StatelessWidget {
     final title = book['title'] as String? ?? '';
     final author = book['author'] as String? ?? '';
     final language = book['language'] as String? ?? '';
-    final rawDesc = book['description'] as String?;
-    final description = rawDesc
-        ?.replaceAll(RegExp(r'<[^>]*>'), '')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
+    final description = plainDescription(book['description'] as String?);
     final publisher = book['publisher'] as String?;
     final publishedDate = book['published_date'] as String?;
     final subject = book['subject'] as String?;
