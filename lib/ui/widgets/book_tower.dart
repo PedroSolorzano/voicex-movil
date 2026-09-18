@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'library_skin.dart';
 
 /// Finished books as a pile of spines, newest on top, with the book in
-/// progress resting translucent on the pile.
+/// progress resting on the pile.
 ///
 /// A number of pages is abstract; a pile of books that grows is not. Each
 /// spine is as thick as its book is long (from its paragraph count, which the
@@ -55,17 +55,19 @@ class BookTower extends StatelessWidget {
     return Column(
       children: [
         if (current case final c?)
-          Opacity(
-            opacity: 0.45,
-            child: _Spine(
-              title: 'En curso: ${c.title}',
-              paragraphs: c.totalParagraphs,
-              color: _leather.first,
-              widthFactor: c.totalParagraphs <= 0
-                  ? 0.5
-                  : (c.at / c.totalParagraphs).clamp(0.25, 1.0),
-              skin: skin,
-            ),
+          // Full width, with the progress as a gilt band along the bottom. An
+          // earlier version drew the width itself as the progress: at 22 % the
+          // spine was too narrow for its title, and nobody read the width as
+          // progress anyway.
+          _Spine(
+            title: 'En curso · ${_percent(c)} % · ${c.title}',
+            paragraphs: c.totalParagraphs,
+            color: _leather.first,
+            widthFactor: 0.9,
+            progress: c.totalParagraphs <= 0
+                ? 0
+                : (c.at / c.totalParagraphs).clamp(0.0, 1.0),
+            skin: skin,
           ),
         for (final (i, book) in shown.indexed)
           _Spine(
@@ -87,6 +89,11 @@ class BookTower extends StatelessWidget {
       ],
     );
   }
+
+  static int _percent(({String title, int totalParagraphs, int at}) c) =>
+      c.totalParagraphs <= 0
+          ? 0
+          : (100 * c.at / c.totalParagraphs).floor().clamp(0, 100);
 }
 
 class _Spine extends StatelessWidget {
@@ -96,12 +103,16 @@ class _Spine extends StatelessWidget {
   final double widthFactor;
   final LibrarySkin skin;
 
+  /// Fraction read, for the book in progress; null on a finished one.
+  final double? progress;
+
   const _Spine({
     required this.title,
     required this.paragraphs,
     required this.color,
     required this.widthFactor,
     required this.skin,
+    this.progress,
   });
 
   @override
@@ -129,18 +140,39 @@ class _Spine extends StatelessWidget {
                   color: Color(0x33000000), blurRadius: 2, offset: Offset(0, 1)),
             ],
           ),
-          child: Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: skin.isModern
-                ? const TextStyle(
-                    color: BookTower._gilt,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.3,
-                  )
-                : skinTitleStyle(10.5, BookTower._gilt),
+          child: Stack(
+            fit: StackFit.expand,
+            alignment: Alignment.center,
+            children: [
+              if (progress case final p?)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 2,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: FractionallySizedBox(
+                      widthFactor: p,
+                      child: Container(height: 3, color: BookTower._gilt),
+                    ),
+                  ),
+                ),
+              Center(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: skin.isModern
+                      ? const TextStyle(
+                          color: BookTower._gilt,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.3,
+                        )
+                      : skinTitleStyle(10.5, BookTower._gilt),
+                ),
+              ),
+            ],
           ),
         ),
       ),

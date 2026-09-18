@@ -79,8 +79,8 @@ void main() {
           ));
       expect(find.text('El talismán'), findsOneWidget);
       expect(find.text('Pedro Páramo'), findsOneWidget);
-      expect(find.text('En curso: 22/11/63'), findsOneWidget);
-      expect(find.byType(Opacity), findsOneWidget);
+      // The percentage is written, not left to the spine's width.
+      expect(find.text('En curso · 25 % · 22/11/63'), findsOneWidget);
     });
 
     testWidgets('vacía, lo dice en vez de dibujar nada', (tester) async {
