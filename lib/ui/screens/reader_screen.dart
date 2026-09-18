@@ -18,6 +18,7 @@ import '../providers/reading_stats_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/highlighted_text.dart';
 import '../widgets/reader_theme.dart';
+import '../widgets/reader_transport.dart';
 import '../widgets/word_sheet.dart';
 
 /// "41 min", "1 h 12 min". Used by both the download bar and its confirmation.
@@ -31,6 +32,13 @@ String _shortDuration(int seconds) {
 /// Rough narration rate in characters per second at 1× for a neural voice.
 /// Only used for the "time left" estimate, so approximate is fine.
 const _charsPerSecond = 14.0;
+
+/// Height of the listening bar: progress slider, the transport row with its
+/// captions, and the status line. Summed from what is on screen rather than
+/// measured, so it cannot oscillate between frames.
+const _bottomChromeBase = 176.0;
+const _shadowingRowHeight = 52.0;
+const _downloadBlockHeight = 64.0;
 
 /// How long after the last scroll event the reading position is persisted.
 const _scrollSettleDelay = Duration(milliseconds: 900);
@@ -163,13 +171,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   /// Height reserved under the text for the floating controls.
-  ///
-  /// Computed from what is actually on screen rather than measured, so it
-  /// cannot oscillate between frames.
   double _bottomChromeHeight(ReaderState reader) {
-    var height = 160.0; // progress bar + transport row + status line
-    if (reader.highlightedSentence >= 0) height += 52; // repeat / loop
-    if (reader.isDownloading) height += 64; // download progress + its label
+    var height = _bottomChromeBase;
+    if (reader.highlightedSentence >= 0) height += _shadowingRowHeight;
+    if (reader.isDownloading) height += _downloadBlockHeight;
     return height;
   }
 
@@ -361,7 +366,14 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           AnimatedPositioned(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOut,
-            bottom: _chromeVisible ? 0 : -220,
+            // Hidden by its own height: a fixed offset fell short of the bar
+            // at its tallest (download + shadowing row) and left it peeking.
+            // The 16 dp cover the elevation shadow.
+            bottom: _chromeVisible
+                ? 0
+                : -(_bottomChromeHeight(reader) +
+                    MediaQuery.paddingOf(context).bottom +
+                    16),
             left: 0,
             right: 0,
             child: _BottomBar(
@@ -1076,54 +1088,33 @@ class _BottomBar extends StatelessWidget {
                   ],
                 ),
               ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  IconButton(
-                    icon: const _ChapterStepIcon(forward: false),
-                    tooltip: 'Capítulo anterior',
-                    color: palette.text,
-                    onPressed: reader.chapterIndex > 0
-                        ? notifier.previousChapter
-                        : null,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.skip_previous),
-                    tooltip: 'Párrafo anterior',
-                    color: palette.text,
-                    onPressed: notifier.previousParagraph,
-                  ),
-                  _PlayButton(
-                      reader: reader, notifier: notifier, palette: palette),
-                  IconButton(
-                    icon: const Icon(Icons.skip_next),
-                    tooltip: 'Párrafo siguiente',
-                    color: palette.text,
-                    onPressed: notifier.nextParagraph,
-                  ),
-                  IconButton(
-                    icon: const _ChapterStepIcon(forward: true),
-                    tooltip: 'Capítulo siguiente',
-                    color: palette.text,
-                    onPressed: reader.chapterIndex <
-                            (reader.book?.chapters.length ?? 1) - 1
-                        ? notifier.nextChapter
-                        : null,
-                  ),
-                  _SpeedMenu(
-                    current: settings.playbackSpeed,
-                    palette: palette,
-                    onChanged: onSpeedChanged,
-                  ),
-                  // Ocupa el hueco que dejó "Detener", que era el único
-                  // control de la fila que ya estaba cubierto por otro: pausar
-                  // hace lo mismo sin perder el sitio dentro del párrafo, y
-                  // parar de verdad sigue estando en la notificación.
-                  _SleepMenu(reader: reader, notifier: notifier, palette: palette),
-                ],
-              ),
+            ReaderTransport(
+              reader: reader,
+              palette: palette,
+              speed: settings.playbackSpeed,
+              onPreviousChapter:
+                  reader.chapterIndex > 0 ? notifier.previousChapter : null,
+              onNextChapter: reader.chapterIndex <
+                      (reader.book?.chapters.length ?? 1) - 1
+                  ? notifier.nextChapter
+                  : null,
+              onPreviousParagraph: notifier.previousParagraph,
+              onNextParagraph: notifier.nextParagraph,
+              onPlay: notifier.play,
+              onPause: notifier.pause,
+              onResume: notifier.resume,
+              onSpeedChanged: onSpeedChanged,
+              // The timer took the slot of "Detener", the only control of the
+              // row another one already covered: pausing keeps the place
+              // inside the paragraph, and a real stop is still in the
+              // notification.
+              onSleepChanged: (d) {
+                if (d == null) {
+                  notifier.setSleepAtChapterEnd(true);
+                } else {
+                  notifier.setSleepTimer(d == Duration.zero ? null : d);
+                }
+              },
             ),
             // Shadowing controls: only meaningful once there is a sentence to
             // repeat, so they stay out of the way until then.
@@ -1133,11 +1124,15 @@ class _BottomBar extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    TextButton.icon(
-                      icon: const Icon(Icons.replay, size: 18),
-                      label: const Text('Repetir'),
-                      style: TextButton.styleFrom(foregroundColor: palette.text),
-                      onPressed: notifier.repeatSentence,
+                    Tooltip(
+                      message: 'Repetir la oración resaltada',
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.replay, size: 18),
+                        label: const Text('Repetir'),
+                        style:
+                            TextButton.styleFrom(foregroundColor: palette.text),
+                        onPressed: notifier.repeatSentence,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     FilterChip(
@@ -1145,6 +1140,7 @@ class _BottomBar extends StatelessWidget {
                           size: 18,
                           color: reader.sentenceLoop ? null : palette.muted),
                       label: const Text('Bucle'),
+                      tooltip: 'Repetir la oración en bucle',
                       selected: reader.sentenceLoop,
                       onSelected: (_) => notifier.toggleSentenceLoop(),
                     ),
@@ -1283,181 +1279,9 @@ class _ProgressSliderState extends State<_ProgressSlider> {
 /// Una página con un "+" o un "-", para que un salto de capítulo no se
 /// confunda a simple vista con `skip_previous`/`skip_next` (párrafo), que
 /// leen como controles de un reproductor de audio.
-class _ChapterStepIcon extends StatelessWidget {
-  final bool forward;
-  const _ChapterStepIcon({required this.forward});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = IconTheme.of(context).color;
-    return SizedBox(
-      width: 24,
-      height: 24,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Icon(Icons.description_outlined, size: 22, color: color),
-          Positioned(
-            right: -3,
-            bottom: -3,
-            child: Icon(forward ? Icons.add_circle : Icons.remove_circle,
-                size: 13, color: color),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PlayButton extends StatelessWidget {
-  final ReaderState reader;
-  final ReaderNotifier notifier;
-  final ReaderPalette palette;
-
-  const _PlayButton({
-    required this.reader,
-    required this.notifier,
-    required this.palette,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (reader.status == ReaderStatus.synthesizing) {
-      return const SizedBox(
-        width: 48,
-        height: 48,
-        child: Center(
-          child: SizedBox(
-            width: 22,
-            height: 22,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
-      );
-    }
-
-    final isPlaying = reader.status == ReaderStatus.playing;
-    return IconButton.filled(
-      iconSize: 30,
-      icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
-      tooltip: isPlaying ? 'Pausar' : 'Reproducir',
-      onPressed: () {
-        if (isPlaying) {
-          notifier.pause();
-        } else if (reader.status == ReaderStatus.paused) {
-          notifier.resume();
-        } else {
-          notifier.play();
-        }
-      },
-    );
-  }
-}
-
-/// Temporizador de apagado: lo primero que se echa en falta escuchando en la
-/// cama, y hasta ahora el audio seguía hasta que se acababa el libro.
-class _SleepMenu extends StatelessWidget {
-  final ReaderState reader;
-  final ReaderNotifier notifier;
-  final ReaderPalette palette;
-
-  const _SleepMenu({
-    required this.reader,
-    required this.notifier,
-    required this.palette,
-  });
-
-  /// `null` es "al final del capítulo"; `Duration.zero`, desactivado.
-  static const _opciones = <(Duration?, String)>[
-    (Duration.zero, 'Desactivado'),
-    (Duration(minutes: 10), '10 minutos'),
-    (Duration(minutes: 20), '20 minutos'),
-    (Duration(minutes: 30), '30 minutos'),
-    (Duration(minutes: 45), '45 minutos'),
-    (Duration(minutes: 60), '1 hora'),
-    (null, 'Al final del capítulo'),
-  ];
-
-  bool get _activo => reader.sleepAt != null || reader.sleepAtChapterEnd;
-
-  String? get _restante {
-    if (reader.sleepAtChapterEnd) return 'cap.';
-    final at = reader.sleepAt;
-    if (at == null) return null;
-    final minutos = at.difference(DateTime.now()).inMinutes + 1;
-    return minutos > 0 ? '${minutos}m' : null;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final restante = _restante;
-    return PopupMenuButton<Duration?>(
-      tooltip: 'Temporizador de apagado',
-      onSelected: (d) {
-        if (d == null) {
-          notifier.setSleepAtChapterEnd(true);
-        } else {
-          notifier.setSleepTimer(d == Duration.zero ? null : d);
-        }
-      },
-      itemBuilder: (_) => [
-        for (final (duracion, etiqueta) in _opciones)
-          PopupMenuItem(value: duracion, child: Text(etiqueta)),
-      ],
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(_activo ? Icons.bedtime : Icons.bedtime_outlined,
-                size: 22, color: palette.text),
-            if (restante != null)
-              Text(restante,
-                  style: TextStyle(fontSize: 10, color: palette.muted)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SpeedMenu extends StatelessWidget {
-  final double current;
-  final ReaderPalette palette;
-  final ValueChanged<double> onChanged;
-
-  static const _speeds = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
-
-  const _SpeedMenu({
-    required this.current,
-    required this.palette,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return PopupMenuButton<double>(
-      tooltip: 'Velocidad',
-      initialValue: current,
-      onSelected: onChanged,
-      itemBuilder: (_) => [
-        for (final s in _speeds)
-          PopupMenuItem(value: s, child: Text('${s.toStringAsFixed(2)}×')),
-      ],
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        child: Text(
-          '${current.toStringAsFixed(2)}×',
-          style: TextStyle(color: palette.text, fontWeight: FontWeight.w600),
-        ),
-      ),
-    );
-  }
-}
-
 // ─── Sheets ──────────────────────────────────────────────────────────────────
 
-class _TocSheet extends StatelessWidget {
+class _TocSheet extends StatefulWidget {
   final List<Chapter> chapters;
   final int currentIndex;
   final ScrollController scrollController;
@@ -1471,7 +1295,38 @@ class _TocSheet extends StatelessWidget {
   });
 
   @override
+  State<_TocSheet> createState() => _TocSheetState();
+}
+
+class _TocSheetState extends State<_TocSheet> {
+  /// One `ListTile` with a subtitle. Fixed so the opening position is exact.
+  static const _itemExtent = 72.0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _revealCurrent());
+  }
+
+  /// Opens on the chapter being read, not at the top: with sixty chapters,
+  /// reaching the current one meant scrolling past a screenful every time.
+  /// The controller belongs to the DraggableScrollableSheet, so it cannot be
+  /// created with an initial offset; jumping after the first frame is the
+  /// only way in that keeps the sheet's drag-to-expand.
+  void _revealCurrent() {
+    final ctrl = widget.scrollController;
+    if (!ctrl.hasClients) return;
+    final position = ctrl.position;
+    final target = widget.currentIndex * _itemExtent -
+        position.viewportDimension / 2 +
+        _itemExtent / 2;
+    ctrl.jumpTo(target.clamp(0.0, position.maxScrollExtent));
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final chapters = widget.chapters;
+    final currentIndex = widget.currentIndex;
     return Column(
       children: [
         const SizedBox(height: 12),
@@ -1490,7 +1345,8 @@ class _TocSheet extends StatelessWidget {
         const Divider(height: 1),
         Expanded(
           child: ListView.builder(
-            controller: scrollController,
+            controller: widget.scrollController,
+            itemExtent: _itemExtent,
             itemCount: chapters.length,
             itemBuilder: (_, i) {
               final ch = chapters[i];
@@ -1520,7 +1376,7 @@ class _TocSheet extends StatelessWidget {
                     ? Icon(Icons.play_arrow,
                         color: Theme.of(context).colorScheme.primary)
                     : null,
-                onTap: () => onSelect(i),
+                onTap: () => widget.onSelect(i),
               );
             },
           ),

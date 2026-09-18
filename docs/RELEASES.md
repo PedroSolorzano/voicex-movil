@@ -9,6 +9,71 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## 0.12.0-preview.1 — 2026-09-18
+
+La barra de escucha deja de parecer un reproductor de música: cada salto dice
+si mueve un párrafo o un capítulo, y el índice abre donde vas. Un probador
+reportó los íconos viejos el mismo día, sin saber que ya estaban rehechos. De
+paso, "Al final del capítulo" en el temporizador —muerto desde 0.10.0— vuelve
+a funcionar.
+
+Sin cambios de datos ni de esquema. Se compila con `compilar.ps1 -Limpio`:
+cambió la versión.
+
+### La barra de escucha dice qué mueve cada botón
+
+La barra inferior del lector se concibió como el transporte de un reproductor
+de música: `⏮ ▶ ⏭` a los lados del play y, en los extremos, un ícono propio
+de página con un círculo −/+ para el capítulo. Pero un audiolibro sintetizado
+no tiene pistas ni segundos: tiene párrafos y capítulos, y ningún ícono
+nombraba su unidad. `⏮` en un reproductor significa "pista"; aquí significa
+"párrafo", y nada lo decía. Los de capítulo eran los peores: sin el tooltip no
+había forma de leerlos. Un probador ya los había marcado como "posible
+duplicado" de algo que no encontró (`docs/bugs/REPORTES_TESTERS.md`, build 65),
+y otro los describió el mismo día en que se rehacían, sin saberlo: *«Los íconos
+de previous page y next page están raros. Pareciera que quiero eliminar o
+agregar una página»* (ídem, 2026-09-18 18:53). Eso es exactamente lo que
+dibujaban: una página con un círculo de −/+.
+
+Ahora los cuatro botones de navegación llevan debajo la unidad que mueven —
+*Capítulo*, *Párrafo*, *Párrafo*, *Capítulo* — y capítulo usa el doble chevrón
+`≪ ≫` en vez de la página: triángulo, un párrafo; doble chevrón, el salto
+grande (`lib/ui/widgets/reader_transport.dart`). Velocidad y el temporizador
+van sin etiqueta a propósito: "1.0×" se describe solo y la luna es lo que usa
+cualquier app de audiolibros; con siete etiquetas, "Capítulo" no cabía en un
+teléfono de 360 dp. En uno de 320 la etiqueta se encoge en vez de cortarse.
+
+**Los botones de capítulo se quedan.** Se consideró sacarlos —ningún
+reproductor de audiolibros los pone en la barra— y se descartó: cambiar de
+capítulo por el índice era tedioso, porque la lista abría siempre desde arriba
+y en un libro de sesenta capítulos había que pasar ocho entradas cada vez para
+llegar al actual. Eso también se arregla: **el índice abre ya posicionado en
+el capítulo que se está leyendo**, con él a la vista y en el centro.
+
+Los botones de la pantalla de bloqueo siguen saltando de párrafo, igual que la
+barra: un solo modelo mental dentro y fuera de la app. Eso cierra por decisión
+el pendiente de `docs/tasks/IMPROVEMENTS.md` sobre si debían saltar de
+capítulo. *Repetir* y *Bucle* ganan un tooltip que dice sobre qué actúan: la
+oración resaltada.
+
+De paso: con una descarga en curso y una oración resaltada, la barra "oculta"
+asomaba unos 56 dp por debajo del texto, porque se escondía desplazándola una
+cantidad fija (220 dp) menor que su altura en ese estado (276). Ahora se
+esconde por su propia altura.
+
+La fila de transporte pasa a ser un widget propio guiado por callbacks, como
+la tarjeta de la biblioteca, y por primera vez tiene tests
+(`test/reader_transport_test.dart`): las etiquetas, los cuatro saltos, el
+apagado en el primer y último capítulo, y que a 320 dp nada desborda.
+
+**Y el primer test del temporizador destapó que "Al final del capítulo" no
+funcionaba desde este menú.** La opción tenía valor `null`, y `PopupMenuButton`
+trata un `null` como "el menú se cerró sin elegir": nunca llama a `onSelected`.
+Desde 0.10.0, elegirla no hacía nada. Ahora esa opción lleva un valor propio
+dentro del menú y se traduce al salir.
+
+---
+
 ## 0.11.0-preview.1 — 2026-09-18
 
 Las otras dos pieles de la biblioteca, rehechas como se rehízo *Fichas* en
