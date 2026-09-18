@@ -52,14 +52,19 @@ lib/
 ├── audio/audio_player.dart    # VoiceXAudioHandler (audio_service)
 ├── services/dictionary.dart   # Wiktionary ES + diccionario EN
 ├── storage/
-│   ├── database.dart          # Esquema SQLite y migraciones (v6)
-│   └── repositories.dart      # LibraryRepo, ProgressRepo, BookmarkRepo, AudioCacheRepo
+│   ├── database.dart          # Esquema SQLite y migraciones (v9)
+│   └── repositories.dart      # LibraryRepo, ProgressRepo, BookmarkRepo, AudioCacheRepo,
+│                              # ReadingLogRepo
 └── ui/
     ├── app.dart               # MaterialApp + GoRouter
     ├── providers/             # library, reader, settings, voices, share_import, app_info
-    ├── screens/               # library, reader, settings
-    └── widgets/               # book_card, book_info_sheet, highlighted_text,
-                               # reader_theme, word_sheet
+    ├── screens/               # library, reader, settings, progress, report
+    └── widgets/               # book_info_sheet, highlighted_text, reader_theme,
+                               # word_sheet, rank_header, book_tower
+                               # Pieles: library_skin (colores y tema),
+                               # book_card (Moderna, color de la portada),
+                               # catalog_card (Fichas), classic_shelf_card
+                               # (Clásica), classic_card_parts (lo compartido)
 
 tools/kokoro/                  # Servidor Kokoro (Docker, puerto 8880)
 tools/piper/                   # Servidor Piper (Docker, puerto 5000)

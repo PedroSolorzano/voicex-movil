@@ -9,7 +9,16 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
-## Sin publicar
+## 0.11.0-preview.1 — 2026-09-18
+
+Las otras dos pieles de la biblioteca, rehechas como se rehízo *Fichas* en
+0.10.1: la *Clásica* como un catálogo de anticuario impreso a dos tintas, y la
+*Moderna* con cada tarjeta teñida del color de su portada. Con eso el pendiente
+de que "Sin empezar" no se veía queda cerrado en las tres. Y un arreglo que
+tocaba a todas: las descripciones salían con los párrafos pegados.
+
+Sin cambios de datos ni de esquema. Se compila con `compilar.ps1 -Limpio`:
+cambió la versión.
 
 ### La Clásica, impresa a dos tintas
 

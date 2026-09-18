@@ -27,8 +27,9 @@ responden, la app cae a Edge automáticamente y lo dice en pantalla.
 - Una sola posición compartida entre leer y escuchar, al estilo Kindle+Audible
 - Resaltado por palabra y por oración, sincronizado con el audio
 - Tipografía, interlineado, márgenes y fondo sepia/claro/oscuro configurables
-- Tres pieles para la biblioteca: la moderna, fichas de catálogo y una clásica
-  de pergamino, siempre con la portada real del libro
+- Tres pieles para la biblioteca: la moderna, teñida con el color de cada
+  portada; fichas de catálogo mecanografiadas; y una clásica de anticuario
+  impresa a dos tintas. Siempre con la portada real del libro
 
 **Como audiolibro**
 
@@ -58,6 +59,7 @@ responden, la app cae a Edge automáticamente y lo dice en pantalla.
 
 | Versión | Lo que trajo |
 |---|---|
+| **0.11.0** | Las otras dos pieles, rehechas: la *Clásica* como un catálogo de anticuario a dos tintas —capitular roja, texto justificado, lotes en romanos, cinta de seda en el libro que estás leyendo— y la *Moderna* con cada tarjeta teñida del color de su portada, un solo botón y el estado en un chip. Las descripciones dejan de salir con los párrafos pegados |
 | **0.10.1** | La piel *Fichas* pasa a parecer un fichero de verdad: mecanografiada sobre el rayado, con signatura en la esquina, la perforación de la varilla, sellos de goma para el estado —`SIN EMPEZAR` por fin se ve—, papel envejecido, la portada sujeta con un clip y el rango en el portaetiquetas de latón del cajón |
 | **0.10.0** | Rangos de lector: cada página leída o escuchada suma, de *Lector novel* a *Maestro bibliotecario*, con una pantalla de progreso (la pila de libros terminados, comparaciones con obras conocidas, la semana en barras) y avisos semanales opcionales. Tres pieles para la biblioteca —moderna, fichas de catálogo y pergamino—, siempre con la portada real. Y los 23 hallazgos de una auditoría: buscar dentro del libro, temporizador para dormir, notas en marcadores, copiar y compartir citas, tocar la página oculta los controles en vez de cortar el audio, el servidor de F5 pide token, EPUB duplicados rechazados y una sección de Privacidad que dice qué sale del teléfono |
 | **0.9.1** | Una descarga que se replegó a Edge ya no termina pareciendo una descarga limpia: ahora avisa antes de empezar si el motor elegido no está disponible —y deja cancelar—, y al terminar dice con cuál se descargó de verdad. Un capítulo de 104 párrafos bajado con la voz equivocada no se descubría hasta ponerse a escuchar |
