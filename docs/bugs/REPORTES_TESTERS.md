@@ -137,3 +137,74 @@ referencia esta entrada, no al revés.
 
 ---
 
+## 2026-09-18 17:24 — crash — pedro
+
+**Error:** \_TypeError
+
+**Traza:** \#0 StatefulElement.state (package:flutter/src/widgets/framework.dart:5951) \| \#1 Navigator.of (package:flutter/src/widgets/navigator.dart:2949) \| \#2 showDialog (package:flutter/src/material/dialog.dart:1642) \| \#3 \_ReaderScreenState.\_editBookmarkNote (package:voicex\_movil/ui/screens/reader\_screen.dart… (recortado)
+
+---
+
+## 2026-09-18 17:24 — bug — pedro
+
+⚠️ **Posible duplicado:** este build (135) ya incluye «El motor de voz del teléfono no generaba audio en Android 11 o superior» (build 63, commit `18410b9`). Revisar si es el mismo caso antes de investigar de cero.
+
+**Contexto:** El talismán, capítulo 14, Edge
+
+**Nota de voz transcrita:**
+
+> ahorita le furí que cuando estoy escuchando audiencia real, o sea que no le ha bajado y termina un párrafo, no me carga si el teléfono está apagado, no me carga y tengo que encender la pantalla, se mira que el botoncita está con moda con el símbolo de carga y ya después se pone pero si no desbloquea el teléfono, si el audio no empieza queda como en ese limpo, como detenido por alguna razón
+
+---
+
+## 2026-09-18 17:31 — bug — pedro
+
+⚠️ **Posible duplicado:** este build (150) ya incluye «Botones de saltar capítulo en el lector, en vez de pasar por el índice» (build 65, commit `ddc3517`). Revisar si es el mismo caso antes de investigar de cero.
+
+**Contexto:** Project Hail Mary, capítulo 2, Kokoro
+
+**Nota de voz transcrita:**
+
+> Estoy descargando con Cocoro un capítulo del libro Project Hail Mary y me está descargando todos los capítulos. Pero miren que hice 51 errores fallidos. Yo apague la pantalla, no sé si tal vez eso hizo que dejará de descargar cuando apago la pantalla. Mientras tengo encendido se miren que sí, descargando todo bien.
+
+**Diagnóstico:**
+- 11:30:57 /kokoro/health ok 215ms
+- 11:29:52 /kokoro/health ok 1425ms (intento 2)
+- 11:29:50 /kokoro/health unreachable 5001ms
+- 11:29:23 /kokoro/health unreachable 8002ms (intento 2)
+- 11:29:15 /kokoro/health unreachable 5002ms
+- 11:27:38 /kokoro/health ok 259ms
+- 11:26:36 /kokoro/health ok 166ms
+- 11:25:35 /kokoro/health ok 235ms
+
+---
+
+## 2026-09-18 18:02 — crash — pedro
+
+**Error:** \_TypeError
+
+**Traza:** \#0 StatefulElement.state (package:flutter/src/widgets/framework.dart:5951) \| \#1 Navigator.of (package:flutter/src/widgets/navigator.dart:2949) \| \#2 showDialog (package:flutter/src/material/dialog.dart:1642) \| \#3 \_ReaderScreenState.\_editBookmarkNote (package:voicex\_movil/ui/screens/reader\_screen.dart… (recortado)
+
+**Diagnóstico:**
+- 11:36:52 /kokoro/health unreachable 8002ms (intento 2)
+- 11:36:00 /kokoro/health unreachable 5001ms
+- 11:35:40 /kokoro/health unreachable 8003ms (intento 2)
+- 11:34:20 /kokoro/health unreachable 5004ms
+- 11:33:02 /kokoro/health ok 154ms
+- 11:32:00 /kokoro/health ok 235ms
+- 11:30:57 /kokoro/health ok 215ms
+- 11:29:52 /kokoro/health ok 1425ms (intento 2)
+
+---
+
+## 2026-09-18 18:55 — bug — spiny
+
+**Contexto:** capítulo 0
+
+> Hay muchos settings en una sola View. Señores developers por favor denme un menu para mejor organización
+
+**Diagnóstico:**
+- 12:53:11 /kokoro/health ok 1264ms
+
+---
+

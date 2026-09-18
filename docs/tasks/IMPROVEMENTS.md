@@ -24,6 +24,7 @@ de acá.
 - **2026-09-06 15:35** `pedro` — Valida si cuando doy descargar un capitulo comienza a descargar todo el capitulo desde el inicio o solo desde donde esta marcado el texto por ejemplo ahorita estoy creo a mitad del capitulo y no quiero ir descargando en tiempo real por que es un poco lento la descarga pero tener que descargar audio … (recortado) _(Las 48 leyes del poder, capítulo 4, F5)_
 - **2026-09-06 15:35** `pedro` — Estoy en capitulo 5 parrafo 28 y lensi descargar capitulo. Veamos si la mejora ya existe o hay que implementarla. _(Las 48 leyes del poder, capítulo 4, F5)_
 - **2026-09-06 15:35** `pedro` — Estoy en capitulo 5 parrafo 28 y lensi descargar capitulo. Veamos si la mejora ya existe o hay que implementarla. _(Las 48 leyes del poder, capítulo 4, Edge (F5 no disponible))_
+- **2026-09-18 18:53** `spiny` — Los íconos de previous page y next page están raros. Pareciera que quiero eliminar o agregar una página _(Alice's Adventures in Wonderland, capítulo 0)_
 
 ---
 
