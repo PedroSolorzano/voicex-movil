@@ -514,6 +514,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ]),
 
+          _Section(title: 'Biblioteca', children: [
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'modern', label: Text('Moderna')),
+                ButtonSegment(value: 'catalog', label: Text('Fichas')),
+                ButtonSegment(value: 'classic', label: Text('Clásica')),
+              ],
+              selected: {s.librarySkin},
+              onSelectionChanged: (v) =>
+                  _update(s.copyWith(librarySkin: v.first)),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Cambia cómo se ve la lista de libros. Fichas y Clásica son de '
+              'papel y no siguen el tema oscuro.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ]),
+
           _Section(title: 'Almacenamiento', children: [
             Text('Caché temporal: '
                 '${(_cacheSizeKb / 1024).toStringAsFixed(1)} MB / ${s.cacheMaxMb} MB'),

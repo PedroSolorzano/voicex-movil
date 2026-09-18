@@ -34,6 +34,11 @@ const readerThemes = ['sepia', 'light', 'dark'];
 /// Bundled reading fonts. 'system' uses the platform default.
 const readerFonts = ['serif', 'sans', 'system'];
 
+/// How the library list is drawn. Stored as a plain string for the same reason
+/// as [readerThemes]; `LibrarySkin.of` turns an unknown value back into the
+/// modern one.
+const librarySkins = ['modern', 'catalog', 'classic'];
+
 class AppSettings {
   String ttsProvider;
   String gender;
@@ -95,6 +100,9 @@ class AppSettings {
   String readerTheme;
   bool followAudioScroll;
 
+  /// Piel de la biblioteca: `modern`, `catalog` (fichas) o `classic`.
+  String librarySkin;
+
   /// Voz concreta del motor del teléfono, por idioma.
   ///
   /// Vacío significa "la que el sistema tenga por defecto para ese idioma". Un
@@ -148,6 +156,7 @@ class AppSettings {
     this.readerFont = 'serif',
     this.readerTheme = 'sepia',
     this.followAudioScroll = true,
+    this.librarySkin = 'modern',
     this.androidVoiceEs = '',
     this.androidVoiceEn = '',
     this.keepScreenOn = true,
@@ -283,6 +292,7 @@ class AppSettings {
       readerFont: prefs.getString('readerFont') ?? 'serif',
       readerTheme: prefs.getString('readerTheme') ?? 'sepia',
       followAudioScroll: prefs.getBool('followAudioScroll') ?? true,
+      librarySkin: prefs.getString('librarySkin') ?? 'modern',
       androidVoiceEs: prefs.getString('androidVoiceEs') ?? '',
       androidVoiceEn: prefs.getString('androidVoiceEn') ?? '',
       keepScreenOn: prefs.getBool('keepScreenOn') ?? true,
@@ -317,6 +327,7 @@ class AppSettings {
     await prefs.setString('readerFont', readerFont);
     await prefs.setString('readerTheme', readerTheme);
     await prefs.setBool('followAudioScroll', followAudioScroll);
+    await prefs.setString('librarySkin', librarySkin);
     await prefs.setString('androidVoiceEs', androidVoiceEs);
     await prefs.setString('androidVoiceEn', androidVoiceEn);
     await prefs.setBool('keepScreenOn', keepScreenOn);
@@ -352,6 +363,7 @@ class AppSettings {
     String? readerFont,
     String? readerTheme,
     bool? followAudioScroll,
+    String? librarySkin,
     String? androidVoiceEs,
     String? androidVoiceEn,
     bool? keepScreenOn,
@@ -386,6 +398,7 @@ class AppSettings {
         readerFont: readerFont ?? this.readerFont,
         readerTheme: readerTheme ?? this.readerTheme,
         followAudioScroll: followAudioScroll ?? this.followAudioScroll,
+        librarySkin: librarySkin ?? this.librarySkin,
         androidVoiceEs: androidVoiceEs ?? this.androidVoiceEs,
         androidVoiceEn: androidVoiceEn ?? this.androidVoiceEn,
         keepScreenOn: keepScreenOn ?? this.keepScreenOn,
