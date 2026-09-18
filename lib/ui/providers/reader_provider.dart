@@ -14,6 +14,8 @@ import '../../epub/parser.dart';
 import '../../epub/text_align.dart';
 import '../../services/reporter.dart';
 import '../../storage/repositories.dart';
+import '../../stats/reader_rank.dart';
+import '../../stats/reading_credit.dart';
 import '../../tts/models.dart';
 import '../../tts/tts_factory.dart';
 import '../../tts/tts_provider.dart';
@@ -22,6 +24,7 @@ import '../../tts/kokoro_tts_provider.dart';
 import '../../tts/piper_tts_provider.dart';
 import '../../tts/server_health.dart';
 import '../../tts/tts_endpoint.dart';
+import 'reading_stats_provider.dart';
 import 'settings_provider.dart';
 
 enum ReaderStatus { idle, synthesizing, playing, paused, error }
@@ -386,6 +389,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
       // Parsing a large EPUB is CPU-heavy; keep it off the UI isolate.
       final book = await parseEpubInBackground(path);
       _charsPrefix = buildCharsPrefix(book);
+      _credit = ReadingCredit(_charsPrefix);
       final progress = await _progressRepo.get(bookId);
       final bookWithId = book.copyWith(id: bookId);
       final maxChapter = book.chapters.isEmpty ? 0 : book.chapters.length - 1;
@@ -551,6 +555,12 @@ class ReaderNotifier extends Notifier<ReaderState> {
   }
 
   void _onEnd() {
+    // The paragraph that just finished is still the current one here:
+    // `_advanceParagraph` below is what moves on.
+    final credit = _credit?.listened(_globalIndex(), DateTime.now());
+    if (credit != null) {
+      _queueAward(credit, CreditSource.listened, paragraphs: 1);
+    }
     state = state.copyWith(
       status: ReaderStatus.idle,
       highlightedSentence: -1,
@@ -1299,9 +1309,75 @@ class ReaderNotifier extends Notifier<ReaderState> {
         paragraphIndex >= chapter.paragraphs.length) {
       return;
     }
+    final from = _globalIndex();
     state = state.copyWith(paragraphIndex: paragraphIndex);
+    final to = _globalIndex();
+    final credit = _credit?.read(from, to, DateTime.now());
+    if (credit != null) {
+      _queueAward(credit, CreditSource.read, paragraphs: to - from);
+    }
     await _saveProgress();
   }
+
+  // ── Reading credit ────────────────────────────────────────────────────────
+
+  ReadingCredit? _credit;
+  final _readingLog = ReadingLogRepo();
+
+  /// Everything credited so far, read once and then kept up to date here, so
+  /// crediting a paragraph does not cost a SUM over the whole log.
+  int? _creditedChars;
+
+  /// Awards run one after another. Two in flight at once would both start
+  /// from the same cached total, and the second would overwrite the first's
+  /// share — the log would be right but the rank arithmetic would not.
+  Future<void> _awards = Future.value();
+
+  void _queueAward(Credit credit, CreditSource source,
+          {required int paragraphs}) =>
+      _awards = _awards
+          .then((_) => _award(credit, source, paragraphs: paragraphs));
+
+  /// Records what [credit] earned, and says so when it crosses a rank or ends
+  /// the book.
+  ///
+  /// Never lets a failure reach the reader: losing a paragraph's credit is a
+  /// shame, interrupting the book over it would be a bug.
+  Future<void> _award(Credit credit, CreditSource source,
+      {required int paragraphs}) async {
+    final book = state.book;
+    try {
+      if (credit.chars > 0) {
+        final before = _creditedChars ??= await _loadCreditedChars();
+        await _readingLog.credit(
+          ReadingLogRepo.dayOf(DateTime.now()),
+          readChars: source == CreditSource.read ? credit.chars : 0,
+          listenedChars: source == CreditSource.listened ? credit.chars : 0,
+          paragraphs: paragraphs,
+        );
+        final after = before + credit.chars;
+        _creditedChars = after;
+        final was = ReaderRank.levelFor(ReaderRank.pagesOf(before));
+        final now = ReaderRank.levelFor(ReaderRank.pagesOf(after));
+        if (now > was) _milestone('Subiste a ${ReaderRank.titleFor(now)}');
+      }
+      if (credit.finished && book?.id != null) {
+        if (await _readingLog.markFinished(book!.id!, DateTime.now())) {
+          _milestone('Terminaste «${book.title}»');
+        }
+      }
+    } catch (e) {
+      dev.log('[Reader] reading credit failed: $e');
+    }
+  }
+
+  Future<int> _loadCreditedChars() async {
+    final t = await _readingLog.totals();
+    return t.readChars + t.listenedChars;
+  }
+
+  void _milestone(String message) =>
+      ref.read(readingMilestoneProvider.notifier).state = message;
 
   Future<void> _saveProgress({int offsetMs = 0}) async {
     final book = state.book;

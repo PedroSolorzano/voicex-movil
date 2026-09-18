@@ -14,6 +14,7 @@ import '../../epub/models.dart';
 import '../../epub/search.dart';
 import '../../epub/text_align.dart';
 import '../providers/reader_provider.dart';
+import '../providers/reading_stats_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/highlighted_text.dart';
 import '../widgets/reader_theme.dart';
@@ -210,6 +211,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final palette = ReaderPalette.of(
         settings.readerTheme, MediaQuery.platformBrightnessOf(context));
     _palette = palette;
+
+    ref.listen<String?>(readingMilestoneProvider, (_, message) {
+      if (message == null) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+      ref.read(readingMilestoneProvider.notifier).state = null;
+    });
 
     ref.listen<ReaderState>(readerProvider, (prev, next) {
       final startedPlaying = prev?.status != next.status &&
