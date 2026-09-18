@@ -304,9 +304,11 @@ atendido.
   convive con esa misma pulsación larga, que es como se resuelve una palabra
   para el diccionario.
 - [ ] `medio` 2026-09-03 — **La app solo habla español.** Toda la interfaz está
-  en castellano y escrita a mano en los widgets: no hay `flutter_localizations`,
-  ni ficheros ARB, ni `AppLocalizations`. Cambiar de idioma hoy significa editar
-  el código.
+  en castellano y escrita a mano en los widgets: no hay ficheros ARB ni
+  `AppLocalizations`. Cambiar de idioma hoy significa editar el código.
+  `flutter_localizations` sí está desde 0.10.0, pero fijado en español y solo
+  para los diálogos de Material (`lib/ui/app.dart`): el selector de hora decía
+  "Cancel" y "OK".
 
   **Lo que hay que investigar antes de decidir**, porque el coste está repartido
   y no todo es traducir:

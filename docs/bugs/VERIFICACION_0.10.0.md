@@ -39,7 +39,11 @@ Ajustes → Biblioteca.
 
 ## Hallazgos
 
-### 1. El lomo "En curso" no deja leer el título — error visual
+Los cuatro quedaron corregidos el mismo 2026-09-18: `bfe9683` (lomo),
+`abcbae4` (selector en español), `3069737` ("hacia las") y `2bb2c55` (semana
+vacía). Se deja la descripción original de cada uno.
+
+### 1. El lomo "En curso" no deja leer el título — error visual · corregido
 
 En *Tu pila de libros*, sin libros terminados, el único lomo dice
 `EN CURSO: E…`. Su ancho es la fracción leída del libro
@@ -53,7 +57,7 @@ título está cortado. **Propuesta**: lomo del ancho normal y el progreso como
 relleno translúcido dentro de él (o el porcentaje escrito: `En curso · 22 % —
 El talismán`).
 
-### 2. El selector de hora sale en inglés — menor
+### 2. El selector de hora sale en inglés — menor · corregido
 
 `showTimePicker` muestra **Cancel** y **OK**. La app no tiene
 `flutter_localizations` (está anotado en `IMPROVEMENTS.md`, "La app solo habla
@@ -67,7 +71,7 @@ con `locale: Locale('es')`, `supportedLocales` y los tres
 traduce los diálogos de Material (selector de hora, `showDatePicker`, menús
 de copiar/pegar) sin tocar ninguna cadena propia.
 
-### 3. El recordatorio puede llegar hasta una hora tarde — decisión de diseño a revisar
+### 3. El recordatorio puede llegar hasta una hora tarde — decisión de diseño · corregido con el texto
 
 La alarma es inexacta a propósito (`inexactAllowWhileIdle`, para no pedir
 `SCHEDULE_EXACT_ALARM`), y Android le dio **una ventana de una hora**
@@ -80,7 +84,7 @@ que en Android 14+ exige el permiso de alarmas exactas y un paso más para
 quien lo encienda. Se inclina por lo primero: un recordatorio para leer no
 necesita puntualidad de despertador.
 
-### 4. Una semana sin lectura deja un hueco grande — cosmético
+### 4. Una semana sin lectura deja un hueco grande — cosmético · corregido
 
 *Los últimos siete días* reserva 120 px de alto aunque todos los días estén en
 cero: queda un bloque vacío con siete rayitas abajo. Con lectura se ve bien.
