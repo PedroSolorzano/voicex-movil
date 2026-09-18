@@ -375,10 +375,34 @@ atendido.
   `jumpToBookmark` llama a `play()` incondicionalmente
   (`reader_provider.dart:1012-1017`): consultar un pasaje marcado mientras lees
   en silencio te pone a sonar el TTS de golpe.
-- [ ] `bajo` 2026-09-02 — **Sin estadísticas de lectura.** No se registra tiempo
+- [x] `bajo` 2026-09-02 — **Sin estadísticas de lectura.** No se registra tiempo
   leído, sesiones ni rachas; no hay tabla que lo soporte. Lo único cuantitativo
   es el `%` y una estimación del **tiempo de escucha** restante
   (`reader_screen.dart:876-894`).
+
+  Hecho el 2026-09-17 como **rangos de lector** (`reading_days`, esquema v9):
+  páginas por día, leído y escuchado por separado, libros terminados con su
+  fecha, y una pantalla de progreso. En páginas y no en tiempo: la unidad que
+  no depende del tamaño de letra ni de la velocidad de la voz. Las dos fases
+  siguientes leen el mismo registro.
+
+- [ ] `medio` 2026-09-17 — **Fase 2 de los rangos: racha con perdón y meta
+  diaria.** La mecánica de hábito más fuerte, y la que más gente hace abandonar
+  cuando se rompe. Por eso, con perdón: un día libre ganado cada 7 días
+  leídos, y la racha solo se muestra desde 3 días para no exhibir un "1". Meta
+  diaria por defecto de 10 páginas, pequeña a propósito: la que engancha es la
+  que se cumple casi sin querer. Todo sale de `reading_days`; no hace falta
+  tabla nueva.
+
+- [ ] `bajo` 2026-09-17 — **Fase 3 de los rangos: logros como ex libris.**
+  Sellos sobre pergamino, uno por hito, que encajan con las pieles clásicas.
+  Candidatos: Primer libro · Búho nocturno (páginas después de medianoche) ·
+  Bilingüe (un libro terminado en cada idioma) · Maratón (50 páginas en un
+  día) · Curioso (50 palabras consultadas en el diccionario, que hoy no se
+  guardan) · Coleccionista (10 libros en la biblioteca). Escuchan los mismos
+  eventos que el crédito (`_award` en `reader_provider.dart`). Conviene
+  elegir los definitivos mirando el registro real de unas semanas, para que
+  sean alcanzables.
 
 ---
 

@@ -28,6 +28,8 @@ responden, la app cae a Edge automáticamente y lo dice en pantalla.
 - Tipografía, interlineado, márgenes y fondo sepia/claro/oscuro configurables
 - Tres pieles para la biblioteca: la moderna, fichas de catálogo y una clásica
   de pergamino, siempre con la portada real del libro
+- Rangos de lector: cada página leída o escuchada suma, con una pantalla de
+  progreso y avisos semanales opcionales. Todo queda en el teléfono
 
 **Como audiolibro**
 
@@ -126,7 +128,8 @@ VoiceXMovil/
 │   ├── tts/             # Edge, Kokoro, Piper y el del sistema (Strategy + Factory)
 │   ├── epub/            # Parser EPUB, modelos y alineado texto-audio
 │   ├── audio/           # Handler de audio_service con MediaSession
-│   ├── services/        # Diccionario
+│   ├── services/        # Diccionario, reportes y avisos de lectura
+│   ├── stats/           # Rangos de lector: crédito, escala, equivalencias, citas
 │   ├── storage/         # SQLite: libros, progreso, marcadores, caché
 │   └── ui/              # providers · screens · widgets
 ├── tools/

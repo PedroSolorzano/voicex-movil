@@ -14,8 +14,47 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 Lo que salió de la auditoría del 2026-09-17
 ([`docs/tasks/PLAN_AUDITORIA_2026-09-17.md`](tasks/PLAN_AUDITORIA_2026-09-17.md)).
 No hubo ningún hallazgo crítico; lo que sigue son 23 arreglos y funciones
-agrupados por lo que cambian. La primera sección, las pieles de la
-biblioteca, no salió de la auditoría: vino después, el mismo día.
+agrupados por lo que cambian. Las dos primeras secciones —los rangos de
+lector y las pieles de la biblioteca— no salieron de la auditoría: vinieron
+después, el mismo día.
+
+### Cada página cuenta: rangos de lector
+
+La app no recordaba nada de lo leído más allá de la posición de cada libro.
+Ahora cada página leída o escuchada suma, y se sube de rango: *Lector novel*,
+*Aprendiz*, *Lector*… hasta *Maestro bibliotecario*, y de ahí con números
+romanos, sin techo. Una página son 1.800 caracteres, así que da igual el tamaño
+de letra o la velocidad de la voz; una novela son unas 300 y el nivel 10 llega
+tras unas seis.
+
+**Leer y escuchar valen lo mismo**, porque en esta app son la misma lectura. Lo
+que **no** suma: saltar desde el índice, un marcador o la búsqueda, pasar
+capítulos con los botones, arrastrar el dedo por medio capítulo (más de tres
+párrafos de golpe) o volver atrás. Y nunca más de 6.000 caracteres por minuto,
+que ya es leer a 1.000 palabras por minuto.
+
+El rango aparece encima de la biblioteca —en las pieles clásicas, como ex
+libris—, y tocarlo abre **Tu progreso**: la cita del día, páginas de hoy, de
+la semana y del total, lo leído frente a lo escuchado, los últimos siete días,
+el mejor día propio, y **la pila de libros terminados**, cada lomo tan grueso
+como largo es el libro.
+
+**Comparaciones contra libros, no contra personas.** «Ya leíste 1,1 veces El
+Quijote» o «en papel, una pila de 12 cm» se entienden mejor que un número. Se
+descartó comparar con lectores famosos: las cifras que circulan (500 páginas al
+día, un libro diario) harían perder a cualquiera todos los días. La única cifra
+sobre otras personas es de INEGI, con su fuente: 62,5 % de las personas de 12
+años o más leyó al menos un libro en el último año (MOLEC 2025). No el «4,2
+libros al año» que citó la prensa, porque el comunicado de INEGI no lo publica.
+
+**Avisos opcionales, apagados de fábrica**: un resumen el domingo por la noche
+(solo si se leyó algo esa semana, y si fue menos que la anterior no lo dice) y
+un recordatorio diario a la hora que se elija. El permiso se pide al encender
+el interruptor. Nada sale del teléfono y ningún aviso lleva texto de un libro.
+
+Esquema de base de datos 9: `reading_days` y `books.finished_at`. Lo leído
+antes de esta versión no se cuenta; la posición guardada dice hasta dónde, no
+cuándo.
 
 ### La biblioteca se puede vestir de otra época
 

@@ -251,7 +251,7 @@ el primero que sirva.
 
 ## Base de datos
 
-`getDatabasesPath()/voicex.db`, esquema en la versión 6. `PRAGMA foreign_keys`
+`getDatabasesPath()/voicex.db`, esquema en la versión 9. `PRAGMA foreign_keys`
 se activa en `_onConfigure`: sqflite abre cada conexión con las claves ajenas
 desactivadas, y sin esto los `ON DELETE CASCADE` nunca se disparan.
 
@@ -268,7 +268,9 @@ CREATE TABLE books (
     publisher        TEXT,
     published_date   TEXT,
     subject          TEXT,
-    total_paragraphs INTEGER NOT NULL DEFAULT 0
+    total_paragraphs INTEGER NOT NULL DEFAULT 0,
+    content_hash     TEXT,   -- v8: SHA-256 del EPUB, para no importarlo dos veces
+    finished_at      TEXT    -- v9: cuándo se terminó; se escribe una sola vez
 );
 
 CREATE TABLE reading_progress (
@@ -311,6 +313,43 @@ CREATE TABLE audio_cache (
 `file_path` es la única columna `UNIQUE`, así que la unicidad por párrafo la
 garantiza el código: `save()` y `savePin()` retiran la fila temporal que
 sustituyen antes de insertar.
+
+### Registro de lectura (v9)
+
+```sql
+CREATE TABLE reading_days (
+    day            TEXT PRIMARY KEY,   -- 'YYYY-MM-DD', hora local
+    read_chars     INTEGER NOT NULL DEFAULT 0,
+    listened_chars INTEGER NOT NULL DEFAULT 0,
+    paragraphs     INTEGER NOT NULL DEFAULT 0
+);
+```
+
+Una fila por día, no por evento: acreditar es sumar a la fila del día
+(`ReadingLogRepo.credit`, `UPDATE` y si no tocó nada `INSERT`, porque el
+*upsert* de SQLite necesita 3.24 y Android 7 trae 3.9). Lo lee todo lo del rango
+de lector: la cabecera de la biblioteca, `/progress` y los avisos. Guarda
+cantidades, nunca texto. Sin *backfill* al migrar: la posición guardada dice
+hasta dónde se llegó, no cuándo.
+
+**Qué suma** lo decide `ReadingCredit` (`lib/stats/reading_credit.dart`), y solo
+desde dos sitios de `reader_provider.dart`:
+
+- `_onEnd()`: el párrafo que acaba de sonar, entero. En ese momento el índice
+  todavía es el suyo; `_advanceParagraph()` es lo que avanza después.
+- `updateReadingPosition()`: la lectura en silencio avanzó de 1 a 3 párrafos
+  en un reposo del *scroll*. Más es arrastrar el dedo; hacia atrás, nada. A una
+  página del final el libro se da por terminado, porque la lista no puede subir
+  el último párrafo hasta arriba de la pantalla.
+
+Todo lo demás que mueve la posición (índice, marcadores, búsqueda, botones de
+pantalla de bloqueo) pasa por `navigateChapter`/`navigateParagraph` y no suma.
+Encima, un tope de 6.000 caracteres por minuto en ventana deslizante.
+
+Los créditos se encolan (`_queueAward`): dos a la vez partían del mismo total en
+caché. Cada uno invalida `readingStatsProvider` al terminar, y la biblioteca lo
+invalida también al volver del lector — no en `cleanup()`, que solo corre al
+destruirse el provider del lector, y ese vive lo que la app.
 
 ---
 
