@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'audio/audio_player.dart';
 import 'config/settings.dart';
+import 'services/reading_reminders.dart';
 import 'services/reporter.dart';
 import 'storage/repositories.dart';
 import 'tts/tts_endpoint.dart';
@@ -24,6 +25,10 @@ void main() {
       // notification and lock-screen controls are lost.
       debugPrint('Audio service init failed, degraded playback: $e\n$st');
     }
+
+    // Before runApp: whether the app was opened from a notification has to
+    // be known before the first route is drawn.
+    await ReadingReminders.init();
 
     unawaited(_stampVersion());
     unawaited(AppSettings.forgetRetiredKeys());

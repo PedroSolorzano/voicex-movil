@@ -109,6 +109,14 @@ class AppSettings {
   /// no empiece de cero.
   bool showReaderRank;
 
+  /// Resumen de la semana, el domingo por la noche. Apagado por defecto: una
+  /// notificación que nadie pidió es la forma más rápida de que se silencien
+  /// todas las de la app, incluida la del audio.
+  bool weeklySummary;
+
+  /// Hora del recordatorio diario, "21:30", o vacío si está apagado.
+  String dailyReminderAt;
+
   /// Voz concreta del motor del teléfono, por idioma.
   ///
   /// Vacío significa "la que el sistema tenga por defecto para ese idioma". Un
@@ -164,6 +172,8 @@ class AppSettings {
     this.followAudioScroll = true,
     this.librarySkin = 'modern',
     this.showReaderRank = true,
+    this.weeklySummary = false,
+    this.dailyReminderAt = '',
     this.androidVoiceEs = '',
     this.androidVoiceEn = '',
     this.keepScreenOn = true,
@@ -301,6 +311,8 @@ class AppSettings {
       followAudioScroll: prefs.getBool('followAudioScroll') ?? true,
       librarySkin: prefs.getString('librarySkin') ?? 'modern',
       showReaderRank: prefs.getBool('showReaderRank') ?? true,
+      weeklySummary: prefs.getBool('weeklySummary') ?? false,
+      dailyReminderAt: prefs.getString('dailyReminderAt') ?? '',
       androidVoiceEs: prefs.getString('androidVoiceEs') ?? '',
       androidVoiceEn: prefs.getString('androidVoiceEn') ?? '',
       keepScreenOn: prefs.getBool('keepScreenOn') ?? true,
@@ -337,6 +349,8 @@ class AppSettings {
     await prefs.setBool('followAudioScroll', followAudioScroll);
     await prefs.setString('librarySkin', librarySkin);
     await prefs.setBool('showReaderRank', showReaderRank);
+    await prefs.setBool('weeklySummary', weeklySummary);
+    await prefs.setString('dailyReminderAt', dailyReminderAt);
     await prefs.setString('androidVoiceEs', androidVoiceEs);
     await prefs.setString('androidVoiceEn', androidVoiceEn);
     await prefs.setBool('keepScreenOn', keepScreenOn);
@@ -374,6 +388,8 @@ class AppSettings {
     bool? followAudioScroll,
     String? librarySkin,
     bool? showReaderRank,
+    bool? weeklySummary,
+    String? dailyReminderAt,
     String? androidVoiceEs,
     String? androidVoiceEn,
     bool? keepScreenOn,
@@ -410,6 +426,8 @@ class AppSettings {
         followAudioScroll: followAudioScroll ?? this.followAudioScroll,
         librarySkin: librarySkin ?? this.librarySkin,
         showReaderRank: showReaderRank ?? this.showReaderRank,
+        weeklySummary: weeklySummary ?? this.weeklySummary,
+        dailyReminderAt: dailyReminderAt ?? this.dailyReminderAt,
         androidVoiceEs: androidVoiceEs ?? this.androidVoiceEs,
         androidVoiceEn: androidVoiceEn ?? this.androidVoiceEn,
         keepScreenOn: keepScreenOn ?? this.keepScreenOn,

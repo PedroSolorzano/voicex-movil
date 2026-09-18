@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../services/reading_reminders.dart';
+import 'providers/reading_stats_provider.dart';
 import 'providers/settings_provider.dart';
 import 'screens/library_screen.dart';
 import 'screens/progress_screen.dart';
@@ -40,11 +42,43 @@ final _router = GoRouter(
   ],
 );
 
-class VoiceXApp extends ConsumerWidget {
+class VoiceXApp extends ConsumerStatefulWidget {
   const VoiceXApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<VoiceXApp> createState() => _VoiceXAppState();
+}
+
+class _VoiceXAppState extends ConsumerState<VoiceXApp> {
+  @override
+  void initState() {
+    super.initState();
+    ReadingReminders.onOpen = () => _router.push('/progress');
+    if (ReadingReminders.launchedFromNotification) {
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _router.push('/progress'));
+    }
+  }
+
+  /// Reading notifications follow both the settings and the figures: turning
+  /// one on schedules it, and every paragraph read may change its text.
+  /// [ReadingReminders.reschedule] skips the call when nothing changed.
+  void _reschedule() {
+    final settings = ref.read(settingsProvider).valueOrNull;
+    final stats = ref.read(readingStatsProvider).valueOrNull;
+    if (settings == null || stats == null) return;
+    ReadingReminders.reschedule(
+      weekly: settings.weeklySummary,
+      dailyAt: settings.dailyReminderAt,
+      stats: stats,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen(settingsProvider, (_, _) => _reschedule());
+    ref.listen(readingStatsProvider, (_, _) => _reschedule());
+
     final settingsAsync = ref.watch(settingsProvider);
     final themeStr =
         settingsAsync.valueOrNull?.theme ?? 'dark';

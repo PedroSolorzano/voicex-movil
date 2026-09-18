@@ -33,6 +33,12 @@
         android:name="${applicationName}"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher">
+        <!-- Muestra los avisos de lectura programados (resumen semanal y
+             recordatorio). Sin el receptor de arranque del plugin a propósito:
+             la app los reprograma cada vez que se abre, y un teléfono que se
+             reinicia y no se abre no tiene lectura nueva que resumir. -->
+        <receiver android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

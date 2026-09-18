@@ -8,6 +8,7 @@ import 'package:just_audio/just_audio.dart' as ja;
 import 'package:package_info_plus/package_info_plus.dart';
 import '../../errors.dart';
 import '../../config/server_config.dart';
+import '../../services/reading_reminders.dart';
 import '../../services/reporter.dart';
 import '../../config/settings.dart';
 import '../../storage/repositories.dart';
@@ -148,6 +149,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _draft = next);
     _saveDebounce?.cancel();
     _saveDebounce = Timer(const Duration(milliseconds: 400), _persist);
+  }
+
+  /// Asks Android for permission to notify, and says where to find it if
+  /// the answer is no — a switch that silently flips back is a broken switch.
+  Future<bool> _allowNotifications() async {
+    final ok = await ReadingReminders.requestPermission();
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Android no dejó mostrar avisos. Se activan en Ajustes '
+            'del teléfono → Aplicaciones → VoiceX → Notificaciones.'),
+      ));
+    }
+    return ok;
+  }
+
+  /// "21:30", or null if the picker was dismissed.
+  Future<String?> _pickTime(String current) async {
+    final parts = current.split(':');
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(
+          hour: int.parse(parts[0]), minute: int.parse(parts[1])),
+      helpText: 'Hora del recordatorio',
+    );
+    if (picked == null) return null;
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(picked.hour)}:${two(picked.minute)}';
   }
 
   Future<void> _persist() async {
@@ -540,6 +568,48 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               value: s.showReaderRank,
               onChanged: (v) => _update(s.copyWith(showReaderRank: v)),
             ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Resumen semanal'),
+              subtitle: const Text(
+                  'El domingo por la noche, cuántas páginas leíste en la '
+                  'semana y una cita. Solo si leíste algo.'),
+              value: s.weeklySummary,
+              onChanged: (v) async {
+                if (v && !await _allowNotifications()) return;
+                _update(s.copyWith(weeklySummary: v));
+              },
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Recordatorio para leer'),
+              subtitle: Text(s.dailyReminderAt.isEmpty
+                  ? 'Un aviso al día, a la hora que elijas.'
+                  : 'Todos los días a las ${s.dailyReminderAt}. '
+                      'Toca la hora para cambiarla.'),
+              value: s.dailyReminderAt.isNotEmpty,
+              onChanged: (v) async {
+                if (!v) {
+                  _update(s.copyWith(dailyReminderAt: ''));
+                  return;
+                }
+                final at = await _pickTime('21:30');
+                if (at == null || !await _allowNotifications()) return;
+                _update(s.copyWith(dailyReminderAt: at));
+              },
+            ),
+            if (s.dailyReminderAt.isNotEmpty)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  icon: const Icon(Icons.schedule),
+                  label: Text('Cambiar hora (${s.dailyReminderAt})'),
+                  onPressed: () async {
+                    final at = await _pickTime(s.dailyReminderAt);
+                    if (at != null) _update(s.copyWith(dailyReminderAt: at));
+                  },
+                ),
+              ),
           ]),
 
           _Section(title: 'Almacenamiento', children: [
@@ -654,7 +724,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               '• El diccionario consulta Wikcionario con la palabra que tocas, '
               'y solo con esa.\n'
               '• Tus libros, tu progreso y tus marcadores se quedan aquí: no '
-              'hay cuenta, ni sincronización, ni copia en la nube.',
+              'hay cuenta, ni sincronización, ni copia en la nube.\n'
+              '• El rango y los avisos de lectura se calculan en el teléfono. '
+              'Los avisos solo llevan cifras y una cita, nunca texto de tus '
+              'libros.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ]),
