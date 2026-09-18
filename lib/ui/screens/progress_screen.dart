@@ -245,6 +245,10 @@ class _SplitBar extends StatelessWidget {
           child: SizedBox(
             height: 12,
             child: Row(
+              // A childless ColoredBox takes the smallest height it is
+              // allowed: without stretch the bar was 0 px tall and only the
+              // legend showed.
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (read > 0)
                   Expanded(
