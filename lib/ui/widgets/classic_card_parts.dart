@@ -30,6 +30,34 @@ String catalogLine(Map<String, dynamic> book, double progress) {
   return parts.join('  ·  ');
 }
 
+/// The call number typed in the corner of a catalogue card: language, title
+/// mark and year, one per line.
+///
+/// The mark comes from the title and not the author, as in the last part of a
+/// Spanish signature ("N GAR cie"): the first surname cannot be told apart
+/// from a middle name without knowing the person ("Gabriel García Márquez"
+/// files under GAR, "Stephen King" under KIN), and a wrong mark is worse than
+/// a plain one.
+List<String> callNumber(Map<String, dynamic> book) {
+  final title = (book['title'] as String? ?? '').toLowerCase();
+  final words = title
+      .split(RegExp(r'[^\p{L}\p{N}]+', unicode: true))
+      .where((w) => w.isNotEmpty)
+      .toList();
+  // A leading article does not file: "El talismán" goes under TAL.
+  const articles = {
+    'el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas', 'the', 'a', 'an',
+  };
+  if (words.length > 1 && articles.contains(words.first)) words.removeAt(0);
+  final joined = words.join();
+  final mark = joined.substring(0, joined.length < 3 ? joined.length : 3);
+  return [
+    (book['language'] as String? ?? 'es').toUpperCase(),
+    if (mark.isNotEmpty) mark.toUpperCase(),
+    ?yearOf(book['published_date'] as String?),
+  ];
+}
+
 /// The real cover, bound: dark leather edge, a gold fillet, a short shadow.
 ///
 /// The mockups draw a generic leather tome; the requirement is that the book's

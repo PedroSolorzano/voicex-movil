@@ -93,6 +93,7 @@ flutter:
 
   # Las dos pieles clásicas de la biblioteca. SIL OFL 1.1, licencias al lado.
   # Variables: el peso se elige con FontVariation('wght', ...).
+  # SpecialElite (Apache 2.0) es la máquina de escribir de la piel Fichas.
   fonts:
     - family: Cinzel
       fonts:
@@ -102,3 +103,6 @@ flutter:
         - asset: assets/fonts/EBGaramond.ttf
         - asset: assets/fonts/EBGaramond-Italic.ttf
           style: italic
+    - family: SpecialElite
+      fonts:
+        - asset: assets/fonts/SpecialElite.ttf

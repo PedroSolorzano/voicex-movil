@@ -9,6 +9,54 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## Sin publicar
+
+### Las fichas parecen fichas
+
+La piel *Fichas* de 0.10.0 era una tarjeta crema con renglones tenues, Cinzel
+y Garamond: elegante, pero no un fichero. Le faltaba todo lo que hace
+reconocible una ficha de catálogo de verdad, así que se rehízo alrededor de
+eso (`lib/ui/widgets/catalog_card.dart`):
+
+- **Mecanografiada.** Las fichas se escribían a máquina, no se componían en
+  imprenta. Fuente Special Elite (Apache 2.0), con cada renglón de texto de la
+  altura exacta del rayado —22 px, `CatalogCard.pitch`— para que lo escrito se
+  asiente sobre las líneas. El autor va como encabezamiento, encima de la raya
+  roja; el título en la segunda sangría y repasado, que es como se destacaba
+  con una máquina.
+- **Signatura en la esquina**: idioma, marca de título y año (`ES / TAL /
+  1984`, `callNumber` en `classic_card_parts.dart`). La marca sale del título
+  y no del autor a propósito: el primer apellido no se distingue de un segundo
+  nombre sin conocer a la persona (García Márquez va por GAR, Stephen King por
+  KIN), y una marca equivocada es peor que una sencilla.
+- **La perforación** para la varilla del cajón, con la madera detrás.
+- **Sellos de goma** para el estado, algo torcidos: `SIN EMPEZAR` en rojo,
+  `EN LECTURA · 24 %` en azul, `LEÍDO` en verde. Resuelve en esta piel lo que
+  estaba anotado como pendiente —"Sin empezar" era un texto gris de 11,5 px
+  que no se encontraba—: el sello es lo más ruidoso de la ficha y su único
+  color. Las tres tintas pasan WCAG AA sobre el papel, porque son texto y no
+  adorno (`test/library_skin_test.dart`).
+- **Papel con años**: bordes amarillentos, manchas de óxido, cada ficha un
+  pelo torcida y la siguiente asomando debajo, como archivadas a mano. Todo
+  sale del id del libro, así que una ficha envejece igual cada vez que vuelve
+  a la pantalla.
+- **La portada, sujeta con un clip** como una fotografía, en vez de
+  encuadernada en cuero: eso es de la piel Clásica. Sin portada, una copia en
+  blanco con el título a máquina.
+- **La cabecera de rango es el frente del cajón**: una etiqueta mecanografiada
+  dentro de un portaetiquetas de latón con sus dos tornillos
+  (`rank_header.dart`). La lista de abajo es lo que hay dentro.
+
+El pie de imprenta solo se escribe si hay editorial: el año suelto ya está en
+la signatura, y hay EPUB que traen un año *como* editorial, lo que en la
+primera prueba en el teléfono daba fichas con "2011." y "2021, 2021.".
+
+Las fichas son más altas que antes (caben algo más de cuatro por pantalla en
+vez de cinco): es el precio del clip y de la franja de la perforación. La piel
+Clásica y la Moderna no cambian.
+
+---
+
 ## 0.10.0-preview.1 — 2026-09-18
 
 La versión más grande desde 0.7.0, y la primera en que la app se ocupa de quien

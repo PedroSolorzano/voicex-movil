@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voicex_movil/config/settings.dart';
+import 'package:voicex_movil/ui/widgets/catalog_card.dart';
 import 'package:voicex_movil/ui/widgets/classic_card_parts.dart';
 import 'package:voicex_movil/ui/widgets/library_skin.dart';
 
@@ -45,6 +46,15 @@ void main() {
     // existieran las pieles.
     final app = ThemeData(brightness: Brightness.dark);
     expect(identical(libraryThemeData(LibrarySkin.modern, app), app), isTrue);
+  });
+
+  test('las tintas de los sellos de las fichas se leen (WCAG AA)', () {
+    // El sello es el único sitio donde la ficha dice si el libro está
+    // empezado: es texto, no adorno.
+    for (final ink in catalogStampInks) {
+      expect(contrast(ink, LibrarySkin.catalog.paper!),
+          greaterThanOrEqualTo(4.5));
+    }
   });
 
   for (final skin in [LibrarySkin.catalog, LibrarySkin.classic]) {

@@ -104,6 +104,17 @@ TextStyle skinTitleStyle(double size, Color color) => TextStyle(
       letterSpacing: 0.4,
     );
 
+/// Typewriter face of the catalogue cards: a real card was typed, not set in
+/// type. [pitch] is the line height in pixels, so typed lines can sit on the
+/// card's ruling whatever the size.
+TextStyle typewriterStyle(double size, Color color, {double? pitch}) =>
+    TextStyle(
+      fontFamily: 'SpecialElite',
+      fontSize: size,
+      color: color,
+      height: pitch == null ? 1.2 : pitch / size,
+    );
+
 /// Material theme for [skin], built on top of the app's own.
 ///
 /// [modern] returns [app] untouched: choosing it must look exactly like the

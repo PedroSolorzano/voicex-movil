@@ -444,6 +444,20 @@ atendido.
   clásicas —una cinta de tela saliendo de la encuadernación de
   `FramedCover`—, pero conviene decidir si va en las tres.
 
+  **Resuelto en la piel Fichas** con un sello de goma rojo (`_Stamp` en
+  `catalog_card.dart`; ver `RELEASES.md`, "Las fichas parecen fichas"). Sigue
+  pendiente en la Moderna y la Clásica, donde la cinta sigue siendo la idea.
+
+- [ ] `bajo` 2026-09-18 — **Fichas: separadores con pestaña y hoja de
+  préstamo.** Las dos ideas que quedaron fuera del rediseño de la piel Fichas
+  por tocar la estructura y no solo el dibujo. (1) Guías con pestaña entre
+  grupos de fichas —*En lectura*, *Sin empezar*, *Leídos*, o A-B-C por
+  título—, que es lo que de verdad ordena un cajón; obliga a agrupar la lista
+  en `library_screen.dart`, hoy plana y con el orden que elige el usuario.
+  (2) En Detalles, una hoja de "fecha de devolución" con los días en que se
+  leyó ese libro sellados; `reading_days` hoy no guarda el libro, solo el día,
+  así que pide una columna o tabla nueva.
+
 - [ ] `bajo` 2026-09-17 — **Una cuarta piel: la estantería.** Portadas en
   grilla sobre baldas de madera, al estilo de iBooks, que era la otra propuesta
   sobre la mesa. El modelo ya la admite: una constante más en `LibrarySkin`

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voicex_movil/ui/widgets/catalog_card.dart';
+import 'package:voicex_movil/ui/widgets/classic_card_parts.dart';
 import 'package:voicex_movil/ui/widgets/classic_shelf_card.dart';
 import 'package:voicex_movil/ui/widgets/library_skin.dart';
 
@@ -64,15 +65,14 @@ void main() {
 
   for (final MapEntry(key: name, value: (skin, build)) in cases.entries) {
     group(name, () {
-      testWidgets('muestra título, autor y signatura', (tester) async {
+      testWidgets('muestra título y autor', (tester) async {
         await pump(tester, skin, build(quijote));
         expect(titulo, findsOneWidget);
         expect(find.textContaining('Miguel de Cervantes', findRichText: true),
             findsOneWidget);
-        expect(find.text('ES  ·  1605  ·  Sin empezar'), findsOneWidget);
       });
 
-      testWidgets('sin portada se ve la encuadernación con el título',
+      testWidgets('sin portada, el título va también donde iría la portada',
           (tester) async {
         await pump(tester, skin, build(quijote));
         // El título aparece dos veces: en el texto y en el lomo.
@@ -106,6 +106,68 @@ void main() {
     });
   }
 
+  group('Fichas', () {
+    CatalogCard ficha(Map<String, dynamic> book, double progress) =>
+        CatalogCard(
+          book: book,
+          progress: progress,
+          onRead: () {},
+          onDelete: () {},
+          onInfo: () {},
+          onLanguageToggle: (_) {},
+        );
+
+    testWidgets('signatura en la esquina, pie de imprenta y sello',
+        (tester) async {
+      await pump(tester, LibrarySkin.catalog, ficha(quijote, 0));
+      // "Don Quijote…" no lleva artículo: se archiva por DON.
+      expect(find.text('ES\nDON\n1605'), findsOneWidget);
+      expect(find.text('Juan de la Cuesta, 1605.'), findsOneWidget);
+      expect(find.text('SIN EMPEZAR'), findsOneWidget);
+    });
+
+    testWidgets('el sello dice por dónde va y cuándo se terminó',
+        (tester) async {
+      await pump(tester, LibrarySkin.catalog, ficha(quijote, 0.237));
+      expect(find.text('EN LECTURA · 24 %'), findsOneWidget);
+
+      await pump(tester, LibrarySkin.catalog,
+          ficha({...quijote, 'finished_at': '2026-09-18T10:00:00'}, 0.4));
+      expect(find.text('LEÍDO'), findsOneWidget);
+    });
+
+    testWidgets('sin editorial no se escribe el año suelto', (tester) async {
+      // El año ya está en la signatura; y hay EPUB que traen un año como
+      // editorial, que daba "2021, 2021.".
+      for (final publisher in [null, '', '2021']) {
+        await pump(tester, LibrarySkin.catalog,
+            ficha({...quijote, 'publisher': publisher}, 0));
+        expect(find.textContaining('1605.'), findsNothing);
+        expect(find.textContaining('2021'), findsNothing);
+      }
+    });
+  });
+
+  group('la signatura', () {
+    test('idioma, marca de título y año', () {
+      expect(callNumber({'title': 'El talismán', 'published_date': '1984'}),
+          ['ES', 'TAL', '1984']);
+      expect(callNumber({'title': 'The Martian', 'language': 'en'}),
+          ['EN', 'MAR']);
+    });
+
+    test('un título que es solo el artículo no se queda sin marca', () {
+      expect(callNumber({'title': 'Él'}), ['ES', 'ÉL']);
+      expect(callNumber({'title': 'La'}), ['ES', 'LA']);
+    });
+
+    test('cifras y signos', () {
+      expect(callNumber({'title': '22/11/63'}), ['ES', '221']);
+      expect(callNumber({'title': '¿…?'}), ['ES']);
+      expect(callNumber({}), ['ES']);
+    });
+  });
+
   group('Clásica', () {
     testWidgets('muestra editorial y descripción sin HTML', (tester) async {
       await pump(tester, LibrarySkin.classic, ClassicShelfCard(
@@ -118,6 +180,7 @@ void main() {
       ));
       expect(find.text('Juan de la Cuesta'), findsOneWidget);
       expect(find.text('Un hidalgo enloquece leyendo.'), findsOneWidget);
+      expect(find.text('ES  ·  1605  ·  Sin empezar'), findsOneWidget);
     });
 
     testWidgets('sin descripción no reserva el hueco', (tester) async {
