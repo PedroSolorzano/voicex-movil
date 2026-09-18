@@ -87,8 +87,21 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   /// contexto que recibe y el Navigator, y el contexto de este State está por
   /// encima del `Theme` del lector. Envolver el contenido es más directo que
   /// andar buscando un contexto más abajo.
-  Widget _themed(Widget child) =>
-      Theme(data: readerThemeData(_palette), child: child);
+  ///
+  /// El `Material` interno es necesario además del `Theme`: el fondo de la
+  /// hoja lo pinta el `Material` que arma el propio `showModalBottomSheet`,
+  /// leyendo el tema de *ese* contexto (el de la app), no el de este wrapper.
+  /// Sin repintar la superficie, un texto pensado para paleta sepia (clara)
+  /// caía sobre un fondo oscuro heredado del tema de la app en modo oscuro —
+  /// letra casi negra sobre negro, invisible pese a que el valor sí se
+  /// escribía (se veía en los resultados de la búsqueda, no en el campo).
+  Widget _themed(Widget child) {
+    final theme = readerThemeData(_palette);
+    return Theme(
+      data: theme,
+      child: Material(color: theme.colorScheme.surface, child: child),
+    );
+  }
 
   @override
   void initState() {
