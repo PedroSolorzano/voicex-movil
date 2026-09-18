@@ -430,7 +430,7 @@ atendido.
   elegir** (Ajustes → Biblioteca): la moderna queda intacta y se suman
   *Fichas* (fichas de catálogo) y *Clásica* (pergamino), a partir de propuestas
   de diseño propias. Las dos llevan la portada real encuadernada. Ver
-  `RELEASES.md`, "Sin publicar".
+  `RELEASES.md`, 0.10.0.
 
 - [ ] `bajo` 2026-09-17 — **"Sin empezar" casi no se ve: marcarlo con una
   cinta.** Hoy es solo texto pequeño (`labelSmall` en la moderna,

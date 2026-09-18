@@ -240,7 +240,7 @@ class AppSettings {
   ///
   /// Kokoro and Piper sit behind the proxy and share its token; F5 is reached
   /// directly and validates its own. Handing F5 the proxy's token — which is
-  /// what every probe did until 0.9.2 — sends a credential to a machine that
+  /// what every probe did until 0.10.0 — sends a credential to a machine that
   /// has no business seeing it, and does not authenticate anything either.
   String tokenFor(String engine) =>
       engine == 'f5' ? TtsServerConfig.f5Token : TtsServerConfig.token;

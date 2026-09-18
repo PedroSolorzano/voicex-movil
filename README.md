@@ -8,16 +8,17 @@ Versión Android de [VoiceX](https://github.com/Preston-IA/voicex).
 
 ## Qué hace
 
-**Cuatro motores de voz**, elegibles por libro:
+**Cinco motores de voz**, elegibles en Ajustes:
 
 | Motor | Dónde corre | Notas |
 |---|---|---|
 | **Edge** | Nube (Microsoft) | 300+ voces, tiempos por palabra. Funciona en cualquier red |
-| **Kokoro** | Servidor propio | Mejor calidad de voz, con tiempos por palabra |
+| **Kokoro** | Servidor propio | Buena voz, con tiempos por palabra |
 | **Piper** | Servidor propio | Voces entrenadas por idioma. El más rápido |
+| **F5** | Laptop con GPU | Voz clonada en español, la más natural. Solo español |
 | **Teléfono** | El propio móvil | El único sin red ni servidor. No marca palabras |
 
-Kokoro y Piper corren en tu computadora ([`tools/`](tools/)); cuando no
+Kokoro, Piper y F5 corren en máquinas propias ([`tools/`](tools/)); cuando no
 responden, la app cae a Edge automáticamente y lo dice en pantalla.
 
 **Como lector**
@@ -28,8 +29,6 @@ responden, la app cae a Edge automáticamente y lo dice en pantalla.
 - Tipografía, interlineado, márgenes y fondo sepia/claro/oscuro configurables
 - Tres pieles para la biblioteca: la moderna, fichas de catálogo y una clásica
   de pergamino, siempre con la portada real del libro
-- Rangos de lector: cada página leída o escuchada suma, con una pantalla de
-  progreso y avisos semanales opcionales. Todo queda en el teléfono
 
 **Como audiolibro**
 
@@ -37,10 +36,20 @@ responden, la app cae a Edge automáticamente y lo dice en pantalla.
 - Descarga por adelantado en WiFi para escuchar sin conexión
 - Velocidad de reproducción que no obliga a volver a sintetizar
 
+**Para leer más**
+
+- Rangos de lector, de *Lector novel* a *Maestro bibliotecario*, por páginas
+  leídas o escuchadas; saltar desde el índice o la búsqueda no suma
+- Pantalla de progreso con la pila de libros terminados y comparaciones con
+  obras conocidas, no con otras personas
+- Resumen semanal y recordatorio diario, opcionales y apagados de fábrica
+- Buscar dentro del libro, notas en los marcadores, temporizador para dormir
+
 **Para practicar idiomas**
 
 - Repetir una oración, en bucle, para *shadowing*
-- Pulsación larga sobre una palabra: oírla o consultar su definición
+- Pulsación larga sobre una palabra: oírla, consultar su definición, o copiar
+  y compartir la oración
 - Diccionario en inglés y español
 
 ---
@@ -49,6 +58,7 @@ responden, la app cae a Edge automáticamente y lo dice en pantalla.
 
 | Versión | Lo que trajo |
 |---|---|
+| **0.10.0** | Rangos de lector: cada página leída o escuchada suma, de *Lector novel* a *Maestro bibliotecario*, con una pantalla de progreso (la pila de libros terminados, comparaciones con obras conocidas, la semana en barras) y avisos semanales opcionales. Tres pieles para la biblioteca —moderna, fichas de catálogo y pergamino—, siempre con la portada real. Y los 23 hallazgos de una auditoría: buscar dentro del libro, temporizador para dormir, notas en marcadores, copiar y compartir citas, tocar la página oculta los controles en vez de cortar el audio, el servidor de F5 pide token, EPUB duplicados rechazados y una sección de Privacidad que dice qué sale del teléfono |
 | **0.9.1** | Una descarga que se replegó a Edge ya no termina pareciendo una descarga limpia: ahora avisa antes de empezar si el motor elegido no está disponible —y deja cancelar—, y al terminar dice con cuál se descargó de verdad. Un capítulo de 104 párrafos bajado con la voz equivocada no se descubría hasta ponerse a escuchar |
 | **0.9.0** | Descargar deja de repetir lo que ya leíste: se agrega "desde aquí hasta el final del capítulo", que arranca donde va la lectura en vez del párrafo 0. Y un servidor ocupado deja de romper la descarga — F5 ya avisaba que estaba trabajando en su propio sondeo de salud y la app no lo leía, así que le mandaba el párrafo siguiente a hacer cola por la GPU hasta agotarle la espera |
 | **0.8.0** | Se va Chatterbox, entra F5-TTS. Sonaban parejos, pero Chatterbox iba a 0.089x tiempo real —casi tres horas de GPU por capítulo— y bloqueaba hasta su propio sondeo de salud mientras generaba, así que la app lo daba por caído a mitad de descarga. F5 hace lo mismo por encima de tiempo real y contesta el sondeo en milisegundos aunque esté trabajando |
@@ -109,9 +119,16 @@ README con los detalles.
 
 ## Build
 
-```bash
-flutter build apk --release
+```powershell
+.\tools\release\compilar.ps1 -Limpio -Instalar   # -Limpio si cambió la versión
 ```
+
+**No `flutter build apk` a mano**: sin `--dart-define-from-file` el APK sale
+sin servidores —solo Edge y Teléfono en Ajustes—, se instala igual y no avisa.
+El script pasa los tres `.json` y comprueba después que las URLs quedaron
+dentro del binario. Funciona con PowerShell 7 (`pwsh`) y con el 5.1 que trae
+Windows. Detalles en
+[`tools/release/README.md`](tools/release/README.md).
 
 El APK queda en `build/app/outputs/flutter-apk/` con el nombre de la versión.
 `versionName` sale de `pubspec.yaml`; el `versionCode` se deriva del número de
@@ -125,7 +142,7 @@ commits.
 VoiceXMovil/
 ├── lib/
 │   ├── config/          # AppSettings (SharedPreferences)
-│   ├── tts/             # Edge, Kokoro, Piper y el del sistema (Strategy + Factory)
+│   ├── tts/             # Edge, Kokoro, Piper, F5 y el del sistema (Strategy + Factory)
 │   ├── epub/            # Parser EPUB, modelos y alineado texto-audio
 │   ├── audio/           # Handler de audio_service con MediaSession
 │   ├── services/        # Diccionario, reportes y avisos de lectura
@@ -134,7 +151,13 @@ VoiceXMovil/
 │   └── ui/              # providers · screens · widgets
 ├── tools/
 │   ├── kokoro/          # Servidor de voz Kokoro (Docker)
-│   └── piper/           # Servidor de voz Piper (Docker)
+│   ├── piper/           # Servidor de voz Piper (Docker)
+│   ├── f5/              # Servidor de voz F5-TTS (Docker, GPU)
+│   ├── proxy/           # nginx con token por probador delante de Kokoro y Piper
+│   ├── release/         # compilar.ps1 y los .json de cada compilación
+│   ├── reportes/        # Cola de reportes de testers → docs/bugs
+│   ├── skins/           # Genera las texturas de las pieles de biblioteca
+│   └── tailscale/       # Acceso remoto a los servidores por la tailnet
 ├── test/
 └── docs/
     ├── RELEASES.md            # Historial de versiones

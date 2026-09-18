@@ -9,14 +9,21 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
-## Sin publicar
+## 0.10.0-preview.1 — 2026-09-18
 
-Lo que salió de la auditoría del 2026-09-17
-([`docs/tasks/PLAN_AUDITORIA_2026-09-17.md`](tasks/PLAN_AUDITORIA_2026-09-17.md)).
-No hubo ningún hallazgo crítico; lo que sigue son 23 arreglos y funciones
-agrupados por lo que cambian. Las dos primeras secciones —los rangos de
-lector y las pieles de la biblioteca— no salieron de la auditoría: vinieron
-después, el mismo día.
+La versión más grande desde 0.7.0, y la primera en que la app se ocupa de quien
+lee y no solo de lo que suena. Tres frentes: **rangos de lector** (cada página
+leída o escuchada suma), **tres pieles para la biblioteca**, y los 23 arreglos
+y funciones de la auditoría del 2026-09-17
+([`docs/tasks/PLAN_AUDITORIA_2026-09-17.md`](tasks/PLAN_AUDITORIA_2026-09-17.md)),
+que no encontró nada crítico.
+
+Actualizar desde 0.9.1 migra la base de datos al esquema 9 sin tocar libros,
+posiciones, marcadores ni descargas. Lo leído antes de esta versión no cuenta
+para el rango: la posición guardada dice hasta dónde se llegó, no cuándo.
+
+Se compila con `compilar.ps1 -Limpio`: cambió la versión, y sin limpiar el APK
+sale con el `versionName` viejo dentro (ver `tools/release/README.md`).
 
 ### Cada página cuenta: rangos de lector
 
