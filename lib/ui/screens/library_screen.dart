@@ -7,9 +7,13 @@ import 'package:go_router/go_router.dart';
 import '../../errors.dart';
 import '../providers/app_info_provider.dart';
 import '../providers/library_provider.dart';
+import '../providers/settings_provider.dart';
 import '../providers/share_import_provider.dart';
 import '../widgets/book_card.dart';
 import '../widgets/book_info_sheet.dart';
+import '../widgets/catalog_card.dart';
+import '../widgets/classic_shelf_card.dart';
+import '../widgets/library_skin.dart';
 
 class LibraryScreen extends ConsumerStatefulWidget {
   const LibraryScreen({super.key});
@@ -56,18 +60,42 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       ref.read(shareImportProvider.notifier).clearMessage();
     });
 
+    final skin = LibrarySkin.of(
+        ref.watch(settingsProvider).valueOrNull?.librarySkin ?? 'modern');
+
+    // The Builder shadows `context` on purpose. Dialogs and sheets take their
+    // theme from the context they are handed, and the one `build` receives is
+    // above this Theme: without the shadowing, "Eliminar libro" and the book
+    // details would open dark over parchment when the phone is in dark mode —
+    // the same bug `_themed` in reader_screen.dart had.
+    return Theme(
+      data: libraryThemeData(skin, Theme.of(context)),
+      child: Builder(builder: (context) => _buildScaffold(context, skin)),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context, LibrarySkin skin) {
     final entriesAsync = ref.watch(libraryEntriesProvider);
     final version = ref.watch(appInfoProvider).valueOrNull?.version;
     final sort = ref.watch(librarySortProvider);
+    // Null on the modern skin, which keeps the app's own colours.
+    final barInk = Theme.of(context).appBarTheme.foregroundColor;
 
     return Scaffold(
       appBar: AppBar(
+        flexibleSpace: skin.barTexture == null ? null : _WoodBar(skin: skin),
         title: _searching
             ? TextField(
                 controller: _searchController,
                 autofocus: true,
-                decoration: const InputDecoration(
+                // On wood the default text colour is the page's dark ink.
+                style: barInk == null ? null : TextStyle(color: barInk),
+                cursorColor: barInk,
+                decoration: InputDecoration(
                   hintText: 'Buscar por título o autor…',
+                  hintStyle: barInk == null
+                      ? null
+                      : TextStyle(color: barInk.withValues(alpha: 0.7)),
                   border: InputBorder.none,
                 ),
                 onChanged: (v) =>
@@ -118,9 +146,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   child: Text(
                     'v$version',
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
+                          color: (barInk ??
+                                  Theme.of(context).colorScheme.onSurface)
                               .withValues(alpha: 0.5),
                         ),
                   ),
@@ -138,39 +165,74 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         label: Text(_importing ? 'Agregando…' : 'Agregar EPUB'),
         onPressed: _importing ? null : () => _pickEpub(context),
       ),
-      body: entriesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(friendlyError(e))),
-        data: (entries) {
-          if (entries.isEmpty) {
-            final searching =
-                ref.read(librarySearchProvider).trim().isNotEmpty;
-            return searching
-                ? const Center(child: Text('Ningún libro coincide'))
-                : _EmptyState(onAdd: () => _pickEpub(context));
-          }
-          return ListView.builder(
-            itemCount: entries.length,
-            itemBuilder: (context, i) {
-              final entry = entries[i];
-              final book = entry.book;
-              final id = book['id'] as int;
-              return BookCard(
-                book: book,
-                progress: entry.progress,
-                onRead: () => _openBook(context, book),
-                onDelete: () => _confirmDelete(context, id),
-                onInfo: () => showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  builder: (_) => BookInfoSheet(book: book),
-                ),
-                onLanguageToggle: (lang) =>
-                    ref.read(libraryProvider.notifier).updateLanguage(id, lang),
+      body: _SkinBackground(
+        skin: skin,
+        child: entriesAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => _OnPaper(
+              skin: skin, child: Center(child: Text(friendlyError(e)))),
+          data: (entries) {
+            if (entries.isEmpty) {
+              final searching =
+                  ref.read(librarySearchProvider).trim().isNotEmpty;
+              return _OnPaper(
+                skin: skin,
+                child: searching
+                    ? const Center(child: Text('Ningún libro coincide'))
+                    : _EmptyState(onAdd: () => _pickEpub(context)),
               );
-            },
-          );
-        },
+            }
+            return ListView.builder(
+              // Room for the FAB over the last entry.
+              padding: skin.isModern
+                  ? null
+                  : const EdgeInsets.only(top: 6, bottom: 88),
+              itemCount: entries.length,
+              itemBuilder: (context, i) {
+                final entry = entries[i];
+                final book = entry.book;
+                final id = book['id'] as int;
+                void onRead() => _openBook(context, book);
+                void onDelete() => _confirmDelete(context, id);
+                void onInfo() => showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      builder: (_) => BookInfoSheet(book: book),
+                    );
+                void onLanguageToggle(String lang) =>
+                    ref.read(libraryProvider.notifier).updateLanguage(id, lang);
+
+                return switch (skin.name) {
+                  'catalog' => CatalogCard(
+                      book: book,
+                      progress: entry.progress,
+                      onRead: onRead,
+                      onDelete: onDelete,
+                      onInfo: onInfo,
+                      onLanguageToggle: onLanguageToggle,
+                    ),
+                  'classic' => ClassicShelfCard(
+                      book: book,
+                      progress: entry.progress,
+                      isLast: i == entries.length - 1,
+                      onRead: onRead,
+                      onDelete: onDelete,
+                      onInfo: onInfo,
+                      onLanguageToggle: onLanguageToggle,
+                    ),
+                  _ => BookCard(
+                      book: book,
+                      progress: entry.progress,
+                      onRead: onRead,
+                      onDelete: onDelete,
+                      onInfo: onInfo,
+                      onLanguageToggle: onLanguageToggle,
+                    ),
+                };
+              },
+            );
+          },
+        ),
       ),
     );
   }
@@ -286,6 +348,76 @@ class _EmptyState extends StatelessWidget {
             onPressed: onAdd,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Paints the skin's background under the list. A repeated tile and no blur:
+/// it costs nothing per frame while scrolling.
+class _SkinBackground extends StatelessWidget {
+  final LibrarySkin skin;
+  final Widget child;
+  const _SkinBackground({required this.skin, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final texture = skin.backgroundTexture;
+    if (texture == null) return child;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: skin.background,
+        image: DecorationImage(
+          image: AssetImage(texture),
+          repeat: ImageRepeat.repeat,
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// On the catalog skin the background is wood, and the empty-state and error
+/// texts are the page's dark ink: they get a sheet of paper to sit on.
+class _OnPaper extends StatelessWidget {
+  final LibrarySkin skin;
+  final Widget child;
+  const _OnPaper({required this.skin, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    if (skin.name != 'catalog') return child;
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.all(24),
+        padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+        decoration: BoxDecoration(
+          color: skin.paper,
+          borderRadius: BorderRadius.circular(2),
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+/// Wood behind the app bar, with a gold rule along its lower edge.
+class _WoodBar extends StatelessWidget {
+  final LibrarySkin skin;
+  const _WoodBar({required this.skin});
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: skin.frame,
+        image: DecorationImage(
+          image: AssetImage(skin.barTexture!),
+          repeat: ImageRepeat.repeat,
+        ),
+        border: const Border(
+          bottom: BorderSide(color: Color(0xFFB08A45), width: 2),
+        ),
       ),
     );
   }
