@@ -408,6 +408,16 @@ atendido.
   de diseño propias. Las dos llevan la portada real encuadernada. Ver
   `RELEASES.md`, "Sin publicar".
 
+- [ ] `bajo` 2026-09-17 — **"Sin empezar" casi no se ve: marcarlo con una
+  cinta.** Hoy es solo texto pequeño (`labelSmall` en la moderna,
+  `book_card.dart:78-81`; Cinzel de 11,5 px al final de la línea de catálogo
+  en las clásicas, `catalogLine` en `classic_card_parts.dart`), y en una lista
+  de libros no se distingue de un vistazo cuáles no has abierto. La idea: una
+  cinta de marcapáginas (o una banda en la esquina de la portada, como el
+  "Nuevo" de iBooks) sobre los libros sin empezar. Encaja mejor en las pieles
+  clásicas —una cinta de tela saliendo de la encuadernación de
+  `FramedCover`—, pero conviene decidir si va en las tres.
+
 - [ ] `bajo` 2026-09-17 — **Una cuarta piel: la estantería.** Portadas en
   grilla sobre baldas de madera, al estilo de iBooks, que era la otra propuesta
   sobre la mesa. El modelo ya la admite: una constante más en `LibrarySkin`
