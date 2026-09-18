@@ -81,3 +81,18 @@ flutter:
   # con la biblioteca vacía. Ver LibraryNotifier._seedDemoLibraryIfNeeded.
   assets:
     - assets/demo/
+    # Papel y madera de las pieles clásicas de la biblioteca. Generadas por
+    # tools/skins/generar_texturas.py, no descargadas.
+    - assets/skins/
+
+  # Las dos pieles clásicas de la biblioteca. SIL OFL 1.1, licencias al lado.
+  # Variables: el peso se elige con FontVariation('wght', ...).
+  fonts:
+    - family: Cinzel
+      fonts:
+        - asset: assets/fonts/Cinzel.ttf
+    - family: EBGaramond
+      fonts:
+        - asset: assets/fonts/EBGaramond.ttf
+        - asset: assets/fonts/EBGaramond-Italic.ttf
+          style: italic
