@@ -44,7 +44,7 @@ class ReaderRank {
 
   static String titleFor(int level) {
     if (level <= titles.length) return titles[level - 1];
-    return '${titles.last} ${_roman(level - titles.length + 1)}';
+    return '${titles.last} ${roman(level - titles.length + 1)}';
   }
 
   /// How far through the current level, from 0 to 1.
@@ -55,7 +55,8 @@ class ReaderRank {
     return ((pages - from) / (to - from)).clamp(0.0, 1.0);
   }
 
-  static String _roman(int n) {
+  /// Also numbers the lots of the classic library skin.
+  static String roman(int n) {
     const values = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1];
     const symbols = [
       'M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I',

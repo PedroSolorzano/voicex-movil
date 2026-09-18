@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voicex_movil/ui/widgets/catalog_card.dart';
 import 'package:voicex_movil/ui/widgets/classic_card_parts.dart';
@@ -30,6 +31,11 @@ void main() {
   // encuadernación. Este es el del texto.
   final titulo = find.byWidgetPredicate((w) =>
       w is Text && w.data == 'Don Quijote de la Mancha' && w.maxLines == 2);
+
+  // La descripción con capitular son tres Text; lo que la hace una sola cosa
+  // para un lector de pantalla es la etiqueta de su Semantics.
+  Finder etiquetado(String label) => find.byWidgetPredicate(
+      (w) => w is Semantics && w.properties.label == label);
 
   Future<void> pump(WidgetTester tester, LibrarySkin skin, Widget card) =>
       tester.pumpWidget(MaterialApp(
@@ -179,8 +185,89 @@ void main() {
         onLanguageToggle: (_) {},
       ));
       expect(find.text('Juan de la Cuesta'), findsOneWidget);
-      expect(find.text('Un hidalgo enloquece leyendo.'), findsOneWidget);
-      expect(find.text('ES  ·  1605  ·  Sin empezar'), findsOneWidget);
+      // La capitular va aparte; para un lector de pantalla es un solo texto.
+      expect(find.text('U'), findsOneWidget);
+      expect(find.text('n hidalgo enloquece leyendo.'), findsOneWidget);
+      expect(etiquetado('Un hidalgo enloquece leyendo.'), findsOneWidget);
+      expect(
+          find.textContaining('ES  ·  1605', findRichText: true), findsOneWidget);
+      expect(find.textContaining('☞ Sin empezar', findRichText: true),
+          findsOneWidget);
+    });
+
+    ClassicShelfCard lote(Map<String, dynamic> book,
+            {double progress = 0, int? number}) =>
+        ClassicShelfCard(
+          book: book,
+          progress: progress,
+          number: number,
+          onRead: () {},
+          onDelete: () {},
+          onInfo: () {},
+          onLanguageToggle: (_) {},
+        );
+
+    testWidgets('los lotes van numerados en romanos', (tester) async {
+      await pump(tester, LibrarySkin.classic, lote(quijote, number: 14));
+      expect(find.text('N.º XIV'), findsOneWidget);
+    });
+
+    testWidgets('el libro en lectura lo dice en rojo y lleva la cinta',
+        (tester) async {
+      await pump(tester, LibrarySkin.classic, lote(quijote, progress: 0.237));
+      expect(find.textContaining('En lectura · 24 %', findRichText: true),
+          findsOneWidget);
+      expect(tester.widget<FramedCover>(find.byType(FramedCover)).ribbon,
+          isTrue);
+
+      await pump(tester, LibrarySkin.classic, lote(quijote));
+      expect(tester.widget<FramedCover>(find.byType(FramedCover)).ribbon,
+          isFalse);
+    });
+
+    testWidgets('una descripción larga se parte sin perder ni repetir nada',
+        (tester) async {
+      const largo = 'En un lugar de la Mancha, de cuyo nombre no quiero '
+          'acordarme, no ha mucho tiempo que vivía un hidalgo de los de lanza '
+          'en astillero, adarga antigua, rocín flaco y galgo corredor. Una '
+          'olla de algo más vaca que carnero, salpicón las más noches.';
+      await pump(tester, LibrarySkin.classic,
+          lote({...quijote, 'description': largo}));
+      expect(tester.takeException(), isNull);
+      // Inicial + lo que va a su lado + lo que sigue debajo. El de al lado
+      // lleva el texto entero y se recorta, así que lo de debajo tiene que
+      // ser una cola suya que empiece en palabra entera.
+      final textos = tester
+          .widgetList<Text>(find.descendant(
+              of: etiquetado(largo), matching: find.byType(Text)))
+          .map((t) => t.data!)
+          .toList();
+      expect(textos, hasLength(3));
+      expect(textos[0], 'E');
+      expect(textos[1], largo.substring(1));
+      expect(largo.endsWith(textos[2]), isTrue);
+      final corte = largo.length - textos[2].length;
+      expect(largo[corte - 1], ' ');
+
+      // Y el corte cae donde acaba la segunda línea *dibujada*, no donde la
+      // calculó una medición aparte: medir sin el estilo por defecto del tema
+      // se comía una palabra ("Aquel día el [mundo] cambió").
+      final alLado = tester.renderObject<RenderParagraph>(find.descendant(
+          of: find.byWidgetPredicate(
+              (w) => w is Text && w.data == largo.substring(1)),
+          matching: find.byType(RichText)));
+      final finDeLinea = alLado
+          .getPositionForOffset(
+              Offset(alLado.size.width, alLado.size.height - 2))
+          .offset;
+      expect(largo.substring(1).substring(finDeLinea).trimLeft(), textos[2]);
+    });
+
+    testWidgets('una descripción que no empieza por letra va sin capitular',
+        (tester) async {
+      await pump(tester, LibrarySkin.classic,
+          lote({...quijote, 'description': '—¿Quién anda ahí?'}));
+      expect(find.text('—¿Quién anda ahí?'), findsOneWidget);
     });
 
     testWidgets('sin descripción no reserva el hueco', (tester) async {

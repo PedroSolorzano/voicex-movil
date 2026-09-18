@@ -445,8 +445,10 @@ atendido.
   `FramedCover`—, pero conviene decidir si va en las tres.
 
   **Resuelto en la piel Fichas** con un sello de goma rojo (`_Stamp` en
-  `catalog_card.dart`; ver `RELEASES.md`, "Las fichas parecen fichas"). Sigue
-  pendiente en la Moderna y la Clásica, donde la cinta sigue siendo la idea.
+  `catalog_card.dart`; ver `RELEASES.md`, "Las fichas parecen fichas"), **y en
+  la Clásica** con la manecilla en tinta roja, `☞ Sin empezar`; la cinta quedó
+  para el libro en lectura, que es lo que una cinta marca ("La Clásica,
+  impresa a dos tintas"). Sigue pendiente solo en la Moderna.
 
 - [ ] `bajo` 2026-09-18 — **Fichas: separadores con pestaña y hoja de
   préstamo.** Las dos ideas que quedaron fuera del rediseño de la piel Fichas

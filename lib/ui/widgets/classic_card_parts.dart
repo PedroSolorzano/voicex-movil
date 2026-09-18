@@ -6,8 +6,19 @@ import 'library_skin.dart';
 /// sheet show them as plain prose.
 String? plainDescription(String? raw) {
   final text = raw
-      ?.replaceAll(RegExp(r'<[^>]*>'), '')
+      // A space, not nothing: `</p><p>` is a paragraph break, and dropping
+      // it glued "deshabitado.Encuentran" into one word.
+      ?.replaceAll(RegExp(r'<[^>]*>'), ' ')
+      // …but not before punctuation: "Fin<b>.</b>" is "Fin.", not "Fin .".
+      .replaceAllMapped(RegExp(r'\s+([.,;:!?])'), (m) => m[1]!)
       .replaceAll(RegExp(r'\s+'), ' ')
+      // Books imported before the parser put a space between paragraphs have
+      // them glued in the database ("deshabitado.Encuentran", "harías?El").
+      // A lowercase letter before the stop keeps "J.R.R. Tolkien" and
+      // "EE.UU." out of it.
+      .replaceAllMapped(
+          RegExp(r'(\p{Ll}[.!?…»”"]+)([\p{Lu}¿¡«“])', unicode: true),
+          (m) => '${m[1]} ${m[2]}')
       .trim();
   return (text == null || text.isEmpty) ? null : text;
 }
@@ -17,17 +28,19 @@ String? plainDescription(String? raw) {
 String? yearOf(String? publishedDate) =>
     publishedDate == null ? null : RegExp(r'\d{4}').firstMatch(publishedDate)?[0];
 
-/// What the classic skins show under the title: language, year and progress,
-/// in the place a real catalogue card carries its call number.
-String catalogLine(Map<String, dynamic> book, double progress) {
-  final parts = <String>[
-    (book['language'] as String? ?? 'es').toUpperCase(),
-    ?yearOf(book['published_date'] as String?),
-    progress > 0.001
-        ? '${(progress * 100).toStringAsFixed(0)} % leído'
-        : 'Sin empezar',
-  ];
-  return parts.join('  ·  ');
+/// Language and year, under a lot of the classic skin: `ES  ·  1984`.
+String classicImprint(Map<String, dynamic> book) => [
+      (book['language'] as String? ?? 'es').toUpperCase(),
+      ?yearOf(book['published_date'] as String?),
+    ].join('  ·  ');
+
+/// Where the reader is with [book], as the classic skin prints it in red.
+String classicStatus(Map<String, dynamic> book, double progress) {
+  if (book['finished_at'] != null || progress >= 0.995) return 'Leído';
+  if (progress > 0.001) {
+    return 'En lectura · ${(progress * 100).toStringAsFixed(0)} %';
+  }
+  return 'Sin empezar';
 }
 
 /// The call number typed in the corner of a catalogue card: language, title
@@ -58,17 +71,22 @@ List<String> callNumber(Map<String, dynamic> book) {
   ];
 }
 
-/// The real cover, bound: dark leather edge, a gold fillet, a short shadow.
+/// The real cover, bound: a leather spine with raised bands, a gold fillet
+/// round the board, and the page block showing along the fore-edge and foot.
 ///
 /// The mockups draw a generic leather tome; the requirement is that the book's
-/// own cover is always visible, so it goes inside the binding instead of being
-/// replaced by it. Without a cover, the binding carries the title the way a
+/// own cover is always visible, so it goes on the board instead of being
+/// replaced by it. Without a cover, the board carries the title the way a
 /// spine would.
+///
+/// [ribbon] hangs a silk bookmark out of the foot of the volume: the book
+/// that is being read. It overflows [height] by [ribbonDrop].
 class FramedCover extends StatelessWidget {
   final String? coverPath;
   final String title;
   final double width;
   final double height;
+  final bool ribbon;
 
   const FramedCover({
     super.key,
@@ -76,39 +94,91 @@ class FramedCover extends StatelessWidget {
     required this.title,
     required this.width,
     required this.height,
+    this.ribbon = false,
   });
 
   static const _leather = Color(0xFF4A2A18);
   static const _gold = Color(0xFFC9A45C);
+  static const _spineWidth = 10.0;
+
+  /// How far the ribbon hangs below the volume.
+  static const ribbonDrop = 20.0;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: width,
       height: height,
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: _leather,
-        borderRadius: BorderRadius.circular(3),
-        boxShadow: const [
-          BoxShadow(color: Color(0x66000000), blurRadius: 4, offset: Offset(1, 2)),
-        ],
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: _gold, width: 1),
-        ),
-        // No existsSync(): this runs while the list scrolls, and errorBuilder
-        // already covers a file that went missing.
-        child: coverPath == null
-            ? _spine()
-            : Image.file(
-                File(coverPath!),
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: double.infinity,
-                errorBuilder: (_, _, _) => _spine(),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          if (ribbon)
+            Positioned(
+              left: width * 0.55,
+              bottom: -ribbonDrop,
+              child: const CustomPaint(
+                  size: Size(9, ribbonDrop + 8), painter: _Ribbon()),
+            ),
+          // The page block, a little smaller than the boards all round.
+          const Positioned(
+            left: _spineWidth,
+            top: 3,
+            right: 0,
+            bottom: 0,
+            child: CustomPaint(painter: _PageBlock()),
+          ),
+          // The front board and the spine.
+          Positioned(
+            left: 0,
+            top: 0,
+            right: 3,
+            bottom: 4,
+            child: DecoratedBox(
+              decoration: const BoxDecoration(
+                color: _leather,
+                borderRadius: BorderRadius.horizontal(
+                    left: Radius.circular(4), right: Radius.circular(2)),
+                boxShadow: [
+                  BoxShadow(
+                      color: Color(0x66000000),
+                      blurRadius: 4,
+                      offset: Offset(1, 2)),
+                ],
               ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(
+                    width: _spineWidth,
+                    child: CustomPaint(painter: _Spine()),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(1, 3, 3, 3),
+                      child: DecoratedBox(
+                        position: DecorationPosition.foreground,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: _gold, width: 1),
+                        ),
+                        // No existsSync(): this runs while the list scrolls,
+                        // and errorBuilder already covers a missing file.
+                        child: coverPath == null
+                            ? _spine()
+                            : Image.file(
+                                File(coverPath!),
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: double.infinity,
+                                errorBuilder: (_, _, _) => _spine(),
+                              ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -128,6 +198,93 @@ class FramedCover extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// The spine: darker leather, rounded by a highlight, five raised bands.
+class _Spine extends CustomPainter {
+  const _Spine();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    canvas.drawRRect(
+      RRect.fromRectAndCorners(rect,
+          topLeft: const Radius.circular(4),
+          bottomLeft: const Radius.circular(4)),
+      Paint()
+        ..shader = const LinearGradient(
+          colors: [Color(0xFF24120A), Color(0xFF5A3620), Color(0xFF2E180D)],
+          stops: [0, 0.45, 1],
+        ).createShader(rect),
+    );
+    final band = Paint()
+      ..color = FramedCover._gold.withValues(alpha: 0.85)
+      ..strokeWidth = 1.2;
+    final shade = Paint()
+      ..color = const Color(0x73000000)
+      ..strokeWidth = 1;
+    for (final f in const [0.12, 0.3, 0.5, 0.7, 0.88]) {
+      final y = size.height * f;
+      canvas.drawLine(Offset(1, y + 1.2), Offset(size.width, y + 1.2), shade);
+      canvas.drawLine(Offset(1, y), Offset(size.width, y), band);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_Spine old) => false;
+}
+
+/// The edges of the leaves, seen past the boards.
+class _PageBlock extends CustomPainter {
+  const _PageBlock();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(
+        Offset.zero & size, Paint()..color = const Color(0xFFE9DCBB));
+    final leaf = Paint()
+      ..color = const Color(0x59795C36)
+      ..strokeWidth = 0.6;
+    // Fore-edge, then foot.
+    for (var x = size.width - 2.4; x < size.width; x += 1.2) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), leaf);
+    }
+    for (var y = size.height - 3.2; y < size.height; y += 1.2) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), leaf);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PageBlock old) => false;
+}
+
+/// A silk bookmark, swallow-tailed.
+class _Ribbon extends CustomPainter {
+  const _Ribbon();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final silk = Path()
+      ..moveTo(0, 0)
+      ..lineTo(w, 0)
+      ..lineTo(w, h)
+      ..lineTo(w / 2, h - 5)
+      ..lineTo(0, h)
+      ..close();
+    canvas.drawPath(silk.shift(const Offset(1, 1)),
+        Paint()..color = const Color(0x40000000));
+    canvas.drawPath(
+      silk,
+      Paint()
+        ..shader = const LinearGradient(
+          colors: [Color(0xFF7A1F16), Color(0xFFB23A2C), Color(0xFF8A261B)],
+        ).createShader(Offset.zero & size),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_Ribbon old) => false;
 }
 
 /// Details, language and delete, behind one quiet button.

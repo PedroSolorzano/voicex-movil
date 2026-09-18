@@ -233,6 +233,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   'classic' => ClassicShelfCard(
                       book: book,
                       progress: entry.progress,
+                      number: i + 1,
                       isLast: i == entries.length - 1,
                       onRead: onRead,
                       onDelete: onDelete,
@@ -393,7 +394,40 @@ class _SkinBackground extends StatelessWidget {
           repeat: ImageRepeat.repeat,
         ),
       ),
-      child: child,
+      // The classic page has browned at the edges, where the air got to it.
+      // Over the list and fixed, like the page itself; it takes no touches.
+      child: skin.name != 'classic'
+          ? child
+          : Stack(
+              fit: StackFit.expand,
+              children: [
+                child,
+                for (final vertical in const [false, true])
+                  IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: vertical
+                              ? Alignment.topCenter
+                              : Alignment.centerLeft,
+                          end: vertical
+                              ? Alignment.bottomCenter
+                              : Alignment.centerRight,
+                          colors: const [
+                            Color(0x336B4420),
+                            Color(0x006B4420),
+                            Color(0x006B4420),
+                            Color(0x336B4420),
+                          ],
+                          stops: vertical
+                              ? const [0, 0.05, 0.95, 1]
+                              : const [0, 0.09, 0.91, 1],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
     );
   }
 }

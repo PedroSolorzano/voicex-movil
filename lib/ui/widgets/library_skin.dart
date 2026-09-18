@@ -78,6 +78,11 @@ class LibrarySkin {
 
   bool get isModern => name == 'modern';
 
+  /// The second ink of the classic skin: initials and reading status, the
+  /// way old printers kept red for where the eye had to land. Held to text
+  /// contrast on the parchment (test/library_skin_test.dart).
+  static const rubric = Color(0xFF8E2A1E);
+
   /// Text on the wooden bar. Gold, whatever [accent] is on the page.
   static const onWood = Color(0xFFEAD9A8);
 

@@ -149,7 +149,24 @@ class RankHeader extends StatelessWidget {
                   border: Border.all(
                       color: const Color(0xFFB08A45).withValues(alpha: 0.5)),
                 ),
-                child: body,
+                child: Column(
+                  children: [
+                    // What a bookplate says before it says whose.
+                    ExcludeSemantics(
+                      child: Text(
+                        '❧  EX LIBRIS  ☙',
+                        style: TextStyle(
+                          fontFamily: 'EBGaramond',
+                          fontSize: 12.5,
+                          letterSpacing: 2.5,
+                          color: skin.accent,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    body,
+                  ],
+                ),
               ),
             ),
           ),

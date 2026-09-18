@@ -9,6 +9,52 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## Sin publicar
+
+### La Clásica, impresa a dos tintas
+
+Después de rehacer *Fichas*, la *Clásica* era la piel floja: una lista con
+buena tipografía sobre pergamino, y nada más que dijera "libro antiguo". Es la
+página de un catálogo de librero anticuario, así que se le dio lo que tiene una
+página impresa antes de 1800 (`lib/ui/widgets/classic_shelf_card.dart`):
+
+- **Capitular en rojo y texto justificado.** La descripción se abre con una
+  inicial de dos líneas en la segunda tinta —*rubricada*, como se hacía— y va
+  justificada. Flutter no tiene capitulares: `_DropCapText` mide dónde acaba
+  la segunda línea, deja hasta ahí al lado de la inicial y el resto debajo a
+  todo el ancho. Si la descripción no empieza por letra ("—¿Quién…"), va sin
+  capitular. Para un lector de pantalla sigue siendo un solo texto.
+- **Lotes numerados en romanos**: `N.º XIV`.
+- **El estado, en la misma tinta roja**, con la manecilla de los impresores
+  para lo que aún no se abrió: `☞ Sin empezar`, `En lectura · 24 %`,
+  `❧ Leído`. El rojo se usa como lo usaban: solo donde el ojo tiene que caer.
+  `LibrarySkin.rubric` pasa WCAG AA sobre el pergamino, porque es texto.
+- **La cinta de seda** cuelga del libro que se está leyendo. Era la idea
+  anotada para "Sin empezar", puesta en su sitio natural: una cinta marca por
+  dónde vas, no lo que no has abierto; de eso se ocupa la manecilla.
+- **El volumen, encuadernado de verdad** (`FramedCover`): lomo con cinco
+  nervios dorados y el canto de las hojas asomando, con la portada real en la
+  tapa. Antes era un marco de cuero plano.
+- Separador con rombos y líneas que se afinan hacia los márgenes, los bordes
+  de la página tostados, y la cabecera de rango encabezada **EX LIBRIS**.
+
+**Dos errores que destapó la prueba en el teléfono**, los dos anteriores a
+este cambio o nacidos con él:
+
+- La capitular **se comía una palabra**: "Aquel día el [mundo] cambió". La
+  medición no heredaba el estilo por defecto del tema —que trae espaciado
+  entre letras— y calculaba el salto de línea una palabra después de donde se
+  dibuja. Ahora mide con el estilo fusionado, y un test compara el corte con
+  la línea realmente dibujada (falla sin el arreglo).
+- Las descripciones salían con **párrafos pegados** ("deshabitado.Encuentran",
+  "¿lo harías?El 22"), en las tres pieles y en Detalles: al importar,
+  `body.text` del parser HTML une los bloques sin nada en medio
+  (`_stripHtml`, `lib/epub/parser.dart`). Arreglado al importar, y también al
+  mostrar (`plainDescription`) para los libros que ya están en la base, sin
+  tocar siglas ni iniciales ("J.R.R. Tolkien", "EE.UU.").
+
+---
+
 ## 0.10.1-preview.1 — 2026-09-18
 
 Solo la piel *Fichas*, rehecha. Sin cambios de datos ni de esquema.
