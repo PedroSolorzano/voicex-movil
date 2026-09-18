@@ -79,9 +79,13 @@ try {
     $memoria = New-Object IO.MemoryStream
     $flujo.CopyTo($memoria)
     $flujo.Close()
-    # Latin1 mapea byte a carácter, así que la búsqueda no depende de decodificar
-    # el binario como texto válido.
-    $contenido = [Text.Encoding]::Latin1.GetString($memoria.ToArray())
+    # ISO-8859-1 mapea byte a carácter, así que la búsqueda no depende de
+    # decodificar el binario como texto válido. GetEncoding(28591) en vez de
+    # ::Latin1: esa propiedad no existe en Windows PowerShell 5.1 (.NET
+    # Framework), solo desde .NET 5, y el `powershell` que trae Windows por
+    # defecto sigue siendo 5.1 -- ahí el script llegaba a compilar y fallaba
+    # recién en esta línea, tirando los minutos de build.
+    $contenido = [Text.Encoding]::GetEncoding(28591).GetString($memoria.ToArray())
     $memoria.Dispose()
 } finally {
     $zip.Dispose()
