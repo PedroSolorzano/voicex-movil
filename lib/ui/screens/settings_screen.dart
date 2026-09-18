@@ -531,6 +531,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               'papel y no siguen el tema oscuro.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Mostrar mi rango de lector'),
+              subtitle: const Text(
+                  'Tu nivel y las páginas leídas o escuchadas, encima de la '
+                  'lista. Apagarlo solo lo esconde: la cuenta sigue.'),
+              value: s.showReaderRank,
+              onChanged: (v) => _update(s.copyWith(showReaderRank: v)),
+            ),
           ]),
 
           _Section(title: 'Almacenamiento', children: [

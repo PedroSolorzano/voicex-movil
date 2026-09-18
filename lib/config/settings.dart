@@ -103,6 +103,12 @@ class AppSettings {
   /// Piel de la biblioteca: `modern`, `catalog` (fichas) o `classic`.
   String librarySkin;
 
+  /// Mostrar el rango de lector encima de la biblioteca.
+  ///
+  /// Apagarlo solo lo esconde: el registro sigue, para que encenderlo después
+  /// no empiece de cero.
+  bool showReaderRank;
+
   /// Voz concreta del motor del teléfono, por idioma.
   ///
   /// Vacío significa "la que el sistema tenga por defecto para ese idioma". Un
@@ -157,6 +163,7 @@ class AppSettings {
     this.readerTheme = 'sepia',
     this.followAudioScroll = true,
     this.librarySkin = 'modern',
+    this.showReaderRank = true,
     this.androidVoiceEs = '',
     this.androidVoiceEn = '',
     this.keepScreenOn = true,
@@ -293,6 +300,7 @@ class AppSettings {
       readerTheme: prefs.getString('readerTheme') ?? 'sepia',
       followAudioScroll: prefs.getBool('followAudioScroll') ?? true,
       librarySkin: prefs.getString('librarySkin') ?? 'modern',
+      showReaderRank: prefs.getBool('showReaderRank') ?? true,
       androidVoiceEs: prefs.getString('androidVoiceEs') ?? '',
       androidVoiceEn: prefs.getString('androidVoiceEn') ?? '',
       keepScreenOn: prefs.getBool('keepScreenOn') ?? true,
@@ -328,6 +336,7 @@ class AppSettings {
     await prefs.setString('readerTheme', readerTheme);
     await prefs.setBool('followAudioScroll', followAudioScroll);
     await prefs.setString('librarySkin', librarySkin);
+    await prefs.setBool('showReaderRank', showReaderRank);
     await prefs.setString('androidVoiceEs', androidVoiceEs);
     await prefs.setString('androidVoiceEn', androidVoiceEn);
     await prefs.setBool('keepScreenOn', keepScreenOn);
@@ -364,6 +373,7 @@ class AppSettings {
     String? readerTheme,
     bool? followAudioScroll,
     String? librarySkin,
+    bool? showReaderRank,
     String? androidVoiceEs,
     String? androidVoiceEn,
     bool? keepScreenOn,
@@ -399,6 +409,7 @@ class AppSettings {
         readerTheme: readerTheme ?? this.readerTheme,
         followAudioScroll: followAudioScroll ?? this.followAudioScroll,
         librarySkin: librarySkin ?? this.librarySkin,
+        showReaderRank: showReaderRank ?? this.showReaderRank,
         androidVoiceEs: androidVoiceEs ?? this.androidVoiceEs,
         androidVoiceEn: androidVoiceEn ?? this.androidVoiceEn,
         keepScreenOn: keepScreenOn ?? this.keepScreenOn,

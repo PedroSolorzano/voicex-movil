@@ -188,6 +188,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             // there it would push the matches down for nothing.
             final stats = ref.watch(readingStatsProvider).valueOrNull;
             final header = stats != null &&
+                (ref.watch(settingsProvider).valueOrNull?.showReaderRank ??
+                    true) &&
                 ref.watch(librarySearchProvider).trim().isEmpty;
             final offset = header ? 1 : 0;
 
