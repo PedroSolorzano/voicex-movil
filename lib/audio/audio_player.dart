@@ -152,7 +152,8 @@ class VoiceXAudioHandler extends BaseAudioHandler with SeekHandler {
   /// Loads a freshly synthesized paragraph and starts playing it.
   Future<void> playFile(String filePath, {int startMs = 0, double speed = 1.0}) async {
     _completionHandled = false;
-    _holding = false;
+    // The hold lasts until the new clip is playing: loading the file emits
+    // player states too, and each would otherwise report a pause.
     await _player.setFilePath(filePath);
     await _player.setSpeed(speed);
     if (startMs > 0) {
@@ -162,6 +163,7 @@ class VoiceXAudioHandler extends BaseAudioHandler with SeekHandler {
     // State and ticker are set BEFORE play() because just_audio 0.9.x returns a
     // Future that only completes when playback ends — awaiting it would block.
     state = AudioState.playing;
+    _holding = false;
     _startTicker();
     _broadcast();
 
