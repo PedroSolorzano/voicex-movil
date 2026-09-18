@@ -9,7 +9,11 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
-## Sin publicar
+## 0.10.1-preview.1 — 2026-09-18
+
+Solo la piel *Fichas*, rehecha. Sin cambios de datos ni de esquema.
+
+Se compila con `compilar.ps1 -Limpio`: cambió la versión.
 
 ### Las fichas parecen fichas
 
