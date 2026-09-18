@@ -9,6 +9,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # Solo para que los diálogos propios de Material (el selector de hora, el
+  # menú de copiar y pegar) hablen español como el resto de la app.
+  flutter_localizations:
+    sdk: flutter
 
   # State management
   flutter_riverpod: ^2.6.1

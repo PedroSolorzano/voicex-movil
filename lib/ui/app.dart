@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../services/reading_reminders.dart';
@@ -85,6 +86,13 @@ class _VoiceXAppState extends ConsumerState<VoiceXApp> {
 
     return MaterialApp.router(
       title: 'VoiceX',
+      // Every string of our own is already Spanish; this translates the ones
+      // that belong to Material itself — the time picker said "Cancel" and
+      // "OK". Fixed to Spanish rather than following the phone, because the
+      // rest of the app does not follow it either.
+      locale: const Locale('es'),
+      supportedLocales: const [Locale('es')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       theme: _buildTheme(Brightness.light),
       darkTheme: _buildTheme(Brightness.dark),
       themeMode: switch (themeStr) {
