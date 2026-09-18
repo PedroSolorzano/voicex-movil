@@ -119,3 +119,21 @@ referencia esta entrada, no al revés.
 
 ---
 
+## 2026-09-06 17:46 — bug — pedro
+
+**Contexto:** El talismán, capítulo 10, Edge (F5 no disponible)
+
+> Identifique posible bug, descargué todo el capitulo era alrededor de 100 parrafos, se tardo un tiempo aceptable no mostro ningún error sin embargo cuando me dispongo a escuchar me grnera la voz de edge, me sale 104 párrafos descargados peroe sale solo 9 megas aproximadamente, no me hace sentido esos… (recortado)
+
+**Diagnóstico:**
+- 11:42:06  /health  unreachable  8001ms (intento 2)
+- 11:41:58  /health  unreachable  5002ms
+- 11:41:31  /health  unreachable  8003ms (intento 2)
+- 11:41:23  /health  unreachable  5003ms
+- 11:41:12  /health  unreachable  8002ms (intento 2)
+- 11:41:04  /health  unreachable  5002ms
+- 11:40:53  /health  unreachable  8001ms (intento 2)
+- 11:40:44  /health  unreachable  5001ms
+
+---
+
