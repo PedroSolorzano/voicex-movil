@@ -291,6 +291,15 @@ class _WeekBars extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final most = days.fold<int>(0, (m, d) => d.chars > m ? d.chars : m);
+    // Seven empty bars are a 120 px blank with dashes under it: a sentence
+    // says the same in one line.
+    if (most == 0) {
+      return Text(
+        'Todavía no hay lectura esta semana.',
+        style: theme.textTheme.bodyMedium
+            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+      );
+    }
     return SizedBox(
       height: 120,
       child: Row(
@@ -309,9 +318,7 @@ class _WeekBars extends StatelessWidget {
                       width: 22,
                       // A day with some reading always shows a sliver, so it
                       // does not look the same as a day with none.
-                      height: most == 0
-                          ? 2
-                          : (d.chars == 0 ? 2 : 6 + 80 * d.chars / most),
+                      height: d.chars == 0 ? 2 : 6 + 80 * d.chars / most,
                       decoration: BoxDecoration(
                         color: i == days.length - 1
                             ? theme.colorScheme.primary
