@@ -59,6 +59,35 @@ de acá.
 
 ## TTS / Audio
 
+- [ ] `alto` 2026-09-18 — **Un mismo párrafo se sintetiza dos veces, y por eso
+  la espera entre párrafos se siente como un cuelgue.** `_schedulePrefetch`
+  empieza a generar el párrafo N+1 mientras suena el N, pero `_ensureAudio`
+  (`lib/ui/providers/reader_provider.dart:768`) solo consulta la caché **en
+  disco**: no lleva registro de lo que ya está en vuelo. Si la reproducción
+  llega a N+1 antes de que la prelectura acabe de escribir el archivo —que
+  tarda de 3 a 20 s—, no encuentra nada y **vuelve a pedirlo a la red**.
+  Medido en el S21 con Kokoro el 2026-09-18: **4 de 12 párrafos pedidos dos
+  veces, 35 s de los 106 s de CPU del servidor tirados (33 %)**, y las dos
+  síntesis del mismo texto compiten entre sí — el par de 738 caracteres tardó
+  11.7 s la primera y 20.6 s la segunda. Con un tercio del servidor quemado en
+  trabajo repetido la prelectura nunca se pone por delante, y cuando va por
+  detrás cada frontera de párrafo se paga completa en silencio (14 s de media
+  en párrafos de más de 600 caracteres, hasta 20.6 s). Es lo que un probador
+  reportó como "no me carga si el teléfono está apagado"
+  (`docs/bugs/REPORTES_TESTERS.md`, 2026-09-18 17:24): no es el wake lock que
+  arregló 0.10.0 —durante el fallo el servicio siguió en primer plano,
+  Tailscale nunca cayó y las peticiones nunca dejaron de salir—, es la espera
+  real de la síntesis. El duplicado tiene un segundo efecto: agota las dos
+  conexiones que el proxy da por probador (`limit_conn contester 2`,
+  `tools/proxy/nginx.conf:150`), así que cualquier tercera petición se lleva un
+  `429` instantáneo, como el de las 17:24:47 de ese mismo día.
+  Arreglarlo es un registro de futuros por párrafo, para que la reproducción se
+  enganche a la síntesis que la prelectura ya empezó en vez de lanzar otra.
+  **Queda sin verificar** si deduplicar basta: si un párrafo tarda 14 s y el
+  anterior dura menos, la prelectura seguirá sin alcanzar, y haría falta
+  anticipar más de un párrafo o mover Kokoro a GPU. También quedó sin cerrar un
+  tramo de 4 min 30 s sin una sola petición (12:30 de ese día) que puede ser
+  simplemente que se pausó la app, o un cuelgue distinto y peor.
 - [x] `medio` 2026-08-30 — **La clave de caché de Kokoro no lleva el idioma.**
   `kokoroVoiceEs` y `kokoroVoiceEn` valen `af_bella` por defecto, así que un
   libro con el idioma cambiado de ES a EN reutiliza el audio ya cacheado
