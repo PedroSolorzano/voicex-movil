@@ -434,7 +434,7 @@ atendido.
   de diseño propias. Las dos llevan la portada real encuadernada. Ver
   `RELEASES.md`, 0.10.0.
 
-- [ ] `bajo` 2026-09-17 — **"Sin empezar" casi no se ve: marcarlo con una
+- [x] `bajo` 2026-09-17 — **"Sin empezar" casi no se ve: marcarlo con una
   cinta.** Hoy es solo texto pequeño (`labelSmall` en la moderna,
   `book_card.dart:78-81`; Cinzel de 11,5 px al final de la línea de catálogo
   en las clásicas, `catalogLine` en `classic_card_parts.dart`), y en una lista
@@ -448,7 +448,9 @@ atendido.
   `catalog_card.dart`; ver `RELEASES.md`, "Las fichas parecen fichas"), **y en
   la Clásica** con la manecilla en tinta roja, `☞ Sin empezar`; la cinta quedó
   para el libro en lectura, que es lo que una cinta marca ("La Clásica,
-  impresa a dos tintas"). Sigue pendiente solo en la Moderna.
+  impresa a dos tintas"). **Y en la Moderna** con el chip `NUEVO` en el color
+  de la portada ("La Moderna deja de ser la tarjeta de fábrica"). Cerrado en
+  las tres.
 
 - [ ] `bajo` 2026-09-18 — **Fichas: separadores con pestaña y hoja de
   préstamo.** Las dos ideas que quedaron fuera del rediseño de la piel Fichas

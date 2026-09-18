@@ -195,9 +195,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
             return ListView.builder(
               // Room for the FAB over the last entry.
-              padding: skin.isModern
-                  ? null
-                  : const EdgeInsets.only(top: 6, bottom: 88),
+              padding: EdgeInsets.only(top: skin.isModern ? 0 : 6, bottom: 88),
               itemCount: entries.length + offset,
               itemBuilder: (context, index) {
                 if (header && index == 0) {

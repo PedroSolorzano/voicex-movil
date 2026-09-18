@@ -53,6 +53,45 @@ este cambio o nacidos con él:
   mostrar (`plainDescription`) para los libros que ya están en la base, sin
   tocar siglas ni iniciales ("J.R.R. Tolkien", "EE.UU.").
 
+### La Moderna deja de ser la tarjeta de fábrica
+
+Con las otras dos rehechas, la piel *Moderna* era la pobre: la `Card` de
+Material tal cual, todas del mismo gris tuviera la portada que tuviera, tres
+íconos en fila —info, basura y reproducir, los tres igual de ruidosos— y
+"Sin empezar" en la letra más pequeña de la tarjeta
+(`lib/ui/widgets/book_card.dart`).
+
+- **Color ambiente.** Cada tarjeta se tiñe con los colores de *su* portada,
+  como hacen las apps de música con la carátula: el degradado de fondo, el
+  resplandor bajo la portada, la barra de progreso y el botón de reproducir
+  salen de un `ColorScheme.fromImageProvider` de la imagen. Una estantería se
+  parece a sus libros. La extracción decodifica y cuantiza, así que se hace
+  una vez por portada y brillo y se guarda en memoria; mientras llega —y en un
+  libro sin portada— la tarjeta lleva los colores de la app y el cambio entra
+  con una transición, sin saltos. Al usar los roles de Material 3
+  (`primary`/`onPrimary`, `secondaryContainer`/`onSecondaryContainer`) el
+  contraste del texto sobre cada color lo garantiza el propio esquema.
+- **Menos cromo**: *Detalles* y *Eliminar* pasan a un menú `⋮`, y queda un
+  solo botón, redondo y del color del libro. El idioma sigue a un toque,
+  como chip, porque de él depende la voz.
+- **El estado, a la vista**: chip `NUEVO` en el color fuerte del libro,
+  `24 %` o `LEÍDO ✓`. Con esto "Sin empezar casi no se ve" queda resuelto en
+  las tres pieles.
+- Portada más grande y redondeada, barra de progreso gruesa, y la cabecera de
+  rango con el **nivel dentro de un anillo** que se va cerrando, en vez de
+  ícono y barra.
+- La lista deja sitio al botón *Agregar EPUB*, que en esta piel tapaba el
+  último libro.
+
+La tarjeta moderna no tenía tests; ahora sí (`test/book_card_test.dart`),
+incluido uno que escribe una portada roja a disco y comprueba que el botón
+sale rojizo.
+
+Esto retira lo que decía 0.10.0 de la Moderna —"idéntica píxel por píxel"—:
+era la promesa correcta al introducir las pieles, no una razón para dejarla
+atrás. El *tema* sigue intacto: `libraryThemeData(modern, app)` devuelve el
+de la app sin tocar.
+
 ---
 
 ## 0.10.1-preview.1 — 2026-09-18

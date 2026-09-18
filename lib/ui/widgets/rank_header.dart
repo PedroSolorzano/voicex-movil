@@ -43,19 +43,22 @@ class RankHeader extends StatelessWidget {
           '${stats.title}  ·  Nivel ${stats.level}',
           style: skin.isModern
               ? theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w600)
+                  ?.copyWith(fontWeight: FontWeight.w700)
               : skinTitleStyle(17, skin.ink!),
           textAlign: skin.isModern ? TextAlign.start : TextAlign.center,
         ),
-        const SizedBox(height: 8),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(2),
-          child: LinearProgressIndicator(
-            value: stats.progressToNext,
-            minHeight: skin.isModern ? 6 : 3,
+        // On the modern skin the ring beside the text is the progress.
+        if (skin.isModern)
+          const SizedBox(height: 4)
+        else ...[
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+                value: stats.progressToNext, minHeight: 3),
           ),
-        ),
-        const SizedBox(height: 6),
+          const SizedBox(height: 6),
+        ],
         Text(details, style: theme.textTheme.bodySmall),
         Text(next, style: theme.textTheme.bodySmall),
       ],
@@ -99,21 +102,38 @@ class RankHeader extends StatelessWidget {
         button: true,
         label: semantics,
         excludeSemantics: true,
-        child: Card(
-          margin: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
-              child: Row(
-                children: [
-                  Icon(Icons.workspace_premium_outlined,
-                      size: 32, color: theme.colorScheme.primary),
-                  const SizedBox(width: 14),
-                  Expanded(child: body),
-                  const Icon(Icons.chevron_right),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  theme.colorScheme.primaryContainer,
+                  theme.colorScheme.surfaceContainerLow,
                 ],
+              ),
+            ),
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(22),
+                onTap: onTap,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
+                  child: Row(
+                    children: [
+                      _LevelRing(
+                          level: stats.level, progress: stats.progressToNext),
+                      const SizedBox(width: 16),
+                      Expanded(child: body),
+                      Icon(Icons.chevron_right,
+                          color: theme.colorScheme.onSurfaceVariant),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -171,6 +191,45 @@ class RankHeader extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The level inside a ring that closes as the next one gets nearer.
+class _LevelRing extends StatelessWidget {
+  final int level;
+  final double progress;
+  const _LevelRing({required this.level, required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 58,
+      height: 58,
+      child: Stack(
+        fit: StackFit.expand,
+        alignment: Alignment.center,
+        children: [
+          CircularProgressIndicator(
+            value: progress,
+            strokeWidth: 5,
+            strokeCap: StrokeCap.round,
+            color: scheme.primary,
+            backgroundColor: scheme.primary.withValues(alpha: 0.18),
+          ),
+          Center(
+            child: Text(
+              '$level',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: scheme.onPrimaryContainer,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
