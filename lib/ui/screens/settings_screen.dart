@@ -584,8 +584,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               contentPadding: EdgeInsets.zero,
               title: const Text('Recordatorio para leer'),
               subtitle: Text(s.dailyReminderAt.isEmpty
-                  ? 'Un aviso al día, a la hora que elijas.'
-                  : 'Todos los días a las ${s.dailyReminderAt}. '
+                  // "Hacia", because the alarm is inexact on purpose (no
+                  // exact-alarm permission): Android may deliver it up to an
+                  // hour late, and promising the minute would be false.
+                  ? 'Un aviso al día, hacia la hora que elijas.'
+                  : 'Todos los días hacia las ${s.dailyReminderAt}. '
                       'Toca la hora para cambiarla.'),
               value: s.dailyReminderAt.isNotEmpty,
               onChanged: (v) async {

@@ -56,8 +56,10 @@ libros al año» que citó la prensa, porque el comunicado de INEGI no lo public
 
 **Avisos opcionales, apagados de fábrica**: un resumen el domingo por la noche
 (solo si se leyó algo esa semana, y si fue menos que la anterior no lo dice) y
-un recordatorio diario a la hora que se elija. El permiso se pide al encender
-el interruptor. Nada sale del teléfono y ningún aviso lleva texto de un libro.
+un recordatorio diario hacia la hora que se elija: la alarma es inexacta para
+no pedir el permiso de alarmas exactas, y en el teléfono de prueba Android le
+dio una hora de margen, así que Ajustes dice "hacia las 21:30" y no "a las".
+El permiso se pide al encender el interruptor. Nada sale del teléfono y ningún aviso lleva texto de un libro.
 
 Esquema de base de datos 9: `reading_days` y `books.finished_at`. Lo leído
 antes de esta versión no se cuenta; la posición guardada dice hasta dónde, no
