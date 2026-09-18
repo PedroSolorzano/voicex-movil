@@ -260,6 +260,26 @@ class ReadingLogRepo {
     return changed > 0;
   }
 
+  /// The book most recently read that is started and not yet finished, with
+  /// how far into it the reader is — the translucent spine on top of the
+  /// tower of finished books.
+  Future<({String title, int totalParagraphs, int at})?> currentBook() async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT b.title, b.total_paragraphs, p.global_index
+      FROM reading_progress p JOIN books b ON b.id = p.book_id
+      WHERE b.finished_at IS NULL AND p.global_index > 0
+      ORDER BY p.updated_at DESC LIMIT 1
+    ''');
+    if (rows.isEmpty) return null;
+    final r = rows.first;
+    return (
+      title: r['title'] as String,
+      totalParagraphs: (r['total_paragraphs'] as int?) ?? 0,
+      at: r['global_index'] as int,
+    );
+  }
+
   /// Finished books, most recent first.
   Future<List<Map<String, dynamic>>> finishedBooks() async {
     final db = await _db;

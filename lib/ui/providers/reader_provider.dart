@@ -1366,6 +1366,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
           _milestone('Terminaste «${book.title}»');
         }
       }
+      // Only recomputed if something is watching it: the library underneath
+      // the reader, so that going back shows this paragraph already counted.
+      ref.invalidate(readingStatsProvider);
     } catch (e) {
       dev.log('[Reader] reading credit failed: $e');
     }

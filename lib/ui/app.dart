@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'providers/settings_provider.dart';
 import 'screens/library_screen.dart';
+import 'screens/progress_screen.dart';
 import 'screens/reader_screen.dart';
 import 'screens/report_screen.dart';
 import 'screens/settings_screen.dart';
@@ -27,6 +28,10 @@ final _router = GoRouter(
     GoRoute(
       path: '/settings',
       builder: (context, state) => const SettingsScreen(),
+    ),
+    GoRoute(
+      path: '/progress',
+      builder: (context, state) => const ProgressScreen(),
     ),
     GoRoute(
       path: '/report',

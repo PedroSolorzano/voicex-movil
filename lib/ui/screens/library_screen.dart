@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../errors.dart';
 import '../providers/app_info_provider.dart';
 import '../providers/library_provider.dart';
+import '../providers/reading_stats_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/share_import_provider.dart';
 import '../widgets/book_card.dart';
@@ -14,6 +15,7 @@ import '../widgets/book_info_sheet.dart';
 import '../widgets/catalog_card.dart';
 import '../widgets/classic_shelf_card.dart';
 import '../widgets/library_skin.dart';
+import '../widgets/rank_header.dart';
 
 class LibraryScreen extends ConsumerStatefulWidget {
   const LibraryScreen({super.key});
@@ -182,13 +184,28 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     : _EmptyState(onAdd: () => _pickEpub(context)),
               );
             }
+            // The rank sits above the list, but not over search results:
+            // there it would push the matches down for nothing.
+            final stats = ref.watch(readingStatsProvider).valueOrNull;
+            final header = stats != null &&
+                ref.watch(librarySearchProvider).trim().isEmpty;
+            final offset = header ? 1 : 0;
+
             return ListView.builder(
               // Room for the FAB over the last entry.
               padding: skin.isModern
                   ? null
                   : const EdgeInsets.only(top: 6, bottom: 88),
-              itemCount: entries.length,
-              itemBuilder: (context, i) {
+              itemCount: entries.length + offset,
+              itemBuilder: (context, index) {
+                if (header && index == 0) {
+                  return RankHeader(
+                    stats: stats,
+                    skin: skin,
+                    onTap: () => context.push('/progress'),
+                  );
+                }
+                final i = index - offset;
                 final entry = entries[i];
                 final book = entry.book;
                 final id = book['id'] as int;
@@ -267,7 +284,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       return;
     }
     if (context.mounted) {
-      context.push('/reader/${book['id']}', extra: filePath);
+      await context.push('/reader/${book['id']}', extra: filePath);
+      // Back from the book: the rank has to show what was just read.
+      ref.invalidate(readingStatsProvider);
     }
   }
 
