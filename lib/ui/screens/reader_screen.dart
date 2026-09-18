@@ -623,6 +623,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           : SnackBarAction(
               label: 'Añadir nota',
               onPressed: () {
+                // This snackbar is hosted above the route, so it survives
+                // leaving the reader: by the time it is tapped this State can
+                // be gone and showDialog throws inside Navigator.of. The note
+                // is still reachable from the bookmarks sheet.
+                if (!mounted) return;
                 unawaited(_editBookmarkNote(context, id, null));
               },
             ),
