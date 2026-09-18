@@ -14,7 +14,41 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 Lo que salió de la auditoría del 2026-09-17
 ([`docs/tasks/PLAN_AUDITORIA_2026-09-17.md`](tasks/PLAN_AUDITORIA_2026-09-17.md)).
 No hubo ningún hallazgo crítico; lo que sigue son 23 arreglos y funciones
-agrupados por lo que cambian.
+agrupados por lo que cambian. La primera sección, las pieles de la
+biblioteca, no salió de la auditoría: vino después, el mismo día.
+
+### La biblioteca se puede vestir de otra época
+
+La pantalla de biblioteca era una lista de tarjetas Material, la única de la
+app sin identidad propia. Ahora hay tres pieles, a elegir en **Ajustes →
+Biblioteca**:
+
+- **Moderna**: la de siempre, idéntica píxel por píxel.
+- **Fichas**: fichas de catálogo de biblioteca sobre madera, con renglones y la
+  línea roja; título en versalitas, autor en cursiva y, donde una ficha real
+  lleva la signatura, el idioma, el año y lo que llevas leído.
+- **Clásica**: una página de catálogo de librería antigua en pergamino, con la
+  editorial y el comienzo de la descripción de cada libro.
+
+Las dos clásicas salen de propuestas de diseño generadas con Gemini, con una
+diferencia a propósito: los mockups dibujan un tomo de cuero genérico, y aquí
+**la portada real del libro va siempre dentro de la encuadernación**, que es
+lo que hace reconocible un libro de un vistazo. Sin portada, la encuadernación
+lleva el título como un lomo.
+
+Tocar la ficha abre el libro; detalles, idioma y eliminar quedan tras un botón
+discreto, porque tres íconos Material sobre pergamino rompían el efecto.
+
+Las pieles clásicas **no siguen el modo oscuro**: son papel, como el fondo
+sepia del lector. Todo lo que se abre desde ellas —detalles, menús, el diálogo
+de eliminar— sale en el mismo papel; hizo falta cuidarlo porque es exactamente
+el bug que tuvo el lector ese mismo día (texto oscuro sobre fondo oscuro con el
+teléfono en modo noche).
+
+Fuentes Cinzel y EB Garamond (licencia OFL) y texturas de papel y madera
+generadas por script (`tools/skins/`): el APK crece 1,1 MB. La medición de
+contraste encontró que el primer dorado elegido para la línea de catálogo daba
+4,2:1, por debajo de lo que pide WCAG AA; se oscureció hasta 5,2:1.
 
 ### Tocar la página hace lo que hace en cualquier otro lector
 

@@ -26,6 +26,8 @@ responden, la app cae a Edge automáticamente y lo dice en pantalla.
 - Una sola posición compartida entre leer y escuchar, al estilo Kindle+Audible
 - Resaltado por palabra y por oración, sincronizado con el audio
 - Tipografía, interlineado, márgenes y fondo sepia/claro/oscuro configurables
+- Tres pieles para la biblioteca: la moderna, fichas de catálogo y una clásica
+  de pergamino, siempre con la portada real del libro
 
 **Como audiolibro**
 

@@ -384,7 +384,7 @@ atendido.
 
 ## Biblioteca
 
-- [ ] `bajo` 2026-09-17 — **Considerar modernizar la pantalla de biblioteca.**
+- [x] `bajo` 2026-09-17 — **Considerar modernizar la pantalla de biblioteca.**
   Hoy es una sola columna de `ListView.builder` (`library_screen.dart:152`)
   con `BookCard` en fila: portada fija de 70×100
   (`book_card.dart:130-131`), título, autor, barra de progreso y tres botones
@@ -401,6 +401,21 @@ atendido.
   (`libraryEntriesProvider`, con progreso y metadata resueltos) de cómo se
   dibuja, así que una vista nueva puede reusar el mismo provider sin tocar la
   carga de datos.
+
+  **Resuelto el mismo día, y no como un rediseño único sino como pieles a
+  elegir** (Ajustes → Biblioteca): la moderna queda intacta y se suman
+  *Fichas* (fichas de catálogo) y *Clásica* (pergamino), a partir de propuestas
+  de diseño propias. Las dos llevan la portada real encuadernada. Ver
+  `RELEASES.md`, "Sin publicar".
+
+- [ ] `bajo` 2026-09-17 — **Una cuarta piel: la estantería.** Portadas en
+  grilla sobre baldas de madera, al estilo de iBooks, que era la otra propuesta
+  sobre la mesa. El modelo ya la admite: una constante más en `LibrarySkin`
+  (`lib/ui/widgets/library_skin.dart`), su entrada en `librarySkins`
+  (`settings.dart`) y un caso en el `switch` de `library_screen.dart`. Lo que
+  cambia de verdad es que sería la primera piel en grilla y no en lista: un
+  `GridView` con su propio cálculo de columnas, y decidir dónde va la metadata
+  cuando la portada ocupa toda la celda.
 
 ---
 
