@@ -96,6 +96,24 @@ generadas por script (`tools/skins/`): el APK crece 1,1 MB. La medición de
 contraste encontró que el primer dorado elegido para la línea de catálogo daba
 4,2:1, por debajo de lo que pide WCAG AA; se oscureció hasta 5,2:1.
 
+### Con la pantalla apagada, el libro ya no se detiene entre párrafos
+
+Escuchando con la pantalla apagada, al terminar un párrafo el siguiente se
+quedaba "cargando" y no arrancaba hasta encender la pantalla. Entre párrafo y
+párrafo la app le decía a Android que el audio se había detenido —y además
+cerraba el servicio de reproducción para abrirlo de nuevo—, y con
+`androidStopForegroundOnPause` audio_service sale del primer plano y suelta su
+*wake lock* en ese momento (`AudioService.java`, `exitForegroundState`). Sin
+pantalla y sin *wake lock*, la CPU se dormía a mitad de la síntesis del párrafo
+siguiente.
+
+Ahora el hueco se informa como "cargando" sin dejar de reproducir
+(`VoiceXAudioHandler.holdForNext`, `lib/audio/audio_player.dart`): el servicio
+sigue en primer plano y la CPU despierta hasta que suena el párrafo nuevo. Lo
+mismo al pasar de párrafo o de capítulo con los botones de la pantalla de
+bloqueo o los auriculares. Pausar en ese hueco ya no se ignora: el párrafo se
+termina de sintetizar y queda guardado, pero no arranca.
+
 ### Tocar la página hace lo que hace en cualquier otro lector
 
 Cada párrafo traía su propio detector de gestos opaco con `onTap`, y por eso

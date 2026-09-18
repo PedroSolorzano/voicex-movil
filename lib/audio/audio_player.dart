@@ -66,6 +66,16 @@ class VoiceXAudioHandler extends BaseAudioHandler with SeekHandler {
 
   bool _completionHandled = false;
 
+  /// True in the gap between one paragraph ending and the next one starting,
+  /// while the reader synthesizes it.
+  ///
+  /// The gap is reported to the system as still playing (buffering). Reporting
+  /// it as stopped made audio_service leave the foreground and release its
+  /// wake lock (`androidStopForegroundOnPause`), and with the screen off the
+  /// CPU then slept through the synthesis of the next paragraph: the request
+  /// hung until the screen came back on.
+  bool _holding = false;
+
   VoiceXAudioHandler() {
     _configureSession();
     _stateSub = _player.playerStateStream.listen(_onPlayerState);
@@ -85,6 +95,9 @@ class VoiceXAudioHandler extends BaseAudioHandler with SeekHandler {
       _completionHandled = true;
       _stopTicker();
       state = AudioState.idle;
+      // Only while a reader is attached to move on; otherwise nothing would
+      // ever release the hold.
+      _holding = onEnd != null;
       _broadcast();
       onEnd?.call();
       return;
@@ -93,7 +106,7 @@ class VoiceXAudioHandler extends BaseAudioHandler with SeekHandler {
   }
 
   void _broadcast() {
-    final playing = state == AudioState.playing;
+    final playing = state == AudioState.playing || _holding;
     playbackState.add(playbackState.value.copyWith(
       controls: [
         MediaControl.skipToPrevious,
@@ -103,13 +116,15 @@ class VoiceXAudioHandler extends BaseAudioHandler with SeekHandler {
       ],
       systemActions: const {MediaAction.seek},
       androidCompactActionIndices: const [0, 1, 3],
-      processingState: switch (_player.processingState) {
-        ja.ProcessingState.idle => AudioProcessingState.idle,
-        ja.ProcessingState.loading => AudioProcessingState.loading,
-        ja.ProcessingState.buffering => AudioProcessingState.buffering,
-        ja.ProcessingState.ready => AudioProcessingState.ready,
-        ja.ProcessingState.completed => AudioProcessingState.completed,
-      },
+      processingState: _holding
+          ? AudioProcessingState.buffering
+          : switch (_player.processingState) {
+              ja.ProcessingState.idle => AudioProcessingState.idle,
+              ja.ProcessingState.loading => AudioProcessingState.loading,
+              ja.ProcessingState.buffering => AudioProcessingState.buffering,
+              ja.ProcessingState.ready => AudioProcessingState.ready,
+              ja.ProcessingState.completed => AudioProcessingState.completed,
+            },
       playing: playing,
       updatePosition: _player.position,
       speed: _player.speed,
@@ -137,6 +152,7 @@ class VoiceXAudioHandler extends BaseAudioHandler with SeekHandler {
   /// Loads a freshly synthesized paragraph and starts playing it.
   Future<void> playFile(String filePath, {int startMs = 0, double speed = 1.0}) async {
     _completionHandled = false;
+    _holding = false;
     await _player.setFilePath(filePath);
     await _player.setSpeed(speed);
     if (startMs > 0) {
@@ -171,6 +187,10 @@ class VoiceXAudioHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> pause() async {
+    if (_holding) {
+      release();
+      return;
+    }
     if (state != AudioState.playing) return;
     await _player.pause();
     _stopTicker();
@@ -180,12 +200,37 @@ class VoiceXAudioHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> stop() async {
+    _holding = false;
     await _player.stop();
     _stopTicker();
     state = AudioState.idle;
     _broadcast();
     await super.stop();
   }
+
+  /// Stops the current clip because another paragraph is about to be played,
+  /// keeping the service in the foreground meanwhile (see [_holding]).
+  ///
+  /// [stop] is for when listening ends: it tears down the service, and
+  /// Android does not let an app in the background bring it back.
+  Future<void> holdForNext() async {
+    _holding = true;
+    _stopTicker();
+    state = AudioState.idle;
+    await _player.stop();
+    _broadcast();
+  }
+
+  /// Ends a hold without playing anything else: end of the book, a failed
+  /// synthesis, a pause in the gap.
+  void release() {
+    if (!_holding) return;
+    _holding = false;
+    _broadcast();
+  }
+
+  /// Whether a paragraph change is in progress (see [_holding]).
+  bool get holding => _holding;
 
   @override
   Future<void> seek(Duration position) async {

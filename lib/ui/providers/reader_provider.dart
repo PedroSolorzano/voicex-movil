@@ -882,16 +882,27 @@ class ReaderNotifier extends Notifier<ReaderState> {
     if (_synthesizing) return;
     final book = state.book;
     final para = state.currentParagraph;
-    if (book == null || para == null) return;
+    if (book == null || para == null) {
+      audioHandler.release();
+      return;
+    }
 
     final settings = _settings;
     _listening = true;
     state = state.copyWith(
         status: ReaderStatus.synthesizing, statusMessage: 'Sintetizando…');
     _synthesizing = true;
+    final continuing = audioHandler.holding;
 
     try {
       final audio = await _ensureAudio(book, state.chapterIndex, para, settings);
+
+      // Paused from the lock screen or the headset while this paragraph was
+      // being synthesized: the audio stays cached, but it does not start.
+      if (continuing && !audioHandler.holding) {
+        state = state.copyWith(status: ReaderStatus.idle);
+        return;
+      }
 
       final wordMarks = buildWordMarks(audio.timestamps, para.rawText);
       final sentenceRanges = buildSentenceRanges(para);
@@ -946,6 +957,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
       _schedulePrefetch();
     } catch (e) {
+      audioHandler.release();
       state = state.copyWith(
           status: ReaderStatus.error, statusMessage: _friendlyError(e));
     } finally {
@@ -1094,10 +1106,19 @@ class ReaderNotifier extends Notifier<ReaderState> {
   }
 
   /// Used between paragraphs, where the session must survive.
-  Future<void> _stopPlayback({required bool endSession}) async {
+  ///
+  /// [continuing] says another paragraph is played right after, so the audio
+  /// service keeps the foreground through the gap instead of being torn down
+  /// (see `VoiceXAudioHandler.holdForNext`).
+  Future<void> _stopPlayback(
+      {required bool endSession, bool continuing = false}) async {
     if (endSession) _listening = false;
     await _saveProgress(offsetMs: audioHandler.elapsedMs);
-    await audioHandler.stop();
+    if (continuing) {
+      await audioHandler.holdForNext();
+    } else {
+      await audioHandler.stop();
+    }
     // The sentence highlight stays: it is the "you were here" marker. Only the
     // word underline goes, since nothing is being spoken any more.
     state = state.copyWith(
@@ -1189,20 +1210,27 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
   void _advanceParagraph() {
     final chapter = state.currentChapter;
-    if (chapter == null) return;
+    if (chapter == null) {
+      audioHandler.release();
+      return;
+    }
     if (state.paragraphIndex < chapter.paragraphs.length - 1) {
-      unawaited(navigateParagraph(state.paragraphIndex + 1).then((_) => play()));
+      unawaited(navigateParagraph(state.paragraphIndex + 1, continuing: true)
+          .then((_) => play()));
     } else if (state.chapterIndex < (state.book?.chapters.length ?? 1) - 1) {
       if (state.sleepAtChapterEnd) {
         // Aquí acaba el capítulo, que es donde se pidió parar. `_onEnd` ya
         // dejó el estado en idle, así que basta con no avanzar.
+        audioHandler.release();
         state = state.copyWith(
             sleepAtChapterEnd: false, statusMessage: 'Fin del capítulo');
         return;
       }
-      unawaited(
-          navigateChapter(state.chapterIndex + 1, paragraph: 0).then((_) => play()));
+      unawaited(navigateChapter(state.chapterIndex + 1,
+              paragraph: 0, continuing: true)
+          .then((_) => play()));
     } else {
+      audioHandler.release();
       state = state.copyWith(
           statusMessage: 'Fin del libro', status: ReaderStatus.idle);
     }
@@ -1214,9 +1242,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
     final chapter = state.currentChapter;
     if (chapter == null) return;
     if (state.paragraphIndex < chapter.paragraphs.length - 1) {
-      await navigateParagraph(state.paragraphIndex + 1);
+      await navigateParagraph(state.paragraphIndex + 1, continuing: wasPlaying);
     } else if (state.chapterIndex < (state.book?.chapters.length ?? 1) - 1) {
-      await navigateChapter(state.chapterIndex + 1, paragraph: 0);
+      await navigateChapter(state.chapterIndex + 1,
+          paragraph: 0, continuing: wasPlaying);
     } else {
       return;
     }
@@ -1228,12 +1257,13 @@ class ReaderNotifier extends Notifier<ReaderState> {
   Future<void> previousParagraph() async {
     final wasPlaying = state.isBusy;
     if (state.paragraphIndex > 0) {
-      await navigateParagraph(state.paragraphIndex - 1);
+      await navigateParagraph(state.paragraphIndex - 1, continuing: wasPlaying);
     } else if (state.chapterIndex > 0) {
       final prev = state.book?.chapters.elementAtOrNull(state.chapterIndex - 1);
       final lastPara =
           prev == null || prev.paragraphs.isEmpty ? 0 : prev.paragraphs.length - 1;
-      await navigateChapter(state.chapterIndex - 1, paragraph: lastPara);
+      await navigateChapter(state.chapterIndex - 1,
+          paragraph: lastPara, continuing: wasPlaying);
     } else {
       return;
     }
@@ -1249,7 +1279,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
     final wasPlaying = state.isBusy;
     final total = state.book?.chapters.length ?? 1;
     if (state.chapterIndex >= total - 1) return;
-    await navigateChapter(state.chapterIndex + 1, paragraph: 0);
+    await navigateChapter(state.chapterIndex + 1,
+        paragraph: 0, continuing: wasPlaying);
     if (wasPlaying) await play();
   }
 
@@ -1260,13 +1291,15 @@ class ReaderNotifier extends Notifier<ReaderState> {
   Future<void> previousChapter() async {
     final wasPlaying = state.isBusy;
     if (state.chapterIndex <= 0) return;
-    await navigateChapter(state.chapterIndex - 1, paragraph: 0);
+    await navigateChapter(state.chapterIndex - 1,
+        paragraph: 0, continuing: wasPlaying);
     if (wasPlaying) await play();
   }
 
-  Future<void> navigateChapter(int index, {int paragraph = 0}) async {
+  Future<void> navigateChapter(int index,
+      {int paragraph = 0, bool continuing = false}) async {
     _prefetchToken++;
-    await _stopPlayback(endSession: false);
+    await _stopPlayback(endSession: false, continuing: continuing);
     state = state.copyWith(
       chapterIndex: index,
       paragraphIndex: paragraph,
@@ -1281,9 +1314,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
     await _saveProgress();
   }
 
-  Future<void> navigateParagraph(int index) async {
+  Future<void> navigateParagraph(int index, {bool continuing = false}) async {
     _prefetchToken++;
-    await _stopPlayback(endSession: false);
+    await _stopPlayback(endSession: false, continuing: continuing);
     state = state.copyWith(
       paragraphIndex: index,
       highlightedSentence: -1,
