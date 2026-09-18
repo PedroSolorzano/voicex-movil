@@ -52,7 +52,7 @@ class LibrarySkin {
     name: 'catalog',
     paper: Color(0xFFF4E9CF),
     ink: Color(0xFF2A1B10),
-    // 6.6:1 on the card. Measured in test/library_skin_test.dart.
+    // 7.4:1 on the card. Measured in test/library_skin_test.dart.
     inkMuted: Color(0xFF5A4632),
     accent: Color(0xFFE2C27A),
     frame: Color(0xFF3A2415),
@@ -67,7 +67,9 @@ class LibrarySkin {
     paper: Color(0xFFF1E4C6),
     ink: Color(0xFF2B1A12),
     inkMuted: Color(0xFF5E4A36),
-    accent: Color(0xFF8A6424),
+    // Also the colour of the 11.5 px catalogue line, so it is held to text
+    // contrast: the first gold tried, #8A6424, gave 4.2:1 on this paper.
+    accent: Color(0xFF7A561C),
     frame: Color(0xFF3A2415),
     background: Color(0xFFF1E4C6),
     backgroundTexture: _parchment,
