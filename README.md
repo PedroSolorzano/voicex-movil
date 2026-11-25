@@ -60,6 +60,7 @@ escucharlos después sin conexión: no hace falta el Mac encendido para oírlos.
 
 | Versión | Lo que trajo |
 |---|---|
+| **0.13.1** | Una pantalla para ver qué ocupa cada libro y borrar por capítulo, o todo lo anterior a donde vas (Ajustes → *Ver qué ocupa cada libro*). Borrar un libro ya borra su audio, que antes se quedaba en el teléfono sin dueño y sin verse en ningún detalle. Apagar la descarga adelantada cancela la que ya corre. |
 | **0.13.0** | Edge vuelve a sonar (Microsoft cambió el token que exige y la app mandaba el viejo). Qwen3 y Chatterbox, voces clonadas generadas en un Mac, reemplazan a Kokoro, Piper y F5, que dependían de máquinas que ya no existen; sirven para descargar capítulos por tandas y oírlos sin conexión. Un EPUB con un byte suelto en el CSS ya se importa, lo descargado con el motor del teléfono deja de borrarse al abrir la app, y "Contar un problema" entrega al mismo Mac. **La primera vez que se abre borra el audio descargado con los motores retirados.** |
 | **0.12.0** | La barra de escucha dice qué mueve cada botón: *Capítulo* y *Párrafo* escritos bajo los cuatro saltos, con doble chevrón para el capítulo en vez de la página con −/+ que un probador leyó como "eliminar o agregar una página". El índice abre en el capítulo actual en vez de desde arriba. Y dos arreglos: "Al final del capítulo" no funcionaba desde el menú del temporizador desde 0.10.0, y la barra oculta asomaba con descarga y oración resaltada |
 | **0.11.0** | Las otras dos pieles, rehechas: la *Clásica* como un catálogo de anticuario a dos tintas —capitular roja, texto justificado, lotes en romanos, cinta de seda en el libro que estás leyendo— y la *Moderna* con cada tarjeta teñida del color de su portada, un solo botón y el estado en un chip. Las descripciones dejan de salir con los párrafos pegados |
@@ -117,6 +118,10 @@ cd tools/mlx && ./arrancar.sh   # puerto 8765; el token queda en tools/mlx/.toke
 
 La instalación, las voces y el porqué de cada decisión están en
 [`tools/mlx/README.md`](tools/mlx/README.md).
+
+Para moverse por las herramientas del Mac (ruta, PATH, `adb`, audios por cable,
+reportes) ver [`docs/context/USO_HERRAMIENTAS.md`](docs/context/USO_HERRAMIENTAS.md):
+`source tools/entorno.sh` deja la terminal lista.
 
 La dirección **no se escribe en Ajustes**: va compilada en el APK. Compila con
 `compilar.sh` (o `compilar.ps1` en Windows), que pasa `voz.json` (la dirección) y tu `.json` personal (el

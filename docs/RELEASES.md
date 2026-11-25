@@ -9,6 +9,102 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## 0.13.1-preview.1 — 2026-11-24
+
+Una pantalla para ver qué ocupa cada libro y borrar por capítulo, porque el total
+de Ajustes ("Descargas: 107 MB") no cuadraba con el detalle de ningún libro. De
+paso se arreglan dos fallos que tenían la misma raíz: la app no sabía qué audio
+era de quién, ni cuándo dejar de descargar.
+
+Sin cambios de esquema. Se compila con `compilar.sh -l`: cambió la versión.
+
+### Audios generados en el Mac, por cable
+
+Pedido en la misma nota: generar capítulos en el Mac y pasarlos al teléfono para
+no depender de la red mientras se lee. `tools/audios/bajar.dart` genera los
+capítulos que elijas con el mismo lector de EPUB de la app (por eso
+`lib/epub/parser.dart` ya no importa Flutter), `tools/audios/pasar.sh` los empuja
+por adb y *Descargas y caché → Importar audios del Mac*
+(`lib/storage/audio_importer.dart`) los registra como descargas normales. El libro
+se reconoce por el hash del EPUB, y los archivos se mueven, no se copian.
+Para los capítulos largos, `--lista` da las horas de escucha y el tiempo de
+generación de cada uno y propone partirlos, y `--horas 1.2` genera solo esa
+parte y dice cómo seguir. El EPUB para generar se trae del propio teléfono (*Dejar mis libros listos para
+el Mac* y `tools/audios/traer-libros.sh`), porque el audio se reconoce por el
+hash del archivo y un nombre distinto o una edición distinta no coincide.
+Probado en un Galaxy S21 Ultra con Android 12: los libros salen con `adb pull`
+(la app los deja en modo 644 para que `adb` los lea) y el audio entra con
+`adb push` a la carpeta de la app, que se crea antes porque `adb push` no puede
+crear carpetas ahí. Instrucciones en `tools/audios/README.md`.
+
+### Una descarga ya no cae a Edge
+
+Si el servidor dejaba de responder a mitad de "Descargar capítulo", la descarga
+seguía con Edge y llenaba el capítulo con una voz que no habías elegido. Ese
+respaldo tiene sentido al escuchar, para que no se calle la lectura, pero no al
+descargar, donde pediste una voz concreta para oírla sin conexión. Ahora la
+descarga se detiene, avisa que el servidor no responde y conserva lo que ya
+guardó (`ReaderNotifier.downloadMustWaitForServer`). Un libro en otro idioma no
+cuenta: ahí Edge es el motor previsto. Lo pidió `pedro` en una nota de voz.
+
+### Se ve de quién es cada megabyte
+
+Ajustes sumaba las descargas de **todos** los libros, y debajo mostraba el detalle
+de **uno** solo, el último abierto. Nada reconciliaba los dos, y no había dónde
+ver el resto. Ahora Ajustes → Almacenamiento → *Ver qué ocupa cada libro*
+(`lib/ui/screens/downloads_screen.dart`) lista cada libro con su tamaño, su motor
+y su voz (`Qwen3 · esposa  18 MB`), y la suma coincide con el total
+(`AudioCacheRepo.usageByBook`, con una prueba que lo exige).
+
+Desde ahí, cada libro abre su detalle por capítulo
+(`lib/ui/screens/book_downloads_screen.dart`): cuántos párrafos de cada capítulo
+están descargados, cuánto pesan, cuál es el capítulo en el que vas, y un botón
+para borrar uno solo. También hay **Borrar lo anterior a mi posición**, que dice
+cuánto libera antes de confirmar y conserva el párrafo en el que estás y todo lo
+que sigue: para quien leyó el principio de un capítulo de varias horas en silencio
+y descargó desde la mitad. Se llega también desde la hoja de descarga del lector.
+
+La pantalla separa lo que se puede liberar sin perder nada, porque ningún libro ni
+ningún motor actual puede reproducirlo:
+
+- **Audio de libros que ya no están en la biblioteca.** Ver el fallo de abajo.
+- **Audio de motores retirados** (Kokoro, Piper, F5…), que la migración de arranque
+  borra solo si reconoce la clave.
+- **Archivos sin registro**: audio en disco que ninguna fila de la base de datos
+  menciona. Solo se buscan nombres con la forma exacta de la caché
+  (`<libro>_<capítulo>_<párrafo>_…`, con o sin `dl_`), nunca el archivo que una
+  reproducción está usando (`qwen3_<uuid>.mp3`).
+
+### Borrar un libro borraba el libro y dejaba su audio
+
+`audio_cache` no tiene clave foránea a `books` (a diferencia de
+`reading_progress`, que sí cae en cascada), y `deleteBook` solo borraba el libro.
+Cada párrafo descargado para él se quedaba en el teléfono, contado en el total y
+listado bajo ningún libro. Importar un EPUB, borrarlo e importarlo otra vez, que es
+lo que se hace al probar un libro que no abre, deja audio huérfano cada vez.
+`deleteBook` ahora borra primero sus archivos
+(`lib/ui/providers/library_provider.dart`). Lo que ya estaba huérfano se ve y se
+libera desde la pantalla nueva: no se borra solo al arrancar, a propósito, para que
+se pueda ver de dónde salían los megas.
+
+### Apagar la descarga adelantada cancela la que ya corre
+
+El ajuste solo se leía cuando la descarga empezaba. Apagarlo no paraba la que ya
+estaba en curso: seguía pidiéndole párrafos al servidor de voz uno tras otro, y una
+descarga nueva tenía que turnarse con ella en la misma cola de GPU. Ahora el bucle
+de descarga lo vuelve a mirar en cada párrafo, y solo para las descargas
+silenciosas: una que el lector pidió con el botón no depende de ese ajuste
+(`ReaderNotifier.prefetchSwitchedOff`).
+
+### "Los próximos capítulos" no decía lo que hacía
+
+La opción empezaba **en el capítulo actual** y tomaba tantos como diga Ajustes
+(3 por defecto), pero hablaba de "los próximos". En una novela con capítulos de
+tres a cinco horas, eso son horas de más. Ahora dice *Este capítulo y los
+siguientes (3 en total)*.
+
+---
+
 ## 0.13.0-preview.1 — 2026-11-24
 
 Edge vuelve a sonar, Qwen3 y Chatterbox —voces clonadas generadas en un Mac—

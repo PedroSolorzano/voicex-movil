@@ -21,6 +21,8 @@ puso una prioridad, y forzar una acá sería inventarla. Revisar, decidir
 prioridad y sección, reescribir con el formato estándar de arriba, y borrar
 de acá.
 
+- **2026-11-25 07:41** `pedro` — Importar audios generados en el Mac: generar el capítulo 1 o 2 en la computadora y cargarlo en el teléfono, para no descargar en tiempo real. Por capítulo, porque unos son muy largos y otros muy cortos, y así se baja lo que se va a escuchar. _(Visión ciega, capítulo 3, Chatterbox; nota de voz transcrita en el Mac. Hecho en 0.13.1: por cable con adb, ver `tools/audios/README.md`.)_
+- **2026-11-25 07:41** `pedro` — Una descarga no debe caer a Edge cuando el servidor falla. _(Hecho en 0.13.1: la descarga se detiene y avisa; ver `docs/RELEASES.md`.)_
 - **2026-09-06 15:35** `pedro` — Valida si cuando doy descargar un capitulo comienza a descargar todo el capitulo desde el inicio o solo desde donde esta marcado el texto por ejemplo ahorita estoy creo a mitad del capitulo y no quiero ir descargando en tiempo real por que es un poco lento la descarga pero tener que descargar audio … (recortado) _(Las 48 leyes del poder, capítulo 4, F5)_
 - **2026-09-06 15:35** `pedro` — Estoy en capitulo 5 parrafo 28 y lensi descargar capitulo. Veamos si la mejora ya existe o hay que implementarla. _(Las 48 leyes del poder, capítulo 4, F5)_
 - **2026-09-06 15:35** `pedro` — Estoy en capitulo 5 parrafo 28 y lensi descargar capitulo. Veamos si la mejora ya existe o hay que implementarla. _(Las 48 leyes del poder, capítulo 4, Edge (F5 no disponible))_

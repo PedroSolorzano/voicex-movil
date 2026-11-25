@@ -46,6 +46,7 @@ URLs dentro de `libapp.so`, así que un archivo incompleto también se cae ahí.
 |---|---|
 | `docs/RELEASES.md` | Todo cambio visible al usuario, con su causa |
 | `docs/context/TECHNICAL.md` | Especificación técnica |
+| `docs/context/USO_HERRAMIENTAS.md` | Cómo correr las herramientas del Mac: ruta, PATH, comandos |
 | `docs/tasks/IMPROVEMENTS.md` | Mejoras pendientes |
 | `docs/bugs/` | Investigaciones de bugs concretos |
 | `docs/bugs/REPORTES_TESTERS.md` | Reportes crudos de testers, sin triar (lo escribe `tools/reportes/procesar.py`, automático) |
