@@ -11,8 +11,7 @@ import '../storage/database.dart';
 import '../tts/server_health.dart';
 import '../tts/tts_endpoint.dart';
 
-/// Sends crashes and tester feedback to the same proxy that fronts the TTS
-/// servers, with the same token.
+/// Sends crashes and feedback to the voice server (`tools/mlx`), with its token.
 ///
 /// Two rules shape everything here.
 ///
@@ -187,16 +186,18 @@ class Reporter {
   /// Whether this build has anywhere to send a report at all.
   ///
   /// An APK handed to somebody with no server of ours behind it — Edge only —
-  /// carries neither token nor address, so [flush] returns immediately and
-  /// everything queued stays queued forever. The screens ask this before
-  /// offering a form that promises delivery.
-  static bool get canDeliver =>
-      TtsServerConfig.token.isNotEmpty && TtsServerConfig.reportUrl.isNotEmpty;
+  /// carries no address, so [flush] returns immediately and everything queued
+  /// stays queued forever. The screens ask this before offering a form that
+  /// promises delivery.
+  ///
+  /// The token is not required: a server started without one asks for nothing.
+  /// A wrong or missing one is answered with 401 and the report stays queued.
+  static bool get canDeliver => TtsServerConfig.hasServer;
 
   /// Delivers everything queued, oldest first. Silent by design.
   static Future<void> flush() async {
     if (_flushing || !canDeliver) return;
-    final base = TtsServerConfig.reportUrl;
+    final base = TtsServerConfig.voiceUrl;
 
     _flushing = true;
     try {
@@ -229,7 +230,7 @@ class Reporter {
       final req = await client.postUrl(buildUri(base, '/report'));
       req.headers.contentType = ContentType.json;
       applyRequestHeaders(req,
-          token: TtsServerConfig.token, engine: 'reporte');
+          token: TtsServerConfig.voiceToken, engine: 'reporte');
       req.write(body);
       final resp = await req.close().timeout(TtsTimeouts.probe);
       await resp.drain<void>();
@@ -255,7 +256,7 @@ class Reporter {
       final req = await client.openUrl(
           'PUT', buildUri(base, '/report/audio/$name'));
       applyRequestHeaders(req,
-          token: TtsServerConfig.token, engine: 'reporte');
+          token: TtsServerConfig.voiceToken, engine: 'reporte');
       req.add(await file.readAsBytes());
       final resp = await req.close().timeout(TtsTimeouts.body);
       await resp.drain<void>();

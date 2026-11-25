@@ -58,15 +58,6 @@ muestras_voz/
 # material de trabajo, no documentación del repo
 docs/screenshot/
 
-# Tokens reales del proxy y sus logs: identidades revocables y registros de
-# acceso de personas concretas, nada de eso va al repo
-tools/proxy/tokens.conf
-tools/proxy/logs/
-
-# Marca de "desde cuándo está encendido el Funnel": estado de esta máquina,
-# no del repo
-tools/proxy/estado/
-
 # Pipeline de reportes: venv local, estado del ledger y sus propios logs
 tools/reportes/.venv/
 tools/reportes/estado/
@@ -75,23 +66,24 @@ tools/reportes/logs/
 # Configuración de compilación por probador: lleva el token dentro
 tools/release/*.json
 !tools/release/tester.example.json
-# Excepción: solo CHATTERBOX_URL, sin proxy ni token -- la tailnet es la
-# barrera de seguridad, no la dirección (ver tools/release/README.md).
-!tools/release/f5.json
-# Excepción: solo KOKORO_URL. Sí pasa por el proxy y sí hace falta token,
-# pero la dirección es la misma para cualquier compilación -lo que protege
-# es el token, que se queda en el .json personal (ver tools/release/README.md).
-!tools/release/kokoro.json
-
-# Token del servidor de F5: lo lee su docker-compose y lo valida el propio
-# servidor, que no tiene proxy delante (ver tools/f5/README.md)
-tools/f5/.env
-
-# Voces clonadas para F5: son grabaciones de personas reales, no van a git.
-# El servidor las lee de aquí (ver tools/f5/README.md).
-tools/f5/voices/*
-!tools/f5/voices/.gitkeep
-!tools/f5/voices/sustituciones.json
+# Excepción: voz.json lleva solo la dirección del servidor, sin token. La
+# dirección no es secreta -un APK la lleva en claro-; el token vive en el .json
+# personal, que sí queda ignorado (ver tools/release/README.md).
+!tools/release/voz.json
 
 # Cache de bytecode de las pruebas de tools/reportes
 tools/reportes/__pycache__/
+
+# Servidor de voz en el Mac (tools/mlx): voces clonadas, token y entorno propios
+tools/mlx/voices/*
+!tools/mlx/voices/.gitkeep
+tools/mlx/.token
+tools/mlx/.venv/
+tools/mlx/__pycache__/
+
+# Reportes recibidos por tools/mlx/server.py: texto y notas de voz de personas
+# reales. El procesador los vuelca a docs/ y los archiva aquí.
+tools/mlx/reportes/
+
+# Libros de prueba para importar: tienen derechos de autor y no son del proyecto
+epubs/

@@ -12,9 +12,9 @@ import 'tts_endpoint.dart';
 /// Before this, every failure collapsed into a single `false` whose reason only
 /// ever reached `dev.log`.
 ///
-/// [busy] is the server answering that it is there but occupied: F5 serves
+/// [busy] is the server answering that it is there but occupied: the voice server serves
 /// `/health` off the synthesis thread and reports `busy` while its single GPU
-/// lock is taken (`tools/f5/server.py`). Sending it work anyway does not fail
+/// lock is taken (`tools/mlx/server.py`). Sending it work anyway does not fail
 /// fast -- the request blocks on that lock and burns the client's synthesis
 /// budget waiting in line -- so it counts as not usable, but for a different
 /// reason and with different words on screen.

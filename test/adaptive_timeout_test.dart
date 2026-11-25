@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voicex_movil/tts/tts_endpoint.dart';
 
-/// El techo de síntesis de F5 sale de lo que la máquina viene
+/// El techo de síntesis del servidor sale de lo que la máquina viene
 /// tardando, no de un número calibrado en otro hardware. La regla que importa
 /// es que esto solo puede volver la app **más** paciente: el caso que motivó
 /// el cambio es una GPU justa terminando un párrafo que el cliente ya había
@@ -10,7 +10,7 @@ void main() {
   test('sin mediciones todavía, el presupuesto es el de siempre', () {
     expect(
       TtsTimeouts.adaptiveSynthesis(measured: Duration.zero, samples: 0),
-      TtsTimeouts.synthesisF5,
+      TtsTimeouts.synthesisServer,
     );
   });
 
@@ -19,7 +19,7 @@ void main() {
     // "ríndete de inmediato", que es justo el fallo que se quiere evitar.
     expect(
       TtsTimeouts.adaptiveSynthesis(measured: Duration.zero, samples: 3),
-      TtsTimeouts.synthesisF5,
+      TtsTimeouts.synthesisServer,
     );
   });
 
@@ -29,7 +29,7 @@ void main() {
     expect(
       TtsTimeouts.adaptiveSynthesis(
           measured: const Duration(seconds: 20), samples: 4),
-      TtsTimeouts.synthesisF5,
+      TtsTimeouts.synthesisServer,
     );
   });
 
@@ -58,7 +58,7 @@ void main() {
     test('un párrafo corto se queda en el piso', () {
       expect(
         TtsTimeouts.synthesisForChars(200),
-        TtsTimeouts.synthesisF5,
+        TtsTimeouts.synthesisServer,
         reason: '200 caracteres x 250 ms = 50 s, por debajo del piso',
       );
     });

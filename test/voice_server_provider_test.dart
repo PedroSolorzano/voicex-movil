@@ -1,14 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:voicex_movil/tts/f5_tts_provider.dart';
+import 'package:voicex_movil/tts/voice_server_provider.dart';
 import 'package:voicex_movil/tts/server_health.dart';
 
 /// Reproduces the incident in `docs/bugs/CHATTERBOX_DESCARGAS.md`: a paragraph
 /// that outlasts its synthesis timeout should not leave the following
 /// health-checks free to hammer a server that is (as far as the client can
-/// tell) still busy with the abandoned request.
+/// tell) still busy with the abandoned request. The incident was with the first
+/// engine to run on a home server and it applies to every one that followed.
 void main() {
   late HttpServer server;
   late String baseUrl;
@@ -43,7 +45,8 @@ void main() {
       // POST /tts: never responds, forcing the client's own timeout.
     });
 
-    final provider = F5TtsProvider(baseUrl,
+    final provider = VoiceServerTtsProvider(baseUrl,
+        engine: 'qwen3',
         synthesisTimeout: const Duration(milliseconds: 50));
 
     await expectLater(
@@ -52,7 +55,7 @@ void main() {
       throwsA(isA<TimeoutException>()),
     );
 
-    expect(await F5TtsProvider.healthOf(baseUrl), ServerHealth.busy);
+    expect(await VoiceServerTtsProvider.healthOf(baseUrl), ServerHealth.busy);
     expect(healthHits, 0,
         reason: 'la probe tiene que saltarse, no solo fallar');
   });
@@ -70,7 +73,7 @@ void main() {
       }
     });
 
-    final provider = F5TtsProvider(baseUrl);
+    final provider = VoiceServerTtsProvider(baseUrl, engine: 'qwen3');
 
     await expectLater(
       provider.synthesize(
@@ -78,7 +81,7 @@ void main() {
       throwsA(isA<HttpException>()),
     );
 
-    expect(await F5TtsProvider.healthOf(baseUrl), ServerHealth.ok);
+    expect(await VoiceServerTtsProvider.healthOf(baseUrl), ServerHealth.ok);
   });
 
   test('el silencio no se encoge al presupuesto de esa síntesis', () async {
@@ -98,7 +101,8 @@ void main() {
       }
     });
 
-    final provider = F5TtsProvider(baseUrl,
+    final provider = VoiceServerTtsProvider(baseUrl,
+        engine: 'qwen3',
         synthesisTimeout: const Duration(milliseconds: 50));
 
     await expectLater(
@@ -110,13 +114,13 @@ void main() {
     // Muy por encima de los 50 ms de esa síntesis, muy por debajo del cooldown.
     await Future<void>.delayed(const Duration(milliseconds: 200));
 
-    expect(await F5TtsProvider.healthOf(baseUrl), ServerHealth.busy);
+    expect(await VoiceServerTtsProvider.healthOf(baseUrl), ServerHealth.busy);
     expect(healthHits, 0);
   });
 
   group('token', () {
-    // Este servidor no tiene proxy delante: el token lo valida él mismo, y
-    // hasta 0.9.1 la app no le mandaba ninguno en la síntesis.
+    // El servidor valida su propio token, sin proxy delante: la síntesis y el
+    // sondeo tienen que llevarlo, o un 401 se leería como servidor caído.
     test('la síntesis se identifica ante el servidor', () async {
       String? recibido;
       // Contesta 200 sin cuerpo: alcanza para leer la cabecera y corta antes
@@ -130,7 +134,7 @@ void main() {
       });
 
       await expectLater(
-        F5TtsProvider(baseUrl, token: 'abc').synthesize(
+        VoiceServerTtsProvider(baseUrl, engine: 'qwen3', token: 'abc').synthesize(
             text: 'hola', voice: 'esposa', rate: '1.0', volume: '1.0'),
         throwsA(isA<HttpException>()),
       );
@@ -147,7 +151,7 @@ void main() {
           ..close();
       });
 
-      await F5TtsProvider.healthOf(baseUrl, token: 'abc');
+      await VoiceServerTtsProvider.healthOf(baseUrl, token: 'abc');
 
       expect(recibido, 'Bearer abc');
     });
@@ -162,9 +166,68 @@ void main() {
           ..close();
       });
 
-      await F5TtsProvider.healthOf(baseUrl);
+      await VoiceServerTtsProvider.healthOf(baseUrl);
 
       expect(recibido, isNull);
+    });
+  });
+
+  group('qué se le pide al servidor', () {
+    test('la síntesis lleva el motor y la voz elegidos, sin la velocidad',
+        () async {
+      Map<String, dynamic>? cuerpo;
+      await serve((req) async {
+        cuerpo = jsonDecode(await utf8.decoder.bind(req).join())
+            as Map<String, dynamic>;
+        req.response
+          ..statusCode = 200
+          ..close();
+      });
+
+      await expectLater(
+        VoiceServerTtsProvider(baseUrl, engine: 'chatterbox2').synthesize(
+            text: 'hola', voice: 'colombiana', rate: '+25%', volume: '+0%'),
+        throwsA(isA<HttpException>()),
+      );
+
+      // La velocidad se aplica al reproducir: mandarla haría que un mismo
+      // párrafo tuviera dos audios distintos bajo una sola clave de caché.
+      expect(cuerpo,
+          {'text': 'hola', 'voice': 'colombiana', 'engine': 'chatterbox2'});
+    });
+
+    test('el catálogo son las voces que el propio servidor anuncia', () async {
+      await serve((req) {
+        req.response
+          ..statusCode = 200
+          ..headers.contentType = ContentType.json
+          ..write(jsonEncode({
+            'status': 'ok',
+            'voices': ['colombiana', 'esposa'],
+            'busy': false,
+          }))
+          ..close();
+      });
+
+      final voces =
+          await VoiceServerTtsProvider(baseUrl, engine: 'qwen3').listVoices();
+
+      expect(voces.map((v) => v.id), ['colombiana', 'esposa']);
+      expect(voces.every((v) => v.locale == 'es'), isTrue);
+    });
+
+    test('un servidor que no responde da catálogo vacío, no una excepción',
+        () async {
+      await serve((req) {
+        req.response
+          ..statusCode = 500
+          ..close();
+      });
+
+      final voces =
+          await VoiceServerTtsProvider(baseUrl, engine: 'qwen3').listVoices();
+
+      expect(voces, isEmpty);
     });
   });
 }

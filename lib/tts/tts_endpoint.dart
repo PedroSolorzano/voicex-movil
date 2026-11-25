@@ -28,34 +28,31 @@ class TtsTimeouts {
   /// short enough that nobody notices it before a paragraph starts.
   static const probeBackoff = Duration(milliseconds: 400);
 
-  /// Synthesis. Kokoro runs ~5x realtime on CPU, so a long paragraph
-  /// legitimately takes seconds; Piper is faster.
-  static const synthesisKokoro = Duration(seconds: 180);
-  static const synthesisPiper = Duration(seconds: 120);
-
-  /// Piso del presupuesto de F5, para un párrafo corto.
+  /// Piso del presupuesto de síntesis del servidor de voz, para un párrafo corto.
   ///
   /// Es solo el piso: el presupuesto real sale de [synthesisForChars], porque
   /// lo que manda es el largo del texto. Un número fijo calibrado con un
-  /// párrafo de prueba **ya falló una vez**: 120 s alcanzaban de sobra para
-  /// los 29 s de audio del párrafo con el que se midió, y se quedaban cortos
-  /// para la sinopsis de la cubierta de La Odisea, cuatro veces más larga.
-  static const synthesisF5 = Duration(seconds: 120);
+  /// párrafo de prueba **ya falló una vez** con el motor anterior: 120 s
+  /// alcanzaban de sobra para el párrafo con el que se midió y se quedaban
+  /// cortos para la sinopsis de una contraportada, cuatro veces más larga.
+  static const synthesisServer = Duration(seconds: 120);
 
-  /// Cuánto tarda F5 por carácter de texto, medido: 378 palabras (~2.100
-  /// caracteres) tardaron 291 s en la RTX 4050, o sea ~0,13 s por carácter.
-  /// Se presupuesta el doble para absorber un párrafo que salga lento sin
-  /// abandonar audio que el servidor sí va a terminar.
-  static const _msPorCaracterF5 = 250;
+  /// Cuánto tarda el servidor por carácter de texto. En el Mac con M3 Max, un
+  /// párrafo de diálogo de ~330 caracteres tarda unos 9 s con Qwen3 y 7 s con
+  /// Chatterbox: ~27 ms por carácter. Se presupuesta nueve veces eso para
+  /// absorber un párrafo lento, o un Mac que además esté ocupado con otra
+  /// cosa, sin abandonar audio que el servidor sí va a terminar.
+  static const _msPorCaracter = 250;
 
   /// Presupuesto de síntesis para un texto de [chars] caracteres.
   ///
-  /// El tiempo de F5 crece con el texto, así que el timeout tiene que crecer
+  /// El tiempo del servidor crece con el texto, así que el timeout tiene que crecer
   /// también: es la diferencia entre un párrafo de diálogo y la sinopsis de
   /// una contraportada. [floor] permite que una descarga suba el piso con lo
   /// que viene midiendo (ver [adaptiveSynthesis]) sin bajarlo nunca.
-  static Duration synthesisForChars(int chars, {Duration floor = synthesisF5}) {
-    final estimado = Duration(milliseconds: chars * _msPorCaracterF5);
+  static Duration synthesisForChars(int chars,
+      {Duration floor = synthesisServer}) {
+    final estimado = Duration(milliseconds: chars * _msPorCaracter);
     if (estimado < floor) return floor;
     if (estimado > adaptiveSynthesisCeiling) return adaptiveSynthesisCeiling;
     return estimado;
@@ -72,12 +69,12 @@ class TtsTimeouts {
   /// Techo de síntesis derivado de lo que esta máquina viene tardando de
   /// verdad, en vez de un número fijo calibrado en otro hardware.
   ///
-  /// [synthesisF5] se calibró en una RTX 4050. Una GPU más justa tarda varias
+  /// [synthesisServer] se calibró en un M3 Max. Un equipo más justo tarda varias
   /// veces eso, y el resultado es el peor desperdicio posible: el servidor
   /// **termina** el audio y el cliente ya se rindió, así que se tira a la
   /// basura una generación entera. Medido con el motor anterior en
   /// `docs/bugs/CHATTERBOX_DESCARGAS.md`: un párrafo de 4 m 37 s abandonado a
-  /// los 4 m. F5 es mucho más rápido, pero la trampa es la misma en cuanto el
+  /// los 4 m. Los modelos de ahora son más rápidos, pero la trampa es la misma en cuanto el
   /// hardware no sea el de calibración.
   ///
   /// Cinco veces el promedio observado cubre ese caso con margen sin volverse
@@ -88,9 +85,9 @@ class TtsTimeouts {
     required Duration measured,
     required int samples,
   }) {
-    if (samples <= 0 || measured <= Duration.zero) return synthesisF5;
+    if (samples <= 0 || measured <= Duration.zero) return synthesisServer;
     final scaled = measured * 5;
-    if (scaled < synthesisF5) return synthesisF5;
+    if (scaled < synthesisServer) return synthesisServer;
     if (scaled > adaptiveSynthesisCeiling) return adaptiveSynthesisCeiling;
     return scaled;
   }
@@ -124,7 +121,7 @@ class TtsTimeouts {
 /// the probe swallowed into the same generic "no responde".
 ///
 /// The path prefix is preserved: behind the proxy the base is
-/// `https://host.ts.net/kokoro`, and dropping that segment would point every
+/// `https://host.ts.net/voz`, and dropping that segment would point every
 /// request at the wrong place.
 String normalizeBaseUrl(String raw) {
   var s = raw.trim();

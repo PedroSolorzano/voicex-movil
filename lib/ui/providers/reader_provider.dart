@@ -19,9 +19,7 @@ import '../../stats/reading_credit.dart';
 import '../../tts/models.dart';
 import '../../tts/tts_factory.dart';
 import '../../tts/tts_provider.dart';
-import '../../tts/f5_tts_provider.dart';
-import '../../tts/kokoro_tts_provider.dart';
-import '../../tts/piper_tts_provider.dart';
+import '../../tts/voice_server_provider.dart';
 import '../../tts/server_health.dart';
 import '../../tts/tts_endpoint.dart';
 import 'reading_stats_provider.dart';
@@ -591,7 +589,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
     return result;
   }
 
-  /// Fallback for engines that report no word boundaries (Piper): spread
+  /// Fallback for engines that report no word boundaries (the server ones): spread
   /// sentences across the clip proportionally to their length. Approximate, but
   /// enough to keep the highlight moving instead of frozen.
   List<SentenceMark> _estimateSentenceMarks(
@@ -616,28 +614,26 @@ class ReaderNotifier extends Notifier<ReaderState> {
   ///
   /// It has to name the engine, not just the voice: when the home server is
   /// unreachable the app falls back to Edge, and storing that under the
-  /// server's key would later serve Edge audio while claiming to be Kokoro.
+  /// server's key would later serve Edge audio while claiming to be Qwen3.
   ///
-  /// Piper additionally folds in the pace, because `length_scale` is baked into
-  /// the samples — changing it must invalidate what was downloaded.
+  /// The voice is part of it because a server voice is a recording: changing
+  /// it changes the audio, so what was downloaded under the old one is not
+  /// valid for the new one.
   static String _cacheKeyFor(String engine, AppSettings settings, Book book) {
-    // Kokoro y Piper llevan el idioma en la clave; Edge no lo necesita porque
-    // el nombre de sus voces ya trae el locale (es-MX-DaliaNeural).
+    // El motor del teléfono lleva el idioma en la clave; Edge no lo necesita
+    // porque el nombre de sus voces ya trae el locale (es-MX-DaliaNeural).
     //
     // Sin él, un libro en inglés y otro en español compartían audio cuando la
-    // misma voz servía para ambos, que es justo el caso por defecto de Kokoro:
-    // af_bella para los dos idiomas, y el idioma solo llega al servidor como
-    // `lang_code`. Misma clave, audio distinto, y el que sonaba era el que se
-    // hubiera descargado primero.
+    // misma voz servía para ambos, y sonaba el que se hubiera descargado
+    // primero.
     final lang = cacheLangTag(book.language);
     final raw = switch (engine) {
-      'piper' => 'piper-$lang-${settings.voiceForEngine('piper', book.language)}'
-          '${piperPaceSuffix(settings.piperLengthScale)}',
-      'kokoro' =>
-        'kokoro-$lang-${settings.voiceForEngine('kokoro', book.language)}',
-      // Sin idioma en la clave: este motor solo sirve español (ver
-      // F5TtsProvider), así que no hay ambigüedad que resolver.
-      'f5' => 'f5-${settings.voiceForEngine('f5', book.language)}',
+      // Sin idioma en la clave: estos motores solo sirven español (ver
+      // VoiceServerTtsProvider), así que no hay ambigüedad que resolver. La
+      // voz sí entra: cambiar de grabación cambia el audio.
+      'qwen3' => 'qwen3-${settings.voiceForEngine('qwen3', book.language)}',
+      'chatterbox2' =>
+        'chatterbox2-${settings.voiceForEngine('chatterbox2', book.language)}',
       // La voz del teléfono entra en la clave porque cambiarla cambia el audio,
       // y el idioma porque una voz puede servir a los dos.
       'android' =>
@@ -651,8 +647,6 @@ class ReaderNotifier extends Notifier<ReaderState> {
   static String cacheKeyFor(String engine, AppSettings settings, Book book) =>
       _cacheKeyFor(engine, settings, book);
 
-  /// Tail of a Piper cache key: the pace is baked into the samples, so audio
-  /// downloaded at one `length_scale` cannot serve another.
   /// Etiqueta de idioma de la clave de caché: dos letras y nada más.
   ///
   /// Se queda en 'es' o 'en' porque son los dos idiomas que la app resuelve, y
@@ -661,9 +655,6 @@ class ReaderNotifier extends Notifier<ReaderState> {
   @visibleForTesting
   static String cacheLangTag(String bookLanguage) =>
       bookLanguage.toLowerCase().startsWith('es') ? 'es' : 'en';
-
-  static String piperPaceSuffix(double lengthScale) =>
-      sanitizeCacheKey('-${lengthScale.toStringAsFixed(2)}');
 
   /// The key is embedded in the cache filename, so it must survive as a path
   /// segment. An earlier version used ':' and '@' here, which made every file
@@ -677,7 +668,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
   /// Reuses one provider instance instead of building a new one per paragraph.
   ///
-  /// Kokoro lives on a machine that is often off or out of reach, so it is
+  /// The voice server lives on a machine that is often off or out of reach, so it is
   /// probed first and quietly replaced by Edge when unavailable — the reader
   /// must never go silent just because the home server is down. The engine in
   /// use is surfaced in [ReaderState.engineLabel] so the swap is visible.
@@ -690,10 +681,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
   Future<String> _resolveEngineKind(AppSettings settings, String lang) async {
     var kind = settings.ttsProvider;
 
-    // F5 solo sirve español: el checkpoint es un finetune en español, y sus
-    // voces son clones grabados para eso. Ni se hace el health check --
-    // directo a Edge, igual que un servidor no configurado.
-    if (kind == 'f5' && !lang.toLowerCase().startsWith('es')) {
+    // Qwen3 y Chatterbox solo leen español aquí: sus voces son clones de
+    // personas que hablan español. Ni se hace el health check -- directo a
+    // Edge, igual que un servidor no configurado.
+    if (settings.usesSelfHostedServer && !lang.toLowerCase().startsWith('es')) {
       return 'edge';
     }
 
@@ -701,15 +692,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
       final url = settings.selfHostedUrl;
       _lastHealth = url.trim().isEmpty
           ? ServerHealth.unreachable
-          : switch (kind) {
-              'kokoro' => await KokoroTtsProvider.healthOf(url,
-                  token: settings.serverToken),
-              'piper' => await PiperTtsProvider.healthOf(url,
-                  token: settings.serverToken),
-              'f5' => await F5TtsProvider.healthOf(url,
-                  token: settings.tokenFor('f5')),
-              _ => ServerHealth.ok,
-            };
+          : await VoiceServerTtsProvider.healthOf(url,
+              token: settings.serverToken, engine: kind);
       if (!_lastHealth.isUsable) {
         dev.log('[Reader] $kind ${_lastHealth.name} → falling back to Edge');
         kind = 'edge';
@@ -731,7 +715,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
     _activeEngineKind = kind;
     // The label used to be written only on the happy path of play(), so a whole
-    // chapter could download through Edge with the bar still claiming Kokoro.
+    // chapter could download through Edge with the bar still claiming Qwen3.
     // Every caller of _provider goes through here, so this is the one place
     // that always knows.
     if (state.book != null && _engineLabel(settings) != state.engineLabel) {
@@ -786,7 +770,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
     if (chosen != null) {
       // A hit under the reader's own engine proves it is in use for this
       // paragraph, whatever a past health check found. Without this, a label
-      // like "Edge (F5 no disponible)" from one failed lookup could
+      // like "Edge (Qwen3 no disponible)" from one failed lookup could
       // sit on screen through any number of later paragraphs served — like
       // this one — straight from cache, with no synthesis call to refresh it.
       _activeEngineKind = settings.ttsProvider;
@@ -812,15 +796,15 @@ class ReaderNotifier extends Notifier<ReaderState> {
     final result = await provider.synthesize(
       text: para.rawText,
       // The engine that is about to run, not the one selected. Asking Edge for
-      // 'af_bella' or 'es_AR-daniela-high' — names from Kokoro's and Piper's
-      // catalogues — made every fallback come back empty, which is exactly the
-      // moment the fallback exists to cover.
+      // 'esposa' or 'colombiana' — names from the voice server's catalogue —
+      // made every fallback come back empty, which is exactly the moment the
+      // fallback exists to cover.
       voice: settings.voiceForEngine(_activeEngineKind, book.language),
       rate: settings.edgeRate,
       volume: settings.edgeVolume,
     );
 
-    // Keep the real extension: Piper emits WAV, Edge MP3, Kokoro AAC.
+    // Keep the real extension: the engines do not all write the same format.
     final ext = result.filePath.split('.').last;
     final cacheDir = await getTemporaryDirectory();
     final dest = '${cacheDir.path}/'
@@ -1190,7 +1174,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
       final result = await provider.synthesize(
         text: word.trim(),
         // As in _ensureAudio: the engine that will run, not the one selected.
-        // Asking Edge for Kokoro's voice returned nothing, and the catch below
+        // Asking Edge for the server's voice returned nothing, and the catch below
         // swallowed it — long-pressing a word simply did nothing.
         voice: settings.voiceForEngine(_activeEngineKind, book.language),
         rate: settings.edgeRate,
@@ -1532,7 +1516,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// getApplicationDocumentsDirectory(), where the OS will not clear them and
   /// the LRU eviction skips them.
   ///
-  /// This is what makes Kokoro usable away from home: the audio is produced
+  /// This is what makes the voice server usable away from home: the audio is produced
   /// while the phone can still reach the server, then played back offline with
   /// its word timings intact.
   ///
@@ -1606,12 +1590,12 @@ class ReaderNotifier extends Notifier<ReaderState> {
     final startedAt = DateTime.now();
     var synthesized = 0;
 
-    // Cuánto tardó F5 de verdad en esta descarga, para calibrar su
+    // Cuánto tardó el servidor de verdad en esta descarga, para calibrar su
     // propio techo de espera. Vive por descarga y no se persiste: un capítulo
     // recalibra en los primeros párrafos, y así un cambio de máquina o de
     // servidor no arrastra una medición vieja.
-    var f5Total = Duration.zero;
-    var f5Samples = 0;
+    var serverTotal = Duration.zero;
+    var serverSamples = 0;
 
     for (var chapterIdx = from; chapterIdx < last; chapterIdx++) {
       for (final para in chapters[chapterIdx].paragraphs) {
@@ -1631,7 +1615,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
         try {
           // Re-resolved per paragraph: the server can drop out mid-download,
           // and the key fixed before the loop would then file Edge's audio
-          // under Kokoro's name — audio that plays with the wrong voice and
+          // under the server's name — audio that plays with the wrong voice and
           // never gets regenerated because the row looks correct. Only the
           // *kind* is re-checked here; the settings snapshot stays the one
           // taken when the download started (see above).
@@ -1646,17 +1630,17 @@ class ReaderNotifier extends Notifier<ReaderState> {
           }
           final voice = _cacheKeyFor(dlKind, settings, book);
 
-          // F5 corre en una GPU cualquiera, no en la que se usó para
-          // calibrar los 240 s por defecto: en una tarjeta justa un párrafo
+          // El servidor corre en un equipo cualquiera, no en el que se usó
+          // para calibrar el piso por defecto: en uno más justo un párrafo
           // tarda varias veces eso, y rendirse antes de tiempo tira a la
           // basura una generación que el servidor sí terminó. El techo se
           // reajusta con lo que esta máquina viene tardando de verdad.
-          if (dlProvider is F5TtsProvider) {
+          if (dlProvider is VoiceServerTtsProvider) {
             dlProvider.synthesisTimeout = TtsTimeouts.adaptiveSynthesis(
-              measured: f5Samples == 0
+              measured: serverSamples == 0
                   ? Duration.zero
-                  : f5Total ~/ f5Samples,
-              samples: f5Samples,
+                  : serverTotal ~/ serverSamples,
+              samples: serverSamples,
             );
           }
 
@@ -1667,12 +1651,12 @@ class ReaderNotifier extends Notifier<ReaderState> {
             volume: settings.edgeVolume,
           );
 
-          // Solo F5 y solo lo que salió bien: los tiempos de Edge son
+          // Solo el servidor y solo lo que salió bien: los tiempos de Edge son
           // un orden de magnitud menores y bajarían el promedio justo cuando
           // el servidor propio vuelve, dejando el techo demasiado corto.
-          if (dlKind == 'f5') {
-            f5Total += DateTime.now().difference(paragraphStartedAt);
-            f5Samples++;
+          if (settings.copyWith(ttsProvider: dlKind).usesSelfHostedServer) {
+            serverTotal += DateTime.now().difference(paragraphStartedAt);
+            serverSamples++;
           }
 
           final ext = result.filePath.split('.').last;
@@ -1702,9 +1686,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
           // de calibración —para ganar paciencia necesitaría un éxito, y para
           // tener un éxito necesitaría la paciencia—, que es exactamente cómo
           // se perdieron horas de GPU con el motor anterior.
-          if (dlKind == 'f5') {
-            f5Total += DateTime.now().difference(paragraphStartedAt);
-            f5Samples++;
+          if (settings.copyWith(ttsProvider: dlKind).usesSelfHostedServer) {
+            serverTotal += DateTime.now().difference(paragraphStartedAt);
+            serverSamples++;
           }
           if (silent) _downloadCancelled = true;
         } catch (e) {
@@ -1751,12 +1735,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// progresses.
   static double estimatedSecondsPerParagraph(AppSettings settings) =>
       switch (settings.ttsProvider) {
-        'piper' => 2.0,
-        'kokoro' => 5.0,
-        // En GPU y por encima de tiempo real: medido, ~23 s para un párrafo de
-        // ~29 s de audio. Sigue siendo un orden de magnitud más lento que
-        // Kokoro, que corre en CPU pero a 5x tiempo real.
-        'f5' => 25.0,
+        // Medido en el M3 Max con un párrafo de diálogo de ~330 caracteres.
+        'qwen3' => 9.0,
+        'chatterbox2' => 7.0,
         'android' => 1.5, // en el propio teléfono, sin red de por medio
         _ => 3.0, // Edge, dominated by the network
       };
@@ -1790,16 +1771,11 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
   Future<void> _prefetchAhead(AppSettings settings, Book book) async {
     // Only worth doing for a home server; Edge already streams on demand and
-    // its audio is cached paragraph by paragraph as it plays. F5 solo
+    // its audio is cached paragraph by paragraph as it plays. El servidor solo
     // vale la pena si el libro está en español -- mismo criterio que
     // _resolveEngineKind.
-    final hasServer = switch (settings.ttsProvider) {
-      'kokoro' => settings.hasKokoroServer,
-      'piper' => settings.hasPiperServer,
-      'f5' => settings.hasF5Server &&
-          book.language.toLowerCase().startsWith('es'),
-      _ => false,
-    };
+    final hasServer = settings.hasServer &&
+        book.language.toLowerCase().startsWith('es');
     if (!settings.usesSelfHostedServer || !hasServer) {
       return;
     }
@@ -1809,16 +1785,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
       dev.log('[Reader] Prefetch skipped: metered connection');
       return;
     }
-    final reachable = switch (settings.ttsProvider) {
-      'kokoro' => await KokoroTtsProvider.isReachable(settings.selfHostedUrl,
-          token: settings.serverToken),
-      'piper' => await PiperTtsProvider.isReachable(settings.selfHostedUrl,
-          token: settings.serverToken),
-      'f5' => await F5TtsProvider.isReachable(
-          settings.selfHostedUrl,
-          token: settings.tokenFor('f5')),
-      _ => false,
-    };
+    final reachable = await VoiceServerTtsProvider.isReachable(
+        settings.selfHostedUrl,
+        token: settings.serverToken,
+        engine: settings.ttsProvider);
     if (!reachable) {
       dev.log('[Reader] Prefetch skipped: server unreachable');
       return;

@@ -67,6 +67,23 @@ void main() {
     });
   });
 
+  group('canDeliver', () {
+    test('sin servidor compilado no se ofrece un formulario que no entrega',
+        () {
+      // Los tests corren sin --dart-define: es el APK de alguien con solo Edge.
+      // Un reporte encolado sin destino promete un envío que nunca ocurre.
+      expect(Reporter.canDeliver, isFalse);
+    });
+
+    test('flush sin servidor no toca la cola', () async {
+      await Reporter.recordFeedback(tipo: 'bug', texto: 'se corta');
+
+      await Reporter.flush();
+
+      expect(await (await getDatabase()).query('reports'), hasLength(1));
+    });
+  });
+
   group('cola', () {
     test('un fallo sin servidor accesible queda encolado, no se pierde', () async {
       // Es el caso que justifica la cola entera: los fallos que interesan
@@ -88,7 +105,7 @@ void main() {
       await Reporter.recordFeedback(
         tipo: 'mejora',
         texto: 'me gustaría poder subrayar',
-        contexto: const {'capitulo': 6, 'motor': 'kokoro'},
+        contexto: const {'capitulo': 6, 'motor': 'qwen3'},
       );
 
       final db = await getDatabase();
@@ -97,7 +114,7 @@ void main() {
 
       expect(cuerpo['texto'], 'me gustaría poder subrayar');
       expect(cuerpo['capitulo'], 6);
-      expect(cuerpo['motor'], 'kokoro');
+      expect(cuerpo['motor'], 'qwen3');
       expect(cuerpo['diagnostico'], isA<List<dynamic>>());
     });
 

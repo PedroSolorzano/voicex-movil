@@ -13,9 +13,7 @@ import '../../services/reporter.dart';
 import '../../config/settings.dart';
 import '../../storage/repositories.dart';
 import '../../tts/tts_factory.dart';
-import '../../tts/f5_tts_provider.dart';
-import '../../tts/kokoro_tts_provider.dart';
-import '../../tts/piper_tts_provider.dart';
+import '../../tts/voice_server_provider.dart';
 import '../../tts/server_health.dart';
 import '../providers/reader_provider.dart';
 import '../providers/settings_provider.dart';
@@ -85,14 +83,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
 
     resetServerHealthCache();
-    final health = switch (_settings.ttsProvider) {
-      'piper' =>
-        await PiperTtsProvider.healthOf(url, token: _settings.serverToken),
-      'f5' => await F5TtsProvider.healthOf(url,
-          token: _settings.tokenFor('f5')),
-      _ =>
-        await KokoroTtsProvider.healthOf(url, token: _settings.serverToken),
-    };
+    final health = await VoiceServerTtsProvider.healthOf(url,
+        token: _settings.serverToken, engine: _settings.ttsProvider);
     if (!mounted) return;
 
     setState(() {
@@ -209,9 +201,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 // a Edge en silencio: exactamente "una función rota".
                 for (final engine in const [
                   ('edge', 'Edge', Icons.cloud_outlined),
-                  ('kokoro', 'Kokoro', Icons.home_outlined),
-                  ('piper', 'Piper', Icons.record_voice_over_outlined),
-                  ('f5', 'F5', Icons.graphic_eq),
+                  ('qwen3', 'Qwen3', Icons.graphic_eq),
+                  ('chatterbox2', 'Chatterbox', Icons.record_voice_over_outlined),
                   ('android', 'Teléfono', Icons.phone_android),
                 ].where((e) => TtsServerConfig.availableEngines.contains(e.$1)))
                   ChoiceChip(
@@ -226,20 +217,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: 8),
             Text(
               switch (s.ttsProvider) {
-                'kokoro' =>
-                  'La mejor voz, generada en una computadora que no es la tuya. '
-                      'Necesita que esté encendida: cuando no lo está, la app usa '
-                      'Edge automáticamente o el audio ya descargado, sin quedarse '
-                      'muda.',
-                'piper' =>
-                  'Voces entrenadas en cada idioma, en esa misma computadora. Muy '
-                      'rápido, pero no marca las palabras: el resaltado se calcula '
-                      'por oración de forma aproximada.',
-                'f5' =>
-                  'Voz clonada, generada en una laptop personal con GPU. Solo '
-                      'para libros en español, y solo mientras esa laptop esté '
-                      'encendida: si no responde, la app usa Edge automáticamente. '
-                      'No marca las palabras.',
+                'qwen3' =>
+                  'Voz clonada, generada en el Mac de casa. Solo para libros en '
+                      'español, y solo mientras ese Mac esté encendido y en la '
+                      'misma red: si no responde, la app usa Edge '
+                      'automáticamente. No marca las palabras.',
+                'chatterbox2' =>
+                  'Voz clonada con Chatterbox, generada en el Mac de casa. Solo '
+                      'para libros en español, y solo mientras ese Mac esté '
+                      'encendido y en la misma red: si no responde, la app usa '
+                      'Edge automáticamente. No marca las palabras.',
                 'android' =>
                   'El motor de voz del propio teléfono. El único que lee sin '
                       'internet y sin servidor, así que es el que sigue '
@@ -294,36 +281,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ),
                   ),
                 ),
-              if (s.ttsProvider == 'piper') ...[
-                const SizedBox(height: 12),
-                _LabelledSlider(
-                  label: 'Ritmo',
-                  value: s.piperLengthScale,
-                  min: 0.8,
-                  max: 1.6,
-                  divisions: 16,
-                  // Named, not just numbered: this is phoneme *length*, so a
-                  // higher number is slower — the opposite of what a bare "×"
-                  // suggests, and a reader chasing a slower voice will reach
-                  // for the low end and get a faster one.
-                  display: _paceLabel(s.piperLengthScale),
-                  onChanged: (v) => _update(s.copyWith(piperLengthScale: v)),
-                  // The pace is part of the cache key because Piper bakes it
-                  // into the samples. Moving the slider by accident silently
-                  // orphans every download made at the previous pace, which is
-                  // exactly how hours of audio went missing during testing.
-                  onChangeEnd: (v) => _warnPaceInvalidates(v),
-                ),
-                Text(
-                  'Alarga cada fonema al sintetizar: números más altos hablan '
-                  'más pausado. Suena mejor que frenar la reproducción, pero va '
-                  'grabado en el audio, así que cambiarlo obliga a descargar de '
-                  'nuevo.\n\n'
-                  'Para ir más despacio sin volver a descargar, usa "Velocidad '
-                  'de reproducción" más abajo.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
               const SizedBox(height: 12),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -352,32 +309,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               label: 'Español',
               lang: 'es',
               settings: s,
-              // Un switch por motor, no un "kokoro o lo demás": con Piper
-              // seleccionado, la voz elegida acababa guardada en los ajustes de
-              // Edge, y piperVoiceEs no se escribía desde ninguna parte de la
-              // interfaz. Cambiar la voz de Piper obligaba a editar el compose.
+              // Un switch por motor, no un "servidor o lo demás": con un motor
+              // propio seleccionado, la voz elegida acababa guardada en los
+              // ajustes de Edge y el motor seguía leyendo con la anterior.
               onPick: (id) => _update(switch (s.ttsProvider) {
-                'kokoro' => s.copyWith(kokoroVoiceEs: id),
-                'piper' => s.copyWith(piperVoiceEs: id),
-                'f5' => s.copyWith(f5VoiceEs: id),
+                'qwen3' => s.copyWith(qwen3Voice: id),
+                'chatterbox2' => s.copyWith(chatterbox2Voice: id),
                 'android' => s.copyWith(androidVoiceEs: id),
                 _ => s.copyWith(edgeVoiceEs: id),
               }),
               onPreview: _preview,
               previewing: _previewing,
             ),
-            // Sin fila de inglés para F5: no ofrece ese idioma (ver
-            // F5TtsProvider), y mostrarla dejaría un selector cuyo
-            // onPick no tendría dónde guardar nada.
-            if (s.ttsProvider != 'f5') ...[
+            // Sin fila de inglés para los motores del servidor: no ofrecen ese
+            // idioma (ver VoiceServerTtsProvider), y mostrarla dejaría un
+            // selector cuyo onPick no tendría dónde guardar nada.
+            if (!s.usesSelfHostedServer) ...[
               const SizedBox(height: 8),
               _VoiceTile(
                 label: 'Inglés',
                 lang: 'en',
                 settings: s,
                 onPick: (id) => _update(switch (s.ttsProvider) {
-                  'kokoro' => s.copyWith(kokoroVoiceEn: id),
-                  'piper' => s.copyWith(piperVoiceEn: id),
                   'android' => s.copyWith(androidVoiceEn: id),
                   _ => s.copyWith(edgeVoiceEn: id),
                 }),
@@ -722,7 +675,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               '• Con Edge, el texto de cada párrafo viaja a los servidores de '
               'Microsoft, que son los que generan la voz. Es el precio de esas '
               'voces.\n'
-              '• Con Kokoro, Piper o F5 va a la computadora de casa, y con '
+              '• Con Qwen3 o Chatterbox va al Mac de casa, y con '
               '"Teléfono" no sale nada: ese motor lee sin red.\n'
               '• El diccionario consulta Wikcionario con la palabra que tocas, '
               'y solo con esa.\n'
@@ -795,39 +748,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ],
       ),
     );
-  }
-
-  /// "1.25× · pausado". The number alone reads backwards for phoneme length.
-  static String _paceLabel(double value) {
-    final word = switch (value) {
-      < 0.95 => 'rápido',
-      < 1.1 => 'normal',
-      < 1.35 => 'pausado',
-      _ => 'muy pausado',
-    };
-    return '${value.toStringAsFixed(2)}× · $word';
-  }
-
-  /// Warns once when the Piper pace moves away from what was downloaded.
-  Future<void> _warnPaceInvalidates(double value) async {
-    final downloaded = await _cacheRepo.countPinnedByKey(prefix: 'piper-');
-    if (!mounted || downloaded == 0) return;
-
-    // The pace closes the key ('piper-<voice>-1_25'), it does not open it. The
-    // warning used to look for it as a prefix, never found it, and so fired at
-    // every nudge of the slider — including a nudge back to the value the
-    // downloads were made at.
-    final atThisPace = await _cacheRepo.countPinnedByKey(
-      prefix: 'piper-',
-      suffix: ReaderNotifier.piperPaceSuffix(value),
-    );
-    if (!mounted || atThisPace > 0) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      duration: const Duration(seconds: 6),
-      content: Text('Con este ritmo no se usarán los $downloaded párrafos ya '
-          'descargados: el ritmo va grabado en el audio.'),
-    ));
   }
 
   /// Wipes the temporary cache only. Handy after switching engines: audio
@@ -945,7 +865,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _previewing = voiceId);
 
     final s = _settings;
-    // Language matters for Kokoro: without it the preview would mispronounce.
+    // Language matters for the phone's own engine; the server ones read Spanish.
     final tts = getProvider(s, lang: lang);
     String? path;
     try {
@@ -1190,7 +1110,6 @@ class _LabelledSlider extends StatelessWidget {
   final int divisions;
   final String display;
   final ValueChanged<double> onChanged;
-  final ValueChanged<double>? onChangeEnd;
 
   const _LabelledSlider({
     required this.label,
@@ -1200,7 +1119,6 @@ class _LabelledSlider extends StatelessWidget {
     required this.divisions,
     required this.display,
     required this.onChanged,
-    this.onChangeEnd,
   });
 
   @override
@@ -1215,7 +1133,6 @@ class _LabelledSlider extends StatelessWidget {
               divisions: divisions,
               label: display,
               onChanged: onChanged,
-              onChangeEnd: onChangeEnd,
             ),
           ),
           SizedBox(

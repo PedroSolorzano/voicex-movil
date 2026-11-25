@@ -39,7 +39,7 @@ void main() {
   /// [AudioCacheRepo.save]. This is how older builds left the cache: a
   /// temporary copy and a download side by side for the same paragraph.
   Future<void> insertRow(String filePath,
-      {required bool pinned, String voiceId = 'kokoro-af_bella'}) async {
+      {required bool pinned, String voiceId = 'qwen3-esposa'}) async {
     final db = await getDatabase();
     await db.insert('audio_cache', {
       'book_id': 1,
@@ -64,13 +64,13 @@ void main() {
   group('pruneExpired', () {
     test('keeps downloads no matter how long they sit untouched', () async {
       final download = await audioFile('pinned.mp3');
-      await repo.savePin(1, 0, 0, 'kokoro-af_bella', 'f96', download, 2);
+      await repo.savePin(1, 0, 0, 'qwen3-esposa', 'f96', download, 2);
       await ageEntry(download, days: 40);
 
       await repo.pruneExpired();
 
       expect(File(download).existsSync(), isTrue);
-      expect(await repo.get(1, 0, 0, 'kokoro-af_bella', 'f96'), download);
+      expect(await repo.get(1, 0, 0, 'qwen3-esposa', 'f96'), download);
     });
 
     test('still drops temporary audio past five days', () async {
@@ -103,7 +103,7 @@ void main() {
       await insertRow(temp, pinned: false);
       await insertRow(download, pinned: true);
 
-      expect(await repo.get(1, 0, 0, 'kokoro-af_bella', 'f96'), download);
+      expect(await repo.get(1, 0, 0, 'qwen3-esposa', 'f96'), download);
     });
 
     test('falls through to the next row when the first file is gone', () async {
@@ -113,7 +113,7 @@ void main() {
       await insertRow(download, pinned: true);
       await File(download).delete();
 
-      expect(await repo.get(1, 0, 0, 'kokoro-af_bella', 'f96'), temp);
+      expect(await repo.get(1, 0, 0, 'qwen3-esposa', 'f96'), temp);
     });
 
     test('re-synthesizes nothing while a download is on disk', () async {
@@ -125,7 +125,7 @@ void main() {
       await insertRow(download, pinned: true);
       await File(temp).delete();
 
-      expect(await repo.get(1, 0, 0, 'kokoro-af_bella', 'f96'), download);
+      expect(await repo.get(1, 0, 0, 'qwen3-esposa', 'f96'), download);
     });
 
     test('treats an empty file as absent and forgets the row', () async {
@@ -157,18 +157,18 @@ void main() {
     test('never removes a download while caching the same paragraph', () async {
       final download = await audioFile('pinned.mp3');
       final temp = await audioFile('temp.mp3');
-      await repo.savePin(1, 0, 0, 'kokoro-af_bella', 'f96', download, 2);
-      await repo.save(1, 0, 0, 'kokoro-af_bella', 'f96', temp, 2);
+      await repo.savePin(1, 0, 0, 'qwen3-esposa', 'f96', download, 2);
+      await repo.save(1, 0, 0, 'qwen3-esposa', 'f96', temp, 2);
 
       expect(File(download).existsSync(), isTrue);
-      expect(await repo.get(1, 0, 0, 'kokoro-af_bella', 'f96'), download);
+      expect(await repo.get(1, 0, 0, 'qwen3-esposa', 'f96'), download);
     });
 
     test('savePin retires the temporary copy it supersedes', () async {
       final temp = await audioFile('temp.mp3');
       final download = await audioFile('pinned.mp3');
-      await repo.save(1, 0, 0, 'kokoro-af_bella', 'f96', temp, 2);
-      await repo.savePin(1, 0, 0, 'kokoro-af_bella', 'f96', download, 2);
+      await repo.save(1, 0, 0, 'qwen3-esposa', 'f96', temp, 2);
+      await repo.savePin(1, 0, 0, 'qwen3-esposa', 'f96', download, 2);
 
       final db = await getDatabase();
       expect((await db.query('audio_cache')).length, 1);
@@ -177,197 +177,172 @@ void main() {
   });
 
   group('migrateCacheKeys', () {
-    test('renames old keys and keeps the download when two rows collide',
+    test('keeps the download when an unprefixed row collides with it',
         () async {
+      // Whatever has no engine prefix predates the split and is relabelled
+      // 'edge-…', which can land on a key that already exists: a temporary copy
+      // from an old build next to the download of the same paragraph.
       final db = await getDatabase();
       final temp = await audioFile('temp.mp3');
       final download = await audioFile('pinned.mp3');
-      // 'kokoro:af_bella' is the pre-0.5.0 spelling; the migration rewrites it
-      // to 'kokoro-af_bella', which collides with the row already stored that
-      // way. Only one may survive, and it has to be the download.
-      await db.insert('audio_cache', {
-        'book_id': 1,
-        'chapter_idx': 0,
-        'para_idx': 0,
-        'voice_id': 'kokoro:af_bella',
-        'speed_hash': 'f96',
-        'file_path': temp,
-        'file_size_kb': 2,
-        'pinned': 0,
-      });
-      await db.insert('audio_cache', {
-        'book_id': 1,
-        'chapter_idx': 0,
-        'para_idx': 0,
-        'voice_id': 'kokoro-af_bella',
-        'speed_hash': 'f96',
-        'file_path': download,
-        'file_size_kb': 2,
-        'pinned': 1,
-      });
+      await insertRow(temp, pinned: false, voiceId: 'es-MX-DaliaNeural');
+      await insertRow(download,
+          pinned: true, voiceId: 'edge-es-MX-DaliaNeural');
 
       await repo.migrateCacheKeys();
 
       expect((await db.query('audio_cache')).length, 1);
-      expect(await repo.get(1, 0, 0, 'kokoro-af_bella', 'f96'), download);
+      expect(await repo.get(1, 0, 0, 'edge-es-MX-DaliaNeural', 'f96'),
+          download);
       expect(File(temp).existsSync(), isFalse);
     });
 
-    test('retires the audio of an engine the app no longer has', () async {
-      final db = await getDatabase();
-      // Both spellings the Android key ever had: 'android:' before 0.5.0,
-      // 'android-' after it. Pinned, to prove even a download goes.
-      final oldSpelling = await audioFile('old.wav');
-      final newSpelling = await audioFile('new.wav');
-      await insertRow(oldSpelling, pinned: true, voiceId: 'android:es-ES');
-      await insertRow(newSpelling, pinned: true, voiceId: 'android-es');
-      final kept = await audioFile('kokoro.mp3');
-      await repo.savePin(1, 0, 1, 'kokoro-af_bella', 'f96', kept, 2);
+    test('relabels what has no engine prefix as Edge', () async {
+      final f = await audioFile('old.mp3');
+      await insertRow(f, pinned: true, voiceId: 'es-MX-DaliaNeural');
 
       await repo.migrateCacheKeys();
 
-      expect(File(oldSpelling).existsSync(), isFalse);
-      expect(File(newSpelling).existsSync(), isFalse);
-      // A deletion, not a relabelling: the catch-all rule at the end of the
-      // migration would otherwise have turned them into 'edge-android-es'.
-      expect(await db.query('audio_cache', where: "voice_id LIKE '%android%'"),
-          isEmpty);
-      expect(await repo.get(1, 0, 1, 'kokoro-af_bella', 'f96'), kept);
+      expect(await repo.get(1, 0, 0, 'edge-es-MX-DaliaNeural', 'f96'), f);
     });
 
-    test('mete el idioma del libro en las claves de Kokoro y Piper', () async {
-      // Sin esto, un libro en inglés y otro en español compartían audio cuando
-      // la misma voz servía para ambos. Migrar en vez de cambiar la clave a
-      // secas es lo que evita huerfanizar las descargas ya hechas: horas de
-      // síntesis que la app no puede permitirse perder.
-      final db = await getDatabase();
-      await db.insert('books', {
-        'id': 7,
-        'title': 'The Gunslinger',
-        'author': 'Stephen King',
-        'file_path': '/x.epub',
-        'language': 'en',
-      });
-      final ingles = await audioFile('ing.aac');
-      await db.insert('audio_cache', {
-        'book_id': 7,
-        'chapter_idx': 0,
-        'para_idx': 0,
-        'voice_id': 'kokoro-af_bella',
-        'speed_hash': 'f96',
-        'file_path': ingles,
-        'file_size_kb': 2,
-        'pinned': 1,
-      });
-
-      await repo.migrateCacheKeys();
-
-      expect(await repo.get(7, 0, 0, 'kokoro-en-af_bella', 'f96'), ingles);
-    });
-
-    test('la migración del idioma es idempotente', () async {
-      final db = await getDatabase();
-      await db.insert('books', {
-        'id': 8,
-        'title': 'El talismán',
-        'author': 'Stephen King',
-        'file_path': '/y.epub',
-        'language': 'es',
-      });
-      final es = await audioFile('esp.aac');
-      await db.insert('audio_cache', {
-        'book_id': 8,
-        'chapter_idx': 0,
-        'para_idx': 0,
-        'voice_id': 'kokoro-af_bella',
-        'speed_hash': 'f96',
-        'file_path': es,
-        'file_size_kb': 2,
-        'pinned': 1,
-      });
-
-      await repo.migrateCacheKeys();
-      await repo.migrateCacheKeys();
-      await repo.migrateCacheKeys();
-
-      // Correrla tres veces no puede dar kokoro-es-es-es-af_bella.
-      expect(await repo.get(8, 0, 0, 'kokoro-es-af_bella', 'f96'), es);
-    });
-
-    test('is idempotent on a clean table', () async {
-      final download = await audioFile('pinned.mp3');
-      await repo.savePin(1, 0, 0, 'kokoro-af_bella', 'f96', download, 2);
-
-      await repo.migrateCacheKeys();
-      await repo.migrateCacheKeys();
-
-      expect(await repo.get(1, 0, 0, 'kokoro-af_bella', 'f96'), download);
-    });
-
-    test('leaves an F5 download alone instead of relabelling it Edge',
-        () async {
+    test('leaves the download of every current engine alone', () async {
       // La trampa que se comió a Chatterbox: la regla comodín "sin prefijo
       // conocido -> Edge" convertía 'chatterbox-voz' en 'edge-chatterbox-voz'
       // en cada arranque, una clave que la reproducción nunca consulta, así
       // que la descarga quedaba inalcanzable con el archivo intacto. Este test
-      // existe para que no vuelva a pasar con el motor que lo reemplazó.
-      final download = await audioFile('pinned.mp3');
-      await repo.savePin(1, 0, 0, 'f5-esposa', 'f96', download, 2);
+      // existe para que no vuelva a pasar con ningún motor que se sume.
+      final keys = [
+        'edge-es-MX-DaliaNeural',
+        'qwen3-esposa',
+        'chatterbox2-colombiana',
+        'android-es-es-ES',
+      ];
+      for (var i = 0; i < keys.length; i++) {
+        await repo.savePin(
+            1, 0, i, keys[i], 'f96', await audioFile('m$i.mp3'), 2);
+      }
 
       await repo.migrateCacheKeys();
+      await repo.migrateCacheKeys();
 
-      expect(await repo.get(1, 0, 0, 'f5-esposa', 'f96'), download);
+      for (var i = 0; i < keys.length; i++) {
+        expect(await repo.get(1, 0, i, keys[i], 'f96'), isNotNull,
+            reason: '${keys[i]} se volvió inalcanzable');
+      }
     });
 
-    test('retires Chatterbox audio, in both the good and the corrupted key',
-        () async {
-      // Chatterbox se fue en 0.8.0. Su audio no lo puede reproducir ningún
-      // motor que quede, así que ocupa disco sin poder usarse -- el mismo
-      // trato que recibió Android TTS. Se van las dos formas: la clave sana y
-      // la que dejó corrupta la regla comodín de arriba.
-      final sana = await audioFile('chatterbox.mp3');
-      final corrupta = await audioFile('chatterbox-corrupta.mp3');
-      await insertRow(sana, pinned: true, voiceId: 'chatterbox-voz_propia');
-      await insertRow(corrupta,
-          pinned: true, voiceId: 'edge-chatterbox-voz_propia');
-      final sobrevive = await audioFile('f5.mp3');
-      await repo.savePin(1, 0, 1, 'f5-esposa', 'f96', sobrevive, 2);
+    test('a phone-engine download survives the start-up migration', () async {
+      // El motor del teléfono volvió en 0.7.0 con el mismo prefijo `android-`
+      // que tuvo el viejo, y la migración seguía borrándolo en cada arranque:
+      // lo descargado con "Teléfono" desaparecía al abrir la app de nuevo.
+      final f = await audioFile('phone.wav');
+      await repo.savePin(1, 0, 0, 'android-es-es-ES', 'f96', f, 2);
 
       await repo.migrateCacheKeys();
 
+      expect(await repo.get(1, 0, 0, 'android-es-es-ES', 'f96'), f);
+      expect(File(f).existsSync(), isTrue);
+    });
+
+    test('retires the audio of every engine the app no longer has', () async {
+      // One row per spelling each retired engine ever had. Pinned, to prove
+      // that even a download goes: nothing that remains can play it.
+      final retired = <String, String>{
+        'android:es-ES': 'android viejo (antes de 0.5.0)',
+        'chatterbox-voz_propia': 'chatterbox',
+        'edge-chatterbox-voz_propia': 'chatterbox corrompido por la regla comodín',
+        'kokoro-af_bella': 'kokoro',
+        'kokoro-es-ef_dora': 'kokoro con idioma',
+        'kokoro:af_bella': 'kokoro, forma de antes de 0.5.0',
+        'edge-kokoro-af_bella': 'kokoro relabelado como Edge',
+        'ef_dora': 'kokoro sin prefijo',
+        'edge-ef_dora': 'kokoro sin prefijo, relabelado como Edge',
+        'piper-es_AR-daniela-high-1_00': 'piper',
+        'piper@es_AR-daniela-high': 'piper, forma de antes de 0.5.0',
+        'edge-piper-es_AR-daniela-high': 'piper relabelado como Edge',
+        'f5-esposa': 'f5',
+        'edge-f5-esposa': 'f5 relabelado como Edge',
+      };
+      final files = <String>[];
+      var i = 0;
       final db = await getDatabase();
-      expect(await db.query('audio_cache', where: "voice_id LIKE '%chatterbox%'"),
-          isEmpty);
-      expect(File(sana).existsSync(), isFalse);
-      expect(File(corrupta).existsSync(), isFalse);
-      expect(await repo.get(1, 0, 1, 'f5-esposa', 'f96'), sobrevive,
-          reason: 'el motor vigente no se toca');
+      for (final id in retired.keys) {
+        final f = await audioFile('retirado_${i++}.mp3');
+        files.add(f);
+        await db.insert('audio_cache', {
+          'book_id': 1,
+          'chapter_idx': 0,
+          'para_idx': i,
+          'voice_id': id,
+          'speed_hash': 'f96',
+          'file_path': f,
+          'file_size_kb': 2,
+          'pinned': 1,
+        });
+      }
+      final vivo = await audioFile('vivo.mp3');
+      await repo.savePin(1, 0, 99, 'qwen3-esposa', 'f96', vivo, 2);
+
+      await repo.migrateCacheKeys();
+
+      // A deletion, not a relabelling: the catch-all rule at the end of the
+      // migration would otherwise have turned them into Edge rows.
+      final left = await db.query('audio_cache');
+      expect(left.map((r) => r['voice_id']), ['qwen3-esposa'],
+          reason: 'solo debería quedar el motor vigente');
+      for (final f in files) {
+        expect(File(f).existsSync(), isFalse, reason: f);
+      }
+      expect(await repo.get(1, 0, 99, 'qwen3-esposa', 'f96'), vivo);
+    });
+
+    test('does not mistake an Edge voice for a retired Kokoro id', () async {
+      // Kokoro ids are a language letter, a gender letter and an underscore.
+      // Edge names ('es-MX-…', 'en-US-…') must never fit that shape.
+      final f = await audioFile('edge.mp3');
+      await repo.savePin(1, 0, 0, 'edge-en-US-JennyNeural', 'f96', f, 2);
+
+      await repo.migrateCacheKeys();
+
+      expect(await repo.get(1, 0, 0, 'edge-en-US-JennyNeural', 'f96'), f);
+    });
+
+    test('is idempotent on a clean table', () async {
+      final download = await audioFile('pinned.mp3');
+      await repo.savePin(1, 0, 0, 'qwen3-esposa', 'f96', download, 2);
+
+      await repo.migrateCacheKeys();
+      await repo.migrateCacheKeys();
+      await repo.migrateCacheKeys();
+
+      expect(await repo.get(1, 0, 0, 'qwen3-esposa', 'f96'), download);
     });
   });
 
   group('countPinnedByKey', () {
     test('reads the underscores in a key literally, not as wildcards',
         () async {
-      await repo.savePin(1, 0, 0, 'piper-es_AR-daniela-high-1_00', 'f96',
+      await repo.savePin(1, 0, 0, 'qwen3-mi_voz-1_00', 'f96',
           await audioFile('a.wav'), 2);
-      await repo.savePin(1, 0, 1, 'piper-es_AR-daniela-high-1_25', 'f96',
+      await repo.savePin(1, 0, 1, 'qwen3-mi_voz-1_25', 'f96',
           await audioFile('b.wav'), 2);
       // Differs from the first key only where the underscores are — the two
       // are indistinguishable to an unescaped LIKE.
-      await repo.savePin(1, 0, 2, 'piper-esXAR-daniela-high-1x00', 'f96',
+      await repo.savePin(1, 0, 2, 'qwen3-miXvoz-1x00', 'f96',
           await audioFile('c.wav'), 2);
 
-      expect(await repo.countPinnedByKey(prefix: 'piper-'), 3);
-      expect(await repo.countPinnedByKey(prefix: 'piper-es_AR-'), 2);
+      expect(await repo.countPinnedByKey(prefix: 'qwen3-'), 3);
+      expect(await repo.countPinnedByKey(prefix: 'qwen3-mi_voz'), 2);
       expect(
-          await repo.countPinnedByKey(prefix: 'piper-', suffix: '-1_00'), 1);
+          await repo.countPinnedByKey(prefix: 'qwen3-', suffix: '-1_00'), 1);
     });
 
     test('ignores temporary audio', () async {
-      await repo.save(1, 0, 0, 'piper-es_AR-daniela-high-1_00', 'f96',
+      await repo.save(1, 0, 0, 'qwen3-mi_voz-1_00', 'f96',
           await audioFile('a.wav'), 2);
 
-      expect(await repo.countPinnedByKey(prefix: 'piper-'), 0);
+      expect(await repo.countPinnedByKey(prefix: 'qwen3-'), 0);
     });
   });
 
@@ -375,8 +350,8 @@ void main() {
     test('evictLruUntilFit never touches a download', () async {
       final download = await audioFile('pinned.mp3');
       final temp = await audioFile('temp.mp3');
-      await repo.savePin(1, 0, 0, 'kokoro-af_bella', 'f96', download, 4096);
-      await repo.save(1, 0, 1, 'kokoro-af_bella', 'f96', temp, 4096);
+      await repo.savePin(1, 0, 0, 'qwen3-esposa', 'f96', download, 4096);
+      await repo.save(1, 0, 1, 'qwen3-esposa', 'f96', temp, 4096);
 
       await repo.evictLruUntilFit(1024, 1);
 
@@ -387,8 +362,8 @@ void main() {
     test('clearAll keeps downloads, deleteDownloads removes them', () async {
       final download = await audioFile('pinned.mp3');
       final temp = await audioFile('temp.mp3');
-      await repo.savePin(1, 0, 0, 'kokoro-af_bella', 'f96', download, 2);
-      await repo.save(1, 0, 1, 'kokoro-af_bella', 'f96', temp, 2);
+      await repo.savePin(1, 0, 0, 'qwen3-esposa', 'f96', download, 2);
+      await repo.save(1, 0, 1, 'qwen3-esposa', 'f96', temp, 2);
 
       await repo.clearAll();
       expect(File(temp).existsSync(), isFalse);

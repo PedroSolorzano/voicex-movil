@@ -20,7 +20,7 @@ const voiceMap = {
 
 /// Engines the app can build. Anything else found in stored settings comes from
 /// a version that offered more of them, and has to be brought back here.
-const ttsEngines = ['edge', 'kokoro', 'piper', 'f5', 'android'];
+const ttsEngines = ['edge', 'qwen3', 'chatterbox2', 'android'];
 
 String resolveVoice(String provider, String lang, String gender) {
   return voiceMap[provider]?[lang]?[gender] ??
@@ -59,36 +59,22 @@ class AppSettings {
   bool highlightSentences;
   bool highlightWords;
 
-  // ── Kokoro (servidor propio en la red local) ─────────────────────────────
-  /// Base URL of the self-hosted Kokoro-FastAPI, e.g. http://192.168.1.50:8880
-  String kokoroBaseUrl;
-  String kokoroVoiceEs;
-  String kokoroVoiceEn;
-
   /// Download the next chapters ahead while on WiFi with the server reachable.
   bool prefetchOnWifi;
   int prefetchChapters;
 
-  // ── Piper (servidor propio, voces nativas por idioma) ────────────────────
-  String piperBaseUrl;
+  // ── Servidor de voz (el Mac con Qwen3-TTS y Chatterbox, solo español) ────
+  /// Base URL of `tools/mlx`. Compiled in rather than stored: see
+  /// [TtsServerConfig].
+  String serverBaseUrl;
 
-  /// Piper model per language. Its voices are trained one language each, so the
-  /// server must be told which model to use: feeding English text to a Spanish
-  /// model produces Spanish phonetics over English words — unintelligible.
-  String piperVoiceEs;
-  String piperVoiceEn;
-
-  /// Phoneme length. Above 1.0 slows the voice; es_AR-daniela reads fast at 1.0.
-  double piperLengthScale;
-
-  // ── F5-TTS (laptop personal con GPU, solo español) ───────────────────────
-  String f5BaseUrl;
-
-  /// Nombre de la voz clonada que sirve `tools/f5` — el nombre a secas, sin
-  /// extensión: el servidor guarda cada voz como un `.wav` y su `.txt` con la
-  /// transcripción. Sin variante `En`: este motor no ofrece inglés, ver
-  /// `F5TtsProvider`.
-  String f5VoiceEs;
+  /// Voz clonada con la que lee cada motor: el nombre a secas de una de las
+  /// que tiene `tools/mlx/voices/` (un `.wav` y su `.txt` con la transcripción).
+  /// Cada motor guarda la suya porque no suenan igual con la misma grabación y
+  /// se eligen por separado. Sin variante `En`: las voces son clones en
+  /// español, ver [VoiceServerTtsProvider].
+  String qwen3Voice;
+  String chatterbox2Voice;
   String theme;
   int cacheMaxMb;
 
@@ -151,17 +137,11 @@ class AppSettings {
     this.edgeVolume = '+0%',
     this.highlightSentences = true,
     this.highlightWords = true,
-    this.kokoroBaseUrl = '',
-    this.kokoroVoiceEs = 'af_bella',
-    this.kokoroVoiceEn = 'af_bella',
     this.prefetchOnWifi = true,
     this.prefetchChapters = 3,
-    this.piperBaseUrl = '',
-    this.piperVoiceEs = 'es_AR-daniela-high',
-    this.piperVoiceEn = 'en_US-lessac-high',
-    this.piperLengthScale = 1.0,
-    this.f5BaseUrl = '',
-    this.f5VoiceEs = 'esposa',
+    this.serverBaseUrl = '',
+    this.qwen3Voice = 'esposa',
+    this.chatterbox2Voice = 'colombiana',
     this.theme = 'dark',
     this.cacheMaxMb = 150,
     this.fontSize = 18,
@@ -187,16 +167,13 @@ class AppSettings {
   ///
   /// Needed because the cache key names the engine that produced the audio,
   /// which is not always the selected one: a fallback to Edge must be keyed
-  /// with Edge's voice, not with whatever Kokoro or Piper would have used.
+  /// with Edge's voice, not with whatever Qwen3 or Chatterbox would have used.
   String voiceForEngine(String engine, String lang) {
     switch (engine) {
-      case 'kokoro':
-        final v = lang == 'es' ? kokoroVoiceEs : kokoroVoiceEn;
-        return v.isNotEmpty ? v : 'af_bella';
-      case 'piper':
-        return lang == 'es' ? piperVoiceEs : piperVoiceEn;
-      case 'f5':
-        return f5VoiceEs;
+      case 'qwen3':
+        return qwen3Voice;
+      case 'chatterbox2':
+        return chatterbox2Voice;
       case 'android':
         final v = lang == 'es' ? androidVoiceEs : androidVoiceEn;
         if (v.isNotEmpty) return v;
@@ -207,43 +184,22 @@ class AppSettings {
     return resolveVoice(engine, lang, gender);
   }
 
-  /// True when a Kokoro server has been configured at all.
-  bool get hasKokoroServer => kokoroBaseUrl.trim().isNotEmpty;
-
-  bool get hasPiperServer => piperBaseUrl.trim().isNotEmpty;
-
-  bool get hasF5Server => f5BaseUrl.trim().isNotEmpty;
+  /// True when this build knows the address of a voice server at all.
+  bool get hasServer => serverBaseUrl.trim().isNotEmpty;
 
   /// Base URL of the self-hosted engine currently selected, if any.
-  String get selfHostedUrl => switch (ttsProvider) {
-        'kokoro' => kokoroBaseUrl,
-        'piper' => piperBaseUrl,
-        'f5' => f5BaseUrl,
-        _ => '',
-      };
+  String get selfHostedUrl => usesSelfHostedServer ? serverBaseUrl : '';
 
   /// Whether the selected engine depends on a machine of the user's own.
   bool get usesSelfHostedServer =>
-      ttsProvider == 'kokoro' ||
-      ttsProvider == 'piper' ||
-      ttsProvider == 'f5';
+      TtsServerConfig.serverEngines.contains(ttsProvider);
 
-  /// Credential for the proxy that fronts the self-hosted engines.
+  /// Credential of the voice server, shared by both of its engines.
   ///
   /// Baked in at build time, never typed: see [TtsServerConfig] for why it is a
-  /// revocable identifier rather than a secret. Empty on a build that reaches
-  /// its server directly on the LAN, where there is no proxy to authenticate to.
-  String get serverToken => TtsServerConfig.token;
-
-  /// The credential [engine] expects, which is not the same one for all of
-  /// them.
-  ///
-  /// Kokoro and Piper sit behind the proxy and share its token; F5 is reached
-  /// directly and validates its own. Handing F5 the proxy's token — which is
-  /// what every probe did until 0.10.0 — sends a credential to a machine that
-  /// has no business seeing it, and does not authenticate anything either.
-  String tokenFor(String engine) =>
-      engine == 'f5' ? TtsServerConfig.f5Token : TtsServerConfig.token;
+  /// revocable identifier rather than a secret. Empty is valid — a server
+  /// started without a token asks for nothing.
+  String get serverToken => TtsServerConfig.voiceToken;
 
   /// Brings a stored engine name back to one **this build** can actually use.
   ///
@@ -251,7 +207,7 @@ class AppSettings {
   /// was retired in 0.6.0, so a phone that had it selected would boot with
   /// `ttsProvider = 'android'`. And from 0.7.0 the self-hosted engines only
   /// exist in a build compiled with their address, so an APK handed to a tester
-  /// without one has no Kokoro at all — while their phone may still carry the
+  /// without one has no Qwen3 at all — while their phone may still carry the
   /// name from a previous build.
   ///
   /// Both cases fail the same way if left alone: the factory quietly returns
@@ -266,7 +222,8 @@ class AppSettings {
   static Future<void> forgetRetiredKeys() async {
     final prefs = await SharedPreferences.getInstance();
     for (final key in ['kokoroBaseUrl', 'piperBaseUrl', 'chatterboxBaseUrl',
-      'chatterboxVoiceEs', 'f5BaseUrl']) {
+      'chatterboxVoiceEs', 'f5BaseUrl', 'kokoroVoiceEs', 'kokoroVoiceEn',
+      'piperVoiceEs', 'piperVoiceEn', 'piperLengthScale', 'f5VoiceEs']) {
       await prefs.remove(key);
     }
   }
@@ -285,22 +242,14 @@ class AppSettings {
       edgeVolume: prefs.getString('edgeVolume') ?? '+0%',
       highlightSentences: prefs.getBool('highlightSentences') ?? true,
       highlightWords: prefs.getBool('highlightWords') ?? true,
-      // Compilada, no guardada: ver [TtsServerConfig]. Las claves viejas se
-      // borran más abajo para que no quede en disco la dirección de una
-      // versión anterior.
-      kokoroBaseUrl: TtsServerConfig.kokoroUrl,
-      kokoroVoiceEs: prefs.getString('kokoroVoiceEs') ?? 'af_bella',
-      kokoroVoiceEn: prefs.getString('kokoroVoiceEn') ?? 'af_bella',
       prefetchOnWifi: prefs.getBool('prefetchOnWifi') ?? true,
       prefetchChapters: prefs.getInt('prefetchChapters') ?? 3,
-      piperBaseUrl: TtsServerConfig.piperUrl,
-      piperVoiceEs: prefs.getString('piperVoiceEs') ?? 'es_AR-daniela-high',
-      piperVoiceEn: prefs.getString('piperVoiceEn') ?? 'en_US-lessac-high',
-      piperLengthScale: prefs.getDouble('piperLengthScale') ?? 1.0,
-      // Compilada, no guardada: mismo motivo que kokoroBaseUrl/piperBaseUrl.
-      f5BaseUrl: TtsServerConfig.f5Url,
-      f5VoiceEs:
-          prefs.getString('f5VoiceEs') ?? 'esposa',
+      // Compilada, no guardada: ver [TtsServerConfig]. Las claves viejas se
+      // borran en [forgetRetiredKeys] para que no quede en disco la dirección
+      // de una versión anterior.
+      serverBaseUrl: TtsServerConfig.voiceUrl,
+      qwen3Voice: prefs.getString('qwen3Voice') ?? 'esposa',
+      chatterbox2Voice: prefs.getString('chatterbox2Voice') ?? 'colombiana',
       theme: prefs.getString('theme') ?? 'dark',
       cacheMaxMb: prefs.getInt('cacheMaxMb') ?? 150,
       fontSize: prefs.getDouble('fontSize') ?? 18,
@@ -331,14 +280,10 @@ class AppSettings {
     await prefs.setString('edgeVolume', edgeVolume);
     await prefs.setBool('highlightSentences', highlightSentences);
     await prefs.setBool('highlightWords', highlightWords);
-    await prefs.setString('kokoroVoiceEs', kokoroVoiceEs);
-    await prefs.setString('kokoroVoiceEn', kokoroVoiceEn);
     await prefs.setBool('prefetchOnWifi', prefetchOnWifi);
     await prefs.setInt('prefetchChapters', prefetchChapters);
-    await prefs.setString('piperVoiceEs', piperVoiceEs);
-    await prefs.setString('piperVoiceEn', piperVoiceEn);
-    await prefs.setDouble('piperLengthScale', piperLengthScale);
-    await prefs.setString('f5VoiceEs', f5VoiceEs);
+    await prefs.setString('qwen3Voice', qwen3Voice);
+    await prefs.setString('chatterbox2Voice', chatterbox2Voice);
     await prefs.setString('theme', theme);
     await prefs.setInt('cacheMaxMb', cacheMaxMb);
     await prefs.setDouble('fontSize', fontSize);
@@ -367,17 +312,11 @@ class AppSettings {
     String? edgeVolume,
     bool? highlightSentences,
     bool? highlightWords,
-    String? kokoroBaseUrl,
-    String? kokoroVoiceEs,
-    String? kokoroVoiceEn,
     bool? prefetchOnWifi,
     int? prefetchChapters,
-    String? piperBaseUrl,
-    String? piperVoiceEs,
-    String? piperVoiceEn,
-    double? piperLengthScale,
-    String? f5BaseUrl,
-    String? f5VoiceEs,
+    String? serverBaseUrl,
+    String? qwen3Voice,
+    String? chatterbox2Voice,
     String? theme,
     int? cacheMaxMb,
     double? fontSize,
@@ -405,17 +344,11 @@ class AppSettings {
         edgeVolume: edgeVolume ?? this.edgeVolume,
         highlightSentences: highlightSentences ?? this.highlightSentences,
         highlightWords: highlightWords ?? this.highlightWords,
-        kokoroBaseUrl: kokoroBaseUrl ?? this.kokoroBaseUrl,
-        kokoroVoiceEs: kokoroVoiceEs ?? this.kokoroVoiceEs,
-        kokoroVoiceEn: kokoroVoiceEn ?? this.kokoroVoiceEn,
         prefetchOnWifi: prefetchOnWifi ?? this.prefetchOnWifi,
         prefetchChapters: prefetchChapters ?? this.prefetchChapters,
-        piperBaseUrl: piperBaseUrl ?? this.piperBaseUrl,
-        piperVoiceEs: piperVoiceEs ?? this.piperVoiceEs,
-        piperVoiceEn: piperVoiceEn ?? this.piperVoiceEn,
-        piperLengthScale: piperLengthScale ?? this.piperLengthScale,
-        f5BaseUrl: f5BaseUrl ?? this.f5BaseUrl,
-        f5VoiceEs: f5VoiceEs ?? this.f5VoiceEs,
+        serverBaseUrl: serverBaseUrl ?? this.serverBaseUrl,
+        qwen3Voice: qwen3Voice ?? this.qwen3Voice,
+        chatterbox2Voice: chatterbox2Voice ?? this.chatterbox2Voice,
         theme: theme ?? this.theme,
         cacheMaxMb: cacheMaxMb ?? this.cacheMaxMb,
         fontSize: fontSize ?? this.fontSize,

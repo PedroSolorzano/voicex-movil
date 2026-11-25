@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../config/server_config.dart';
 import '../../config/settings.dart';
 import '../../tts/models.dart';
 import '../../tts/tts_factory.dart';
@@ -34,8 +35,7 @@ class VoiceCatalogKey {
   /// Reconstruye unos ajustes mínimos para poder construir el proveedor.
   AppSettings get settings => AppSettings(
         ttsProvider: engine,
-        kokoroBaseUrl: engine == 'kokoro' ? baseUrl : '',
-        piperBaseUrl: engine == 'piper' ? baseUrl : '',
+        serverBaseUrl: TtsServerConfig.serverEngines.contains(engine) ? baseUrl : '',
       );
 
   @override
@@ -51,8 +51,8 @@ class VoiceCatalogKey {
 
 /// Catálogo de voces del motor seleccionado.
 ///
-/// Edge devuelve 300+ entradas y las cachea siete días en disco; Kokoro y Piper
-/// devuelven lo que tenga cargado su servidor. Una lista vacía significa "tira
+/// Edge devuelve 300+ entradas y las cachea siete días en disco; Qwen3 y
+/// Chatterbox devuelven las voces clonadas que tenga el servidor. Una lista vacía significa "tira
 /// del `voiceMap` fijo".
 ///
 /// `autoDispose` porque el catálogo solo hace falta con Ajustes abierto: sin

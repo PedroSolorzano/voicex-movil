@@ -1,0 +1,4 @@
+# Probado con Python 3.12 en macOS (Apple Silicon). Ver README.md.
+mlx-audio==0.6.8
+fastapi
+uvicorn

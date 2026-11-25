@@ -477,11 +477,11 @@ class AudioCacheRepo {
     } catch (_) {}
   }
 
-  /// Rewrites cache keys to the filesystem-safe form.
+  /// Brings the cache keys to what this build computes, and sweeps out audio no
+  /// engine of this build can play.
   ///
-  /// Earlier builds embedded the raw key in the filename, and those keys
-  /// carried ':' and '@'. Renaming the rows keeps everything already
-  /// downloaded reachable instead of forcing hours of re-synthesis; rows whose
+  /// Renaming the rows that can still be reached keeps everything already
+  /// downloaded available instead of forcing hours of re-synthesis; rows whose
   /// file never made it to disk clean themselves up on the next lookup, since
   /// [get] drops a row when its file is missing.
   ///
@@ -489,95 +489,56 @@ class AudioCacheRepo {
   Future<void> migrateCacheKeys() async {
     final db = await _db;
     // Before anything renames them: audio from an engine the app no longer
-    // has. Nothing will ever ask for it again, and Android TTS wrote WAV, so
-    // these are the bulkiest rows on disk. Runs first so the catch-all rule at
-    // the end does not relabel them as Edge.
+    // has. Nothing will ever ask for it again, and some of it is bulky. Runs
+    // first so the catch-all rule below does not relabel it as Edge.
     await _dropRetiredEngineRows();
-    await db.execute(
-        "UPDATE audio_cache SET voice_id = 'kokoro-' || substr(voice_id, 8) "
-        "WHERE voice_id LIKE 'kokoro:%'");
-    await db.execute(
-        "UPDATE audio_cache SET voice_id = 'piper-' || "
-        "replace(substr(voice_id, 7), '.', '_') WHERE voice_id LIKE 'piper@%'");
-    // Kokoro voice ids look like af_bella or ef_dora: a language letter, a
-    // gender letter, an underscore. Without this they fall through to the Edge
-    // rule below and downloads get labelled with an engine that never made
-    // them — which is exactly what happened to a first batch.
-    await db.execute(
-        "UPDATE audio_cache SET voice_id = 'kokoro-' || voice_id "
-        "WHERE voice_id GLOB '[abefhijpz][mf]_*' "
-        "AND voice_id NOT LIKE 'kokoro-%'");
-    // Repair rows already mislabelled by the earlier version of this migration.
-    await db.execute(
-        "UPDATE audio_cache SET voice_id = 'kokoro-' || substr(voice_id, 6) "
-        "WHERE voice_id LIKE 'edge-%' "
-        "AND substr(voice_id, 6) GLOB '[abefhijpz][mf]_*'");
     // Whatever is left with no engine prefix predates the split and came from Edge.
     //
     // **Cada motor nuevo tiene que sumarse a esta exclusión.** Olvidarlo no
     // falla ruidosamente: la clave deja de coincidir con la que calcula la
     // reproducción y la descarga se vuelve inalcanzable en silencio, con el
     // archivo intacto en el disco. Eso es lo que le pasó a Chatterbox cuando
-    // se integró sin tocar esta línea, y por qué F5 figura acá desde el día
-    // uno. Los retirados no hacen falta: `_dropRetiredEngineRows` ya los borró
-    // más arriba.
+    // se integró sin tocar esta línea. Los retirados no hacen falta:
+    // `_dropRetiredEngineRows` ya los borró más arriba.
     await db.execute(
         "UPDATE audio_cache SET voice_id = 'edge-' || voice_id "
-        "WHERE voice_id NOT LIKE 'edge-%' AND voice_id NOT LIKE 'kokoro-%' "
-        "AND voice_id NOT LIKE 'piper-%' AND voice_id NOT LIKE 'f5-%' "
+        "WHERE voice_id NOT LIKE 'edge-%' AND voice_id NOT LIKE 'qwen3-%' "
+        "AND voice_id NOT LIKE 'chatterbox2-%' "
         "AND voice_id NOT LIKE 'android-%'");
 
-    await _stampLanguage();
     await _dropDuplicateRows();
-  }
-
-  /// Mete el idioma del libro en las claves de Kokoro y Piper.
-  ///
-  /// Sin él, un libro en inglés y otro en español compartían audio cuando la
-  /// misma voz servía para ambos —el caso por defecto de Kokoro, que usa
-  /// `af_bella` en los dos—, y sonaba el que se hubiera descargado primero.
-  ///
-  /// El idioma sale de `books.language`, así que la migración se hace en SQL
-  /// contra la fila del libro. La alternativa era no migrar, y eso habría
-  /// huerfanizado todas las descargas hechas hasta hoy: la única cosa que esta
-  /// caché no puede permitirse.
-  ///
-  /// Idempotente: las claves que ya llevan idioma quedan fuera del WHERE.
-  Future<void> _stampLanguage() async {
-    final db = await _db;
-    for (final engine in ['kokoro', 'piper']) {
-      final prefix = '$engine-';
-      await db.execute(
-        "UPDATE audio_cache SET voice_id = '$prefix' || "
-        "  (SELECT CASE WHEN lower(b.language) LIKE 'es%' THEN 'es' ELSE 'en' END "
-        "   FROM books b WHERE b.id = audio_cache.book_id) "
-        "  || '-' || substr(voice_id, ${prefix.length + 1}) "
-        "WHERE voice_id LIKE '$prefix%' "
-        "  AND voice_id NOT LIKE '${prefix}es-%' "
-        "  AND voice_id NOT LIKE '${prefix}en-%' "
-        // Una fila sin libro no se puede etiquetar; la limpieza de duplicados
-        // y la purga se encargan de ella.
-        "  AND EXISTS (SELECT 1 FROM books b WHERE b.id = audio_cache.book_id)",
-      );
-    }
   }
 
   /// Deletes audio produced by an engine the app has since dropped.
   ///
-  /// Android TTS went away in 0.6.0. Covers both spellings its key ever had:
-  /// the 'android:' form used before 0.5.0 and the 'android-' one after it.
+  /// Nothing that remains can play it, so it only takes up disk. Every engine
+  /// that ever existed and is gone is listed here, with the spellings its key
+  /// ever had:
   ///
-  /// Chatterbox se fue en 0.8.0, reemplazado por F5 (`tools/f5/README.md`):
-  /// sonaban parecido, pero Chatterbox iba a 0.089x tiempo real y no servía
-  /// para un audiolibro. Su audio cacheado no lo puede reproducir ningún
-  /// motor que quede, así que ocupa disco sin poder usarse nunca.
+  /// - Android TTS used 'android:' before 0.5.0. Its 'android-' form is **not**
+  ///   here: the phone engine came back in 0.7.0 with that same prefix, and
+  ///   listing it deleted every download made with it on the next start.
+  /// - Chatterbox se fue en 0.8.0, reemplazado por F5: Chatterbox iba a 0.089x
+  ///   tiempo real y no servía para un audiolibro. 'edge-chatterbox-%' es la
+  ///   forma corrupta que dejó la regla comodín antes de aprender a excluirlo.
+  ///   El motor de hoy se llama `chatterbox2` justamente para no chocar con
+  ///   este prefijo.
+  /// - Kokoro, Piper y F5 se fueron con el servidor de casa que los alojaba;
+  ///   los dos primeros también con sus claves viejas ('kokoro:', 'piper@') y
+  ///   los ids de voz de Kokoro sin prefijo (`af_bella`, `ef_dora`: una letra
+  ///   de idioma, una de género y un guion bajo), que la regla comodín llegó a
+  ///   etiquetar como Edge.
   Future<void> _dropRetiredEngineRows() async {
     final db = await _db;
-    // 'edge-chatterbox-%' es la forma corrupta que dejó la regla comodín de
-    // abajo antes de aprender a excluirlo: son filas de Chatterbox igual, y
-    // se van por la misma puerta.
-    const where = "voice_id LIKE 'android-%' OR voice_id LIKE 'android:%' "
-        "OR voice_id LIKE 'chatterbox-%' OR voice_id LIKE 'edge-chatterbox-%'";
+    const where = "voice_id LIKE 'android:%' "
+        "OR voice_id LIKE 'chatterbox-%' OR voice_id LIKE 'edge-chatterbox-%' "
+        "OR voice_id LIKE 'kokoro-%' OR voice_id LIKE 'kokoro:%' "
+        "OR voice_id LIKE 'edge-kokoro-%' "
+        "OR voice_id GLOB '[abefhijpz][mf]_*' "
+        "OR substr(voice_id, 6) GLOB '[abefhijpz][mf]_*' AND voice_id LIKE 'edge-%' "
+        "OR voice_id LIKE 'piper-%' OR voice_id LIKE 'piper@%' "
+        "OR voice_id LIKE 'edge-piper-%' "
+        "OR voice_id LIKE 'f5-%' OR voice_id LIKE 'edge-f5-%'";
     final rows = await db.query('audio_cache', where: where);
     for (final row in rows) {
       await _deleteCachedFile(row['file_path'] as String);
