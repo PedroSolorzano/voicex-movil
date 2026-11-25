@@ -9,6 +9,140 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## Sin publicar
+
+### Edge vuelve a funcionar
+
+Edge dejó de sonar: cada síntesis y la lista de voces recibían HTTP 403. El
+servicio de Microsoft seguía vivo —la librería de referencia `edge-tts` 7.3.1
+lo usaba sin problema desde la misma máquina—; lo que cambió fue el token
+`Sec-MS-GEC` que exige. La versión 1 era un SHA-256 simple de la hora y el
+token de cliente, y la app seguía mandando esa con `Sec-MS-GEC-Version=1-…`.
+Microsoft ahora pide la versión 2, `<CS64>-<SHA256>`, donde el SHA-256 es una
+variante no estándar y CS64 un checksum sobre los mismos bytes.
+
+Se portó el cálculo de `edge-tts` a Dart (`lib/tts/edge_drm.dart`) y la lista
+de voces pasó a firmarse igual, porque también la rechazaba. Comprobado de dos
+maneras: `test/edge_drm_test.dart` compara el resultado con cuatro valores
+generados por la librería de Python en instantes fijos, y una conexión real con
+el token calculado en Dart devolvió audio. Lo que no se puede comprobar desde
+aquí es cuánto tarda Microsoft en cambiar el algoritmo otra vez: si Edge vuelve
+a dar 403 con el servicio vivo, el primer sitio donde mirar es ese archivo
+(`docs/bugs/EDGE_TTS_DEBUG.md`).
+
+### Herramientas de compilación al día (Gradle 9.5, AGP 9.3, Kotlin 2.4)
+
+Con el Flutter actual (3.50.1) el proyecto no compilaba: `Your project's Gradle
+version (8.14.0) is lower than Flutter's minimum supported version of 9.3.1`.
+Se subieron `distributionUrl` a Gradle 9.5.0, el plugin de Android a 9.3.1 y el de
+Kotlin a 2.4.20, que son los que trae la plantilla de `flutter create` de ese
+Flutter (`android/gradle/wrapper/gradle-wrapper.properties` y
+`android/settings.gradle.kts`). Los interruptores `android.builtInKotlin=false` y
+`android.newDsl=false` ya estaban.
+
+Con eso apareció un segundo fallo: `:file_picker is currently compiled against
+android-34` mientras `flutter_plugin_android_lifecycle` exige 36. Varios plugins
+fijan un `compileSdk` viejo (`file_picker`, `audio_session` y `just_audio` en 34,
+`audio_service` y `jni_flutter` en 35), así que actualizar solo uno movía el error
+al siguiente. `android/build.gradle.kts` ahora sube todas las librerías al
+`compileSdk` que usa la app (36). Eso solo cambia contra qué API puede compilar el
+código del plugin, no lo que exige en ejecución: el `minSdk` sigue en 24.
+
+**Sin verificar:** si un Flutter anterior a 3.50 compila con estas versiones. No
+se probó. Lo seguro es que las dos computadoras de desarrollo usen el mismo
+Flutter (3.50.1); si una tiene otro, o se actualiza, o se vuelve a las versiones
+anteriores de esos tres archivos (están en el historial de git).
+
+### Compilar desde el Mac, sin PowerShell
+
+`tools/release/compilar.sh` es el equivalente nativo de `compilar.ps1`: pasa los
+`.json` a `flutter build`, comprueba que cada `*_URL` y `*_TOKEN` quedó dentro de
+`libapp.so`, y con `-i` instala por `adb`. El `.ps1` está pensado para Windows y
+nunca se probó en macOS, y pedía instalar PowerShell solo para eso. Además de
+las direcciones, el `.sh` comprueba el token: sin él el servidor responde 401 y la
+app se repliega a Edge sin decirlo, que es el mismo fallo silencioso.
+
+### Qwen3 y Chatterbox, desde un Mac
+
+Se van Kokoro, Piper y F5, que dependían del servidor de casa y de la laptop con
+GPU que ya no existen. Entran dos motores de voz clonada que salen de un mismo
+servidor en un Mac con Apple Silicon (`tools/mlx`): **Qwen3-TTS** y
+**Chatterbox**. Se eligieron tras una prueba del mismo diálogo en el Mac: ambos
+leen sin errores (0 % de palabras mal leídas medidas con Whisper) y a ~0,35x y
+~0,45x de tiempo real.
+
+Chatterbox ya había estado en la app y se retiró en 0.8.0 por ir a 0,089x en una
+RTX 4050. Aquí la velocidad no decide: el uso es descargar 2 o 3 capítulos por
+tanda y escucharlos sin conexión. Por eso reaparece con el id `chatterbox2`, y
+no `chatterbox`: `_dropRetiredEngineRows` borra en cada arranque toda fila con
+ese prefijo, así que reutilizarlo habría perdido las descargas la siguiente vez
+que se abriera la app.
+
+Cambios que lo acompañan:
+
+- **Un solo provider para los dos motores** (`VoiceServerTtsProvider`), que
+  manda `engine` y `voice` al servidor. Cada motor guarda su propia voz
+  (`qwen3Voice`, `chatterbox2Voice`).
+- **Ajustes y claves guardadas.** Un teléfono que tenía Kokoro, Piper o F5
+  elegido vuelve a Edge al arrancar (`resolveEngine`), y las direcciones y voces
+  viejas se borran de `SharedPreferences`.
+- **La caché de esos tres motores se borra al arrancar**
+  (`_dropRetiredEngineRows`): ningún motor que quede puede reproducirla, y la
+  regla comodín de la migración la habría relabelado como Edge. Incluye lo que
+  estuviera descargado y fijado. Quien quiera conservarla debe hacerlo antes de
+  instalar esta versión.
+- **El servidor valida su propio token** (`VOICE_TOKEN`) y se alcanza por la IP
+  de Tailscale del Mac (`tools/release/voz.json`).
+- **"Contar un problema" sigue funcionando, ahora hacia el Mac.** Sus reportes
+  iban a un proxy en `voicex-server`, una máquina que ya no existe, y su
+  dirección se deducía de la de Kokoro. Ahora `tools/mlx/server.py` recibe el
+  reporte (`POST /report`) y la nota de voz (`PUT /report/audio/…`) con el mismo
+  token que la síntesis, y la app no tiene dirección ni credencial aparte:
+  `Reporter.canDeliver` es verdadero exactamente cuando la compilación trae
+  `VOICE_URL`. El servidor limita el tamaño (32 KB el reporte, 4 MB la nota) y el
+  ritmo (20 por minuto), y solo acepta como nombre de nota un UUID con `.m4a`.
+  `tools/reportes/procesar.sh` los vuelca a `docs/`, ahora con Whisper de MLX en
+  vez de `faster-whisper`, sin Docker ni cron.
+- **Se borran `tools/kokoro`, `tools/piper`, `tools/f5`, `tools/proxy` y
+  `tools/tailscale`:** la infraestructura de las máquinas que ya no existen. Siguen
+  en el historial de git.
+
+### Lo descargado con el motor del teléfono ya no se borra al abrir la app
+
+`_dropRetiredEngineRows` seguía listando `android-%` como motor retirado. El
+TTS del teléfono se fue en 0.6.0, pero volvió en 0.7.0 **con el mismo prefijo**,
+y la migración que corre en cada arranque borraba lo que se hubiera descargado
+con él, también lo fijado. Se quitó `android-%` de la lista y se dejó solo la
+forma `android:`, que sí es de antes de 0.5.0. Lo cubre
+`audio_cache_repo_test.dart`.
+
+### Un libro con un byte suelto en el CSS ya se importa
+
+*Visión ciega* (Peter Watts), en sus dos ediciones, se rechazaba con "El
+archivo no parece un EPUB válido". El archivo estaba bien: lo único roto era
+una `ñ` guardada en Latin-1 (byte `0xF1`) dentro de un comentario de
+`OPS/0.css` (`/*Añadido por betatron*/`). `epubx` decodifica como UTF-8
+estricto **todos** los archivos de texto del ZIP, hojas de estilo incluidas, y
+un solo byte inválido aborta la importación con una `FormatException`.
+`friendlyError` (`lib/errors.dart`) traduce cualquier `FormatException` a ese
+mensaje, así que lo que se veía era una acusación falsa sobre el libro y no
+la causa.
+
+`parseEpub` y `extractEpubExtras` ahora pasan por `_readBook`
+(`lib/epub/parser.dart`): si la primera lectura falla con `FormatException`,
+reescriben los archivos de texto que no son UTF-8 válido y reintentan una vez.
+La corrección es por byte y no por archivo: lo que ya es UTF-8 válido queda
+intacto, y cada byte suelto se lee como Windows-1252 (el 0x93 es una comilla
+curva, no un código de control). Un libro que ya se importaba no paga nada
+extra, porque la copia reparada solo se construye después del fallo. Un
+archivo que no es un ZIP sigue dando el mismo error de antes.
+
+Cubierto en `test/parser_test.dart` con un EPUB mínimo armado en memoria. Sin
+la reparación fallan exactamente los tres tests del libro. `archive` pasa de
+dependencia transitiva a directa en `pubspec.yaml`.
+
+---
+
 ## 0.12.0-preview.1 — 2026-09-18
 
 La barra de escucha deja de parecer un reproductor de música: cada salto dice

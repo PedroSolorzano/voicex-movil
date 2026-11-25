@@ -1,5 +1,13 @@
 # VoiceX Móvil — Acceso remoto a los servidores de voz
 
+> **Obsoleto desde noviembre de 2026.** Este documento describe la tailnet con
+> `voicex-server` (Kokoro, Piper y el proxy) y la laptop `g14` (F5). Esas
+> máquinas ya no existen, y los motores que alojaban se retiraron. Hoy hay un
+> solo servidor de voz, el Mac de `tools/mlx`, alcanzado por su IP de Tailscale
+> (`tools/release/voz.json`) con un token propio (`VOICE_TOKEN`). Se conserva
+> como registro de cómo estaba montado y por qué.
+
+
 Kokoro y Piper corren en la computadora, y hoy el teléfono solo los alcanza
 dentro de la misma red WiFi. Fuera de casa la app se repliega a Edge o tira del
 audio descargado por adelantado. Este documento compara las formas de llegar a

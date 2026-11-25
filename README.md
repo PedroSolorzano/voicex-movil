@@ -8,18 +8,19 @@ Versión Android de [VoiceX](https://github.com/Preston-IA/voicex).
 
 ## Qué hace
 
-**Cinco motores de voz**, elegibles en Ajustes:
+**Cuatro motores de voz**, elegibles en Ajustes:
 
 | Motor | Dónde corre | Notas |
 |---|---|---|
 | **Edge** | Nube (Microsoft) | 300+ voces, tiempos por palabra. Funciona en cualquier red |
-| **Kokoro** | Servidor propio | Buena voz, con tiempos por palabra |
-| **Piper** | Servidor propio | Voces entrenadas por idioma. El más rápido |
-| **F5** | Laptop con GPU | Voz clonada en español, la más natural. Solo español |
+| **Qwen3** | Un Mac con Apple Silicon, propio | Voz clonada de una grabación. Solo español. No marca palabras |
+| **Chatterbox** | El mismo Mac | Voz clonada, otro modelo. Solo español. No marca palabras |
 | **Teléfono** | El propio móvil | El único sin red ni servidor. No marca palabras |
 
-Kokoro, Piper y F5 corren en máquinas propias ([`tools/`](tools/)); cuando no
-responden, la app cae a Edge automáticamente y lo dice en pantalla.
+Qwen3 y Chatterbox salen del mismo servidor ([`tools/mlx`](tools/mlx/)); cuando
+no responde, la app cae a Edge automáticamente y lo dice en pantalla. Se usan
+para **descargar capítulos por tandas** con el teléfono en la WiFi de casa, y
+escucharlos después sin conexión: no hace falta el Mac encendido para oírlos.
 
 **Como lector**
 
@@ -85,7 +86,7 @@ El detalle de cada cambio, con su causa, está en
 
 ## Requisitos
 
-- [Flutter 3.x](https://docs.flutter.dev/get-started/install) (canal stable)
+- [Flutter 3.50 o posterior](https://docs.flutter.dev/get-started/install) (canal stable): el proyecto usa Gradle 9.5, que exige un Flutter reciente
 - Android 7.0 o superior (API 24+)
 - Android Studio o un dispositivo conectado
 
@@ -104,33 +105,37 @@ flutter pub get
 flutter run
 ```
 
-### Servidores de voz (opcional)
+### Servidor de voz (opcional)
 
-Solo si quieres usar Kokoro o Piper. La app funciona sin ellos con Edge.
+Solo si quieres usar Qwen3 o Chatterbox. La app funciona sin él con Edge. Corre
+en un Mac con Apple Silicon:
 
 ```bash
-docker compose -f tools/kokoro/docker-compose.yml up -d   # puerto 8880, solo loopback
-docker compose -f tools/piper/docker-compose.yml up -d    # puerto 5000, solo loopback
+cd tools/mlx && ./arrancar.sh   # puerto 8765; el token queda en tools/mlx/.token
 ```
 
+La instalación, las voces y el porqué de cada decisión están en
+[`tools/mlx/README.md`](tools/mlx/README.md).
+
 La dirección **no se escribe en Ajustes**: va compilada en el APK. Compila con
-`--dart-define-from-file` apuntando a un `.json` con `KOKORO_URL`/`PIPER_URL`
-(ver [`tools/release/README.md`](tools/release/README.md)); sin eso, esos
-chips ni aparecen en Ajustes → Motor de voz. Cada carpeta tiene su propio
-README con los detalles.
+`compilar.sh` (o `compilar.ps1` en Windows), que pasa `voz.json` (la dirección) y tu `.json` personal (el
+token `VOICE_TOKEN`); ver [`tools/release/README.md`](tools/release/README.md).
+Sin eso, esos chips ni aparecen en Ajustes → Motor de voz.
 
 ---
 
 ## Build
 
 ```powershell
-.\tools\release\compilar.ps1 -Limpio -Instalar   # -Limpio si cambió la versión
+tools/release/compilar.sh -l -i                   # macOS/Linux; -l si cambió la versión
+.\tools\release\compilar.ps1 -Limpio -Instalar   # Windows, lo mismo
 ```
 
 **No `flutter build apk` a mano**: sin `--dart-define-from-file` el APK sale
 sin servidores —solo Edge y Teléfono en Ajustes—, se instala igual y no avisa.
-El script pasa los tres `.json` y comprueba después que las URLs quedaron
-dentro del binario. Funciona con PowerShell 7 (`pwsh`) y con el 5.1 que trae
+El script pasa los `.json` y comprueba después que las URLs quedaron
+dentro del binario. `compilar.sh` es bash y no pide nada más que `flutter` y
+`python3`; `compilar.ps1` funciona con PowerShell 7 (`pwsh`) y con el 5.1 que trae
 Windows. Detalles en
 [`tools/release/README.md`](tools/release/README.md).
 
@@ -146,7 +151,7 @@ commits.
 VoiceXMovil/
 ├── lib/
 │   ├── config/          # AppSettings (SharedPreferences)
-│   ├── tts/             # Edge, Kokoro, Piper, F5 y el del sistema (Strategy + Factory)
+│   ├── tts/             # Edge, Qwen3, Chatterbox y el del sistema (Strategy + Factory)
 │   ├── epub/            # Parser EPUB, modelos y alineado texto-audio
 │   ├── audio/           # Handler de audio_service con MediaSession
 │   ├── services/        # Diccionario, reportes y avisos de lectura
@@ -154,14 +159,10 @@ VoiceXMovil/
 │   ├── storage/         # SQLite: libros, progreso, marcadores, caché
 │   └── ui/              # providers · screens · widgets
 ├── tools/
-│   ├── kokoro/          # Servidor de voz Kokoro (Docker)
-│   ├── piper/           # Servidor de voz Piper (Docker)
-│   ├── f5/              # Servidor de voz F5-TTS (Docker, GPU)
-│   ├── proxy/           # nginx con token por probador delante de Kokoro y Piper
-│   ├── release/         # compilar.ps1 y los .json de cada compilación
-│   ├── reportes/        # Cola de reportes de testers → docs/bugs
+│   ├── mlx/             # Servidor de voz Qwen3 + Chatterbox y buzón de reportes (Mac, MLX)
+│   ├── release/         # compilar.sh / .ps1 y los .json de cada compilación
+│   ├── reportes/        # Vuelca los reportes recibidos a docs/bugs
 │   ├── skins/           # Genera las texturas de las pieles de biblioteca
-│   └── tailscale/       # Acceso remoto a los servidores por la tailnet
 ├── test/
 └── docs/
     ├── RELEASES.md            # Historial de versiones

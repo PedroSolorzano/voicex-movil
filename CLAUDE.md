@@ -11,13 +11,14 @@ Cerrar los cambios de código con:
 flutter analyze && flutter test
 ```
 
-**Para compilar un APK, `tools/release/compilar.ps1` y nada más.** Nunca
+**Para compilar un APK, `tools/release/compilar.sh` (macOS/Linux) o
+`compilar.ps1` (Windows), y nada más.** Hacen lo mismo. Nunca
 `flutter build apk` a mano: sin `--dart-define-from-file` la build sale sin
-servidores y en Ajustes quedan dos motores en vez de cinco. No falla, no avisa
-y el APK se instala igual — solo que F5, Kokoro y Piper no existen dentro
-(`lib/config/server_config.dart:26-33`, filtrado en `settings_screen.dart:185`).
-El script pasa los tres `.json` y después comprueba las URLs dentro de
-`libapp.so`, así que un archivo incompleto también se cae ahí. Detalles en
+servidores y en Ajustes quedan dos motores en vez de cuatro. No falla, no avisa
+y el APK se instala igual — solo que Qwen3 y Chatterbox no existen dentro
+(`TtsServerConfig.availableEngines` en `lib/config/server_config.dart`, filtrado
+en `settings_screen.dart`). El script pasa los `.json` y después comprueba las
+URLs dentro de `libapp.so`, así que un archivo incompleto también se cae ahí. Detalles en
 [`tools/release/README.md`](tools/release/README.md).
 
 ## Cómo se escribe acá
@@ -54,11 +55,15 @@ cambio en `RELEASES.md` y en la tabla de versiones del `README.md`.
 
 ## Motores de voz
 
-Cinco providers bajo `lib/tts/` (Edge, Kokoro, Piper, F5, Teléfono), con
-Strategy + Factory: agregar uno toca `tts_provider.dart` (la interfaz), el
-provider nuevo, `tts_factory.dart` y `models.dart`.
+Tres providers bajo `lib/tts/`: Edge, el del teléfono y `VoiceServerTtsProvider`,
+que sirve **dos motores** (`qwen3` y `chatterbox2`) desde un mismo servidor, el
+Mac de `tools/mlx`. Strategy + Factory: un motor del servidor nuevo toca
+`TtsServerConfig.serverEngines`, `ttsEngines` en `settings.dart`, `_cacheKeyFor`
+y el servidor; no hace falta un provider nuevo. Kokoro, Piper y F5 se retiraron
+con el servidor de casa que los alojaba, y sus carpetas se borraron (siguen en
+el historial de git).
 
-Cinco invariantes que ya causaron bugs y conviene no romper:
+Invariantes que ya causaron bugs y conviene no romper:
 
 - **Un motor nuevo tiene que sumarse a la exclusión de `migrateCacheKeys`**
   (`lib/storage/repositories.dart`). La regla comodín de esa migración
@@ -67,38 +72,42 @@ Cinco invariantes que ya causaron bugs y conviene no romper:
   reproducción y cada descarga se vuelve inalcanzable en silencio, con el
   archivo intacto en el disco. Le pasó a Chatterbox entero
   (`docs/bugs/CHATTERBOX_DESCARGAS.md`).
+- **Un motor retirado se declara en `_dropRetiredEngineRows`, y su prefijo no
+  se reutiliza.** Esa función borra en cada arranque toda fila con el prefijo
+  de un motor que se fue. Por eso el Chatterbox de hoy se llama `chatterbox2`:
+  con el id viejo la app borraría sus descargas la siguiente vez que abriera.
+  Y por eso `android-` **no** está ahí: el motor del teléfono volvió en 0.7.0 con
+  ese prefijo, y listarlo borraba lo descargado con él en cada arranque.
 - **La clave de caché no incluye el host del servidor**
-  (`_cacheKeyFor` en `lib/ui/providers/reader_provider.dart`): es motor + voz +
-  ritmo. Cambiar de dirección de servidor no invalida lo descargado — es
-  deliberado. Meter el host ahí tiraría toda la caché de los usuarios.
+  (`_cacheKeyFor` en `lib/ui/providers/reader_provider.dart`): es motor + voz.
+  Cambiar de dirección de servidor no invalida lo descargado — es
+  deliberado. Meter el host ahí tiraría toda la caché de los usuarios. La
+  velocidad tampoco entra: se aplica al reproducir, y un mismo archivo sirve a
+  todas.
 - **El health check tiene 5 s de tope y un reintento de 8 s**
   (`TtsTimeouts.probe`/`probeRetry`), cacheado 60 s en éxito y solo 5 s en
   fallo. Si se agota, la app se repliega a Edge **en silencio**. Cualquier
   cosa que agregue latencia (túnel, VPN, arranque en frío) se manifiesta como
   "el servidor no responde" — y un servidor **ocupado** también, si comparte
-  hilo entre síntesis y sondeo: por eso `tools/f5` atiende `/tts` en otro
-  hilo.
-- **Tras comprobar el 200, la respuesta se distingue por su `content-type`**: JSON
-  con base64 en Kokoro ≥ v0.8, audio crudo si no. Un intermediario que conteste
-  200 con HTML cae por la rama de "audio crudo" y rompe el parseo aunque el
-  servidor esté bien.
-- **Los providers sí mandan credencial, y quien la valida nunca es el motor.**
-  `applyRequestHeaders` (`lib/tts/tts_endpoint.dart`) pone `Authorization:
-  Bearer` en la síntesis, el sondeo y el catálogo. Kokoro y Piper no saben
-  autenticar —la "API key" de Kokoro es la cadena literal `not-needed`—, así
-  que escuchan solo en loopback y quien comprueba el token es el proxy de
-  `tools/proxy`. F5 es el caso aparte: no tiene proxy delante y valida su
-  propio `F5_TOKEN` (`tools/f5/server.py`), distinto del anterior, por eso la
-  credencial se elige con `settings.tokenFor(engine)` y no con un campo único.
-  Quitar esas cabeceras razonando que "los motores no autentican" deja fuera
-  justamente a quien sí lo hace. El acceso remoto sigue yendo por Tailscale y
-  no por un túnel público (`docs/context/ACCESO_REMOTO.md`).
+  hilo entre síntesis y sondeo: por eso `tools/mlx` atiende `/health` fuera del
+  hilo de la GPU y dice `busy`.
+- **El servidor valida su propio token** (`VOICE_TOKEN`, el de
+  `tools/mlx/.token`) y `applyRequestHeaders` (`lib/tts/tts_endpoint.dart`) lo
+  manda en la síntesis, el sondeo y el catálogo. **Los reportes** ("Contar un
+  problema") van al mismo servidor y con el mismo token (`POST /report`,
+  `PUT /report/audio/…`): no tienen dirección ni credencial propias, y sin
+  `VOICE_URL` `Reporter.canDeliver` es falso y Ajustes no ofrece la sección. Lo
+  recibido se vuelca a `docs/` con `tools/reportes/procesar.sh`. El acceso al Mac
+  va por Tailscale (`tools/release/voz.json`), no por un túnel público.
+- **El token de Edge (`Sec-MS-GEC`) lo cambia Microsoft sin avisar.** La versión
+  2 es `<CS64>-<SHA256 propio>` y vive en `lib/tts/edge_drm.dart`, portada de
+  `rany2/edge-tts`, que es la fuente de verdad; la versión 1 (un SHA-256 simple)
+  da 403 en el WebSocket **y** en la lista de voces. Si Edge deja de funcionar y
+  el servicio responde a `edge-tts`, es esto: ver `docs/bugs/EDGE_TTS_DEBUG.md`.
 
 ## Detalles del entorno
 
 - `analysis_options.yaml` excluye `build/**` y `android/**`. Si `flutter analyze`
   empieza a reportar ruido de esas carpetas, es que se perdió el `analyzer:`.
-- Los servidores de voz son opcionales y viven en `tools/kokoro`, `tools/piper`
-  y `tools/f5` (este último necesita GPU y corre en la laptop, no en
-  `voicex-server`)
-  (Docker, puertos 8880 y 5000). La app funciona sin ellos con Edge.
+- El servidor de voz vive en `tools/mlx` y corre en un Mac con Apple Silicon
+  (`./arrancar.sh`, puerto 8765). Es opcional: la app funciona sin él con Edge.
