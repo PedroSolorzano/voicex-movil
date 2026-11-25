@@ -573,6 +573,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 '${(_cacheSizeKb / 1024).toStringAsFixed(1)} MB / ${s.cacheMaxMb} MB'),
             Text('Descargas: ${(_downloadsKb / 1024).toStringAsFixed(1)} MB',
                 style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 4),
+            // El total de arriba cuenta todos los libros; el detalle de "Este
+            // libro" solo el abierto. Aquí se ve de quién es cada megabyte.
+            FilledButton.tonalIcon(
+              icon: const Icon(Icons.storage_outlined, size: 18),
+              label: const Text('Ver qué ocupa cada libro'),
+              onPressed: () async {
+                await context.push('/downloads');
+                if (mounted) await _loadCacheSize();
+              },
+            ),
             const SizedBox(height: 8),
             _LabelledSlider(
               label: 'Máximo caché',

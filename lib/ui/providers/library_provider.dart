@@ -10,6 +10,7 @@ import '../../errors.dart';
 import '../../storage/repositories.dart';
 
 final _libraryRepo = LibraryRepo();
+final _audioCacheRepo = AudioCacheRepo();
 const _uuid = Uuid();
 
 /// Dos libros de dominio público verificado (Project Gutenberg), uno en cada
@@ -169,6 +170,11 @@ class LibraryNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
     final path = row?['file_path'] as String?;
     final cover = row?['cover_path'] as String?;
 
+    // The audio cache has no foreign key to the books table, so deleting the
+    // book alone left every paragraph downloaded for it on the phone: counted
+    // in the total in Ajustes, listed under no book. Its files go first, while
+    // the rows that name them still exist.
+    await _audioCacheRepo.deleteForBook(id);
     await _libraryRepo.delete(id);
 
     for (final p in [path, cover]) {

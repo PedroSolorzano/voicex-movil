@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../services/reading_reminders.dart';
 import 'providers/reading_stats_provider.dart';
 import 'providers/settings_provider.dart';
+import 'screens/book_downloads_screen.dart';
+import 'screens/downloads_screen.dart';
 import 'screens/library_screen.dart';
 import 'screens/progress_screen.dart';
 import 'screens/reader_screen.dart';
@@ -31,6 +33,15 @@ final _router = GoRouter(
     GoRoute(
       path: '/settings',
       builder: (context, state) => const SettingsScreen(),
+    ),
+    GoRoute(
+      path: '/downloads',
+      builder: (context, state) => const DownloadsScreen(),
+    ),
+    GoRoute(
+      path: '/downloads/:bookId',
+      builder: (context, state) => BookDownloadsScreen(
+          bookId: int.parse(state.pathParameters['bookId']!)),
     ),
     GoRoute(
       path: '/progress',

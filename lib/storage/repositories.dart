@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:sqflite/sqflite.dart';
+import '../config/settings.dart' show ttsEngines;
+import 'audio_usage.dart';
 import 'database.dart';
 
 // ─── Library ────────────────────────────────────────────────────────────────
@@ -736,6 +738,145 @@ class AudioCacheRepo {
       await _deleteCachedFile(row['file_path'] as String);
     }
     await db.delete('audio_cache', where: where, whereArgs: args);
+  }
+
+  /// Deletes the rows matching [where] together with their files, and says how
+  /// many KB that freed.
+  Future<int> _deleteWhere(String where, [List<Object?> args = const []]) async {
+    final db = await _db;
+    final rows = await db.query('audio_cache', where: where, whereArgs: args);
+    var freed = 0;
+    for (final row in rows) {
+      freed += (row['file_size_kb'] as int?) ?? 0;
+      await _deleteCachedFile(row['file_path'] as String);
+    }
+    await db.delete('audio_cache', where: where, whereArgs: args);
+    return freed;
+  }
+
+  /// Every book that has audio stored, biggest first, **including audio whose
+  /// book is no longer in the library** ([BookAudioUsage.orphaned]).
+  ///
+  /// This is what [sizeBreakdown] adds up, split the way a person thinks about
+  /// it. The total in Ajustes spans every book while the per-book detail only
+  /// shows the one that is open, so the two never reconciled.
+  Future<List<BookAudioUsage>> usageByBook() async {
+    final db = await _db;
+    final rows = await db.rawQuery(
+      'SELECT a.book_id AS book_id, b.title AS title, a.voice_id AS voice_id, '
+      'a.pinned AS pinned, COUNT(*) AS n, '
+      'COALESCE(SUM(a.file_size_kb), 0) AS kb '
+      'FROM audio_cache a LEFT JOIN books b ON b.id = a.book_id '
+      'GROUP BY a.book_id, a.voice_id, a.pinned',
+    );
+
+    final titles = <int, String?>{};
+    final perKey = <int, Map<String, List<int>>>{}; // [downloadsKb, cacheKb, n]
+    for (final r in rows) {
+      final id = r['book_id'] as int;
+      titles[id] = r['title'] as String?;
+      final key = (r['voice_id'] as String?) ?? '';
+      final acc = perKey.putIfAbsent(id, () => {}).putIfAbsent(key, () => [0, 0, 0]);
+      final kb = (r['kb'] as int?) ?? 0;
+      if ((r['pinned'] as int?) == 1) {
+        acc[0] += kb;
+      } else {
+        acc[1] += kb;
+      }
+      acc[2] += (r['n'] as int?) ?? 0;
+    }
+
+    final list = [
+      for (final id in perKey.keys)
+        BookAudioUsage(
+          bookId: id,
+          title: titles[id],
+          keys: [
+            for (final e in perKey[id]!.entries)
+              KeyUsage(
+                  voiceId: e.key,
+                  downloadsKb: e.value[0],
+                  cacheKb: e.value[1],
+                  items: e.value[2]),
+          ]..sort((a, b) => b.totalKb.compareTo(a.totalKb)),
+        ),
+    ]..sort((a, b) => b.totalKb.compareTo(a.totalKb));
+    return list;
+  }
+
+  /// What is stored for each chapter of one book, in chapter order.
+  Future<List<ChapterAudioUsage>> usageByChapter(int bookId) async {
+    final db = await _db;
+    final rows = await db.rawQuery(
+      'SELECT chapter_idx, COUNT(DISTINCT para_idx) AS paragraphs, '
+      'COUNT(DISTINCT CASE WHEN pinned = 1 THEN para_idx END) AS downloaded, '
+      'COALESCE(SUM(file_size_kb), 0) AS kb '
+      'FROM audio_cache WHERE book_id = ? GROUP BY chapter_idx '
+      'ORDER BY chapter_idx',
+      [bookId],
+    );
+    return [
+      for (final r in rows)
+        ChapterAudioUsage(
+          chapter: r['chapter_idx'] as int,
+          paragraphs: (r['paragraphs'] as int?) ?? 0,
+          downloadedParagraphs: (r['downloaded'] as int?) ?? 0,
+          kb: (r['kb'] as int?) ?? 0,
+        ),
+    ];
+  }
+
+  /// Every file path the cache knows about, to tell stray files from tracked
+  /// ones.
+  Future<Set<String>> knownPaths() async {
+    final db = await _db;
+    final rows = await db.query('audio_cache', columns: ['file_path']);
+    return {for (final r in rows) r['file_path'] as String};
+  }
+
+  /// Deletes one chapter's audio. Returns the KB freed.
+  Future<int> deleteChapter(int bookId, int chapterIdx) =>
+      _deleteWhere('book_id = ? AND chapter_idx = ?', [bookId, chapterIdx]);
+
+  /// Deletes everything **before** a position: whole earlier chapters, and the
+  /// paragraphs of [chapterIdx] that come before [paragraphIdx]. The position
+  /// itself is kept.
+  ///
+  /// For somebody who read the start of a long chapter in silence and then
+  /// wants to listen from where they are: what was downloaded earlier is of no
+  /// use to them any more.
+  Future<int> deleteBefore(int bookId, int chapterIdx, int paragraphIdx) =>
+      _deleteWhere(
+        'book_id = ? AND (chapter_idx < ? OR (chapter_idx = ? AND para_idx < ?))',
+        [bookId, chapterIdx, chapterIdx, paragraphIdx],
+      );
+
+  /// How much [deleteBefore] would free, so the person can be told before
+  /// they confirm.
+  Future<({int kb, int paragraphs})> usageBefore(
+      int bookId, int chapterIdx, int paragraphIdx) async {
+    final db = await _db;
+    final r = (await db.rawQuery(
+      'SELECT COALESCE(SUM(file_size_kb), 0) AS kb, '
+      'COUNT(DISTINCT chapter_idx || \':\' || para_idx) AS n FROM audio_cache '
+      'WHERE book_id = ? AND (chapter_idx < ? OR (chapter_idx = ? AND para_idx < ?))',
+      [bookId, chapterIdx, chapterIdx, paragraphIdx],
+    ))
+        .first;
+    return (kb: (r['kb'] as int?) ?? 0, paragraphs: (r['n'] as int?) ?? 0);
+  }
+
+  /// Deletes the audio of books that are no longer in the library.
+  Future<int> deleteOrphans() =>
+      _deleteWhere('book_id NOT IN (SELECT id FROM books)');
+
+  /// Deletes audio made by an engine this build no longer has (see
+  /// [describeCacheKey]). A key with no engine prefix is legacy Edge, not a
+  /// retired engine.
+  Future<int> deleteRetiredEngines() {
+    final current = ttsEngines.map((e) => "'$e'").join(',');
+    return _deleteWhere("instr(voice_id, '-') > 0 AND "
+        "substr(voice_id, 1, instr(voice_id, '-') - 1) NOT IN ($current)");
   }
 
   /// Wipes everything: cache and downloads, every book.

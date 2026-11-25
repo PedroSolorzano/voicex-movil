@@ -442,7 +442,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   _DownloadScope.fromHere,
                   'Desde aquí hasta el final del capítulo'
                 ),
-              (_DownloadScope.ahead, 'Los próximos capítulos'),
+              // Cuenta el capítulo en el que estás: `downloadChapters` arranca en
+              // él. Decir "los próximos" sin número dejaba creer que eran los
+              // siguientes, y en una novela con capítulos de horas son horas de más.
+              (
+                _DownloadScope.ahead,
+                'Este capítulo y los siguientes (${settings.prefetchChapters} en total)'
+              ),
               (_DownloadScope.book, 'Libro completo'),
             ])
               ListTile(
@@ -453,6 +459,17 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   unawaited(_download(context, opcion.$1, settings));
                 },
               ),
+            if (reader.book?.id != null) ...[
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.folder_open_outlined),
+                title: const Text('Ver y borrar lo descargado de este libro'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  context.push('/downloads/${reader.book!.id}');
+                },
+              ),
+            ],
           ],
         ),
       )),
@@ -472,7 +489,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       _DownloadScope.fromHere => (1, 'desde aquí hasta el final del capítulo'),
       _DownloadScope.ahead => (
           settings.prefetchChapters,
-          'los próximos ${settings.prefetchChapters} capítulos'
+          'este capítulo y los siguientes (${settings.prefetchChapters} en total)'
         ),
       _DownloadScope.book => (chapters - from, 'el resto del libro'),
     };
