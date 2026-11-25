@@ -61,6 +61,17 @@ pasar
 Importar audios del Mac*. Te dice cuántos párrafos entraron; desde ahí se oyen
 sin conexión.
 
+**Cosas que confunden:**
+
+- El número de capítulo es el de la primera columna de `--lista` (en Visión ciega,
+  **Teseo es el 4**, no el 3: el 3 es el Prólogo, de 51 párrafos).
+- **No necesitas `--desde`** para no repetir: la herramienta ya salta los párrafos
+  que el celular tiene, esté donde esté. `bajar "…" 4 --horas 1.2` genera las
+  siguientes ~1,2 horas **de lo que falta**. Úsalo solo para empezar en un punto
+  concreto; cuenta desde 0, y solo vale para el primer capítulo que pidas.
+- Las opciones van pegadas a los guiones: `--horas 1.2`, no `-- horas 1.2`. Si
+  algo está mal escrito, la herramienta se detiene y lo dice; no sigue en silencio.
+
 Las comillas del nombre del libro son obligatorias: lleva espacios y tildes.
 Los pasos 2 y 3 solo se repiten si apagaste el servidor o si agregaste libros o
 descargaste algo en la app desde la última vez.

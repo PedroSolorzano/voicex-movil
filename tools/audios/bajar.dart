@@ -80,6 +80,8 @@ Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
     return i >= 0 && i + 1 < args.length ? args[i + 1] : null;
   }
 
+  _rejectUnknownArguments(args);
+
   final epubPath = args[0];
   final book = await parseEpub(epubPath);
   final hash =
@@ -144,6 +146,26 @@ Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
 
   final wanted = _parseChapters(args[1], book.chapters.length);
   final skipUntil = int.tryParse(opt('--desde') ?? '') ?? 0;
+  if (opt('--desde') != null && skipUntil < 0) {
+    stderr.writeln('--desde espera un número de párrafo (0 o más).');
+    exit(64);
+  }
+  final firstChapter = book.chapters[wanted.first - 1];
+  if (skipUntil >= firstChapter.paragraphs.length) {
+    final fits = book.chapters
+        .where((c) => c.paragraphs.length > skipUntil)
+        .take(4)
+        .map((c) => '${c.index + 1} (${c.title}, ${c.paragraphs.length} párrafos)')
+        .join(', ');
+    stderr.writeln('El capítulo ${wanted.first} (${firstChapter.title}) tiene '
+        '${firstChapter.paragraphs.length} párrafos: --desde $skipUntil queda '
+        'fuera de él.');
+    if (fits.isNotEmpty) {
+      stderr.writeln('Capítulos con más de $skipUntil párrafos: $fits. '
+          'Los números son los de --lista.');
+    }
+    exit(64);
+  }
   final hoursBudget = double.tryParse(opt('--horas') ?? '');
   if (opt('--horas') != null && (hoursBudget == null || hoursBudget <= 0)) {
     stderr.writeln('--horas espera un número mayor que 0 (ejemplo: 1.5).');
@@ -382,3 +404,50 @@ _Phone? _loadPhone(String path, String hash, String voiceId) {
     return null;
   }
 }
+
+const _flagsWithValue = {
+  '--motor', '--voz', '--desde', '--horas', '--servidor', '--salida',
+  '--inventario',
+};
+const _flagsAlone = {'--lista', '--sin-inventario', '--ayuda'};
+
+/// A mistyped option used to be ignored without a word: `-- horas 1.2` (with a
+/// space) dropped the time limit and `--desde 100` on a 51-paragraph chapter
+/// quietly did nothing. Better to stop and say what looks wrong.
+void _rejectUnknownArguments(List<String> args) {
+  var positional = 0;
+  for (var i = 0; i < args.length; i++) {
+    final a = args[i];
+    if (_flagsWithValue.contains(a)) {
+      if (i + 1 >= args.length) {
+        stderr.writeln('$a necesita un valor (ejemplo: $a ${_example(a)}).');
+        exit(64);
+      }
+      i++; // its value
+    } else if (_flagsAlone.contains(a)) {
+      continue;
+    } else if (a.startsWith('-')) {
+      final close = [..._flagsWithValue, ..._flagsAlone]
+          .where((f) => f.replaceAll('-', '').startsWith(a.replaceAll('-', '')))
+          .toList();
+      stderr.writeln(a == '--'
+          ? 'Hay un «--» suelto. ¿Quisiste escribir la opción pegada, como '
+              '--horas 1.2 (sin espacio entre -- y horas)?'
+          : 'Opción desconocida: $a'
+              '${close.isEmpty ? '' : '. ¿Quisiste decir ${close.first}?'}');
+      exit(64);
+    } else if (++positional > 2) {
+      stderr.writeln('Sobra «$a». Si es una opción, le falta el «--» delante '
+          '(por ejemplo --horas 1.2).');
+      exit(64);
+    }
+  }
+}
+
+String _example(String flag) => switch (flag) {
+      '--horas' => '1.2',
+      '--desde' => '45',
+      '--motor' => 'chatterbox2',
+      '--voz' => 'colombiana',
+      _ => '<valor>',
+    };
