@@ -14,7 +14,7 @@ persona antes de mandarlo: todas las compilaciones del mismo commit comparten
 distingue.
 
 Sin `--dart-define-from-file`, la compilación no trae servidor: solo Edge, y los
-chips de Kokoro y Piper no aparecen. Es el modo correcto para probar la app sin
+chips de Qwen3 y Chatterbox no aparecen. Es el modo correcto para probar la app sin
 depender de nada.
 
 **Un motor que no aparece en Ajustes casi siempre es esto**: `TtsServerConfig`
@@ -23,54 +23,38 @@ qué variables lleva el `.json` que vas a usar contra las que llevaba el build
 anterior — un archivo incompleto no avisa, simplemente el motor desaparece en
 silencio.
 
-**Y una dirección equivocada es igual de callada que una que falta**: el motor sí
-aparece en Ajustes, no contesta nunca y la app se repliega a Edge sin decirlo. Por
-eso importa el orden de los `--dart-define-from-file`, y de eso habla lo que sigue.
+## Sumar el servidor de voz a una compilación
 
-## Sumar Kokoro a una compilación
-
-`KOKORO_URL` vive en [`kokoro.json`](kokoro.json), **trackeado en git** a
-diferencia de los `.json` por probador: la dirección del proxy es la misma
-para cualquier compilación tuya, lo único que cambia por persona es
-`TTS_TOKEN`. `--dart-define-from-file` acepta repetirse, y **el último archivo
-gana cada clave que repita**, así que el `.json` personal va al final:
+`VOICE_URL` vive en [`voz.json`](voz.json), **trackeado en git** a diferencia
+de los `.json` por probador: es la dirección del Mac que corre Qwen3-TTS y
+Chatterbox (`tools/mlx`), igual para cualquier compilación tuya. Lo único que
+cambia por persona es el token, `VOICE_TOKEN`, que va en el `.json` personal.
+`--dart-define-from-file` acepta repetirse, y **el último archivo gana cada
+clave que repita**, así que el personal va al final:
 
 ```bash
 flutter build apk --release \
-  --dart-define-from-file=tools/release/kokoro.json \
-  --dart-define-from-file=tools/release/amigo.json
+  --dart-define-from-file=tools/release/voz.json \
+  --dart-define-from-file=tools/release/pedro.json
 ```
 
-Al revés, `kokoro.json` le pisa el `KOKORO_URL` a quien traiga uno propio. **A un
-probador que entra por el Funnel eso lo deja sin Kokoro**: su `.json` apunta a
-`https://…ts.net/kokoro`, el build sale con la IP de tailnet dentro, y esa
-dirección no existe para él. `compilar.ps1` directamente omite `kokoro.json` en
-ese caso y lo dice en pantalla; a mano, basta con no pasarlo — el `.json` del
-probador ya trae dirección y token.
+`compilar.sh` (macOS y Linux) o `compilar.ps1` (Windows) hacen exactamente eso y
+además comprueban que las direcciones y el token quedaron dentro del APK. El
+`.sh` no necesita PowerShell: es bash con `flutter`, `python3` y `unzip`.
 
-Si el proxy cambia de dirección de tailnet, actualizar `kokoro.json` y
-recompilar. `PIPER_URL` queda fuera de este archivo a propósito: Piper
-devuelve WAV sin comprimir (~159 MB/hora) y no siempre conviene mandárselo a
-un probador, así que sigue viviendo en el `.json` personal de quien sí lo
-quiera.
+Una dirección equivocada es igual de callada que una que falta: el motor sí
+aparece en Ajustes, no contesta nunca y la app se repliega a Edge sin decirlo.
+Si el Mac cambia de dirección, actualizar `voz.json` y recompilar. Una
+dirección de la red local (`192.168.x.x`) cambia cuando el router reparte otra:
+conviene reservarla en el router, o usar una de Tailscale, que no cambia.
 
-## Sumar F5 a una compilación
-
-`F5_URL` vive en [`f5.json`](f5.json), **trackeado en
-git** a diferencia de los `.json` por probador: no lleva proxy ni token, así
-que no hay nada que revocar (ver
-[`docs/context/ACCESO_REMOTO.md`](../../docs/context/ACCESO_REMOTO.md),
-segundo nodo de la tailnet). `--dart-define-from-file` acepta repetirse, así
-que se combina con tu archivo personal en el mismo build:
-
-```bash
-flutter build apk --release \
-  --dart-define-from-file=tools/release/amigo.json \
-  --dart-define-from-file=tools/release/f5.json
-```
-
-Si la laptop cambia de IP de tailnet, actualizar `f5.json` y
-recompilar.
+**Los reportes ("Contar un problema") van al mismo servidor**, con el mismo
+token: `POST /report` y `PUT /report/audio/…` en `tools/mlx/server.py`. No hay
+nada más que configurar: la función existe exactamente cuando la compilación
+trae `VOICE_URL`. Sin esa dirección (un APK con solo Edge), `Reporter.canDeliver`
+es falso y Ajustes ni muestra la sección, porque un reporte encolado sin destino
+promete un envío que nunca ocurre. Lo que llega se procesa con
+`tools/reportes/procesar.sh`.
 
 ## Configurar una segunda PC propia
 
@@ -79,8 +63,8 @@ mismo `TTS_TOKEN`, la misma firma, otro disco. El objetivo es compilar ahí un
 APK igual de completo al de la primera PC sin tener que mandarse nada en cada
 build.
 
-**Lo que ya llega solo con `git pull`:** `kokoro.json` y `f5.json`
-(las URLs, sin token) — no hay que tocarlos.
+**Lo que ya llega solo con `git pull`:** `voz.json`
+(la URL, sin token) — no hay que tocarlos.
 
 **Lo que hay que llevar aparte, una sola vez, por USB** (nunca por git: ver
 "Lo que un APK no puede esconder" y "El keystore" más abajo para el porqué de
@@ -90,7 +74,7 @@ cada uno):
 |---|---|---|
 | `voicex.keystore` | `android/app/` | Firma del APK; perderlo es no poder actualizar nunca más ningún APK ya instalado. |
 | `key.properties` | `android/` | Contraseñas de esa firma. |
-| `pedro.json` (o el `.json` personal que uses) | `tools/release/` | Lleva `TTS_TOKEN` y, si querés Piper, `PIPER_URL`. Es lo que falta hoy si Kokoro no aparece configurable en la segunda PC. |
+| `pedro.json` (o el `.json` personal que uses) | `tools/release/` | Lleva `VOICE_TOKEN` (servidor de voz, el de `tools/mlx/.token`). Es lo que falta si Qwen3 y Chatterbox no aparecen en la segunda PC. |
 
 **Lo que NO se copia:** `android/local.properties`. Lo regenera Flutter solo
 en el primer build, y trae el `sdk.dir` de *esa* máquina — copiar el de la
@@ -100,13 +84,13 @@ Con los tres archivos en su sitio, compilar es el mismo comando de siempre:
 
 ```bash
 flutter build apk --release \
-  --dart-define-from-file=tools/release/pedro.json \
-  --dart-define-from-file=tools/release/kokoro.json
+  --dart-define-from-file=tools/release/voz.json \
+  --dart-define-from-file=tools/release/pedro.json
 ```
 
 Y confirmar como en cualquier build (ver "Al subir la versión, compila
 limpio"): instalar el APK y probar conexión en Ajustes → Motor de voz para
-Kokoro y Piper. Hecho este traspaso una vez, compilar en cualquiera de las dos
+Qwen3 y Chatterbox. Hecho este traspaso una vez, compilar en cualquiera de las dos
 PCs no vuelve a pedir mandarse nada: cada `git pull` trae lo público, y lo
 privado ya quedó instalado en ambas.
 
@@ -149,7 +133,7 @@ Por eso el token **no se trata como un secreto** sino como un identificador
 revocable. Lo que protege la máquina de casa está en el proxy: un token distinto
 por persona, límite de ritmo, lista blanca de rutas, backends en loopback y el
 túnel apagado fuera de la ventana de pruebas. Ver
-[`tools/proxy/README.md`](../proxy/README.md).
+`tools/mlx/README.md`.
 
 ## Entrega
 

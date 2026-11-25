@@ -3,19 +3,19 @@
 #
 # Existe porque `flutter build apk --release` a secas compila sin servidores y
 # el resultado no se distingue de uno bueno: el APK se instala, arranca y
-# funciona, solo que en Ajustes aparecen dos motores en vez de cinco. Es un
+# funciona, solo que en Ajustes aparecen dos motores en vez de cuatro. Es un
 # fallo silencioso, y por eso hace falta comprobarlo en vez de confiar.
 #
 # Una dirección equivocada es igual de callada que una que falta -- el motor
-# aparece en Ajustes y no contesta nunca --, así que el perfil manda sobre los
-# .json compartidos y los de la tailnet se quedan fuera de una compilación que
-# va por Funnel. Ver el bloque de abajo.
+# aparece en Ajustes y no contesta nunca --, así que el perfil personal va al
+# final y manda sobre los .json compartidos. Ver el bloque de abajo.
 #
-#   .\tools\release\compilar.ps1                 # perfil pedro, por la tailnet
-#   .\tools\release\compilar.ps1 -Perfil amigo   # probador, por el Funnel
+#   .\tools\release\compilar.ps1                 # perfil pedro
+#   .\tools\release\compilar.ps1 -Perfil amigo   # compilación de un probador
 #   .\tools\release\compilar.ps1 -Limpio         # obligatorio si cambió la versión
 #   .\tools\release\compilar.ps1 -Instalar       # y lo deja en el teléfono
 #
+# En macOS y Linux hay un equivalente sin PowerShell: compilar.sh.
 # Ver README.md de esta carpeta para qué lleva cada .json y por qué.
 
 [CmdletBinding()]
@@ -29,54 +29,21 @@ $ErrorActionPreference = "Stop"
 $raiz = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 Set-Location $raiz
 
-# El .json personal lleva TTS_TOKEN y las direcciones que valen solo para quien
-# compila: no está en git. `kokoro.json` y `f5.json` sí, y llevan direcciones de
-# la tailnet, que sirven para las compilaciones propias.
+# El .json personal lleva VOICE_TOKEN: no está en git. voz.json (la dirección del
+# servidor de voz) sí, así que vale para cualquier compilación.
 $personal = "tools/release/$Perfil.json"
 if (-not (Test-Path $personal)) {
     Write-Error "No existe $personal. Copiá tools/release/tester.example.json y editalo (ver README.md)."
 }
 
-$urlsPerfil = @{}
-foreach ($p in (Get-Content $personal -Raw | ConvertFrom-Json).PSObject.Properties) {
-    if ($p.Name -like "*_URL" -and $p.Value) { $urlsPerfil[$p.Name] = $p.Value }
-}
-
-# Un perfil que apunta al Funnel (`*.ts.net`) es de alguien que está fuera de la
-# tailnet, y el Funnel publica solo el proxy del 8080: Kokoro y Piper. Lo que
-# viva en una IP `100.x` -- F5, que corre en otra máquina -- no lo alcanza, y
-# meterlo igual no falla: el motor aparece en Ajustes, no contesta nunca y la
-# app se repliega a Edge en silencio. Es el fallo de 0.9.1, esta vez metido
-# desde el build.
-$porFunnel = $false
-foreach ($u in $urlsPerfil.Values) {
-    if ($u -like "*ts.net*") { $porFunnel = $true }
-}
-
 # Los compartidos van PRIMERO y el perfil personal AL FINAL, porque
 # `--dart-define-from-file` repetido se queda con el último valor de cada clave.
-# Al revés -- el orden que tenía este script -- `kokoro.json` le pisaba el
-# `KOKORO_URL` del Funnel a un perfil de probador y el APK salía con la IP de
-# tailnet dentro: Kokoro inalcanzable para él, sin un solo aviso.
+# Al revés, voz.json le pisaría el VOICE_URL a un perfil que traiga uno propio y
+# el APK saldría con una dirección que no es la suya, sin un solo aviso.
 $configs = @()
-foreach ($extra in @("tools/release/kokoro.json", "tools/release/f5.json")) {
-    if (-not (Test-Path $extra)) {
-        Write-Warning "Falta ${extra}: ese motor no va a estar en el APK."
-        continue
-    }
-    $urlsExtra = @{}
-    foreach ($p in (Get-Content $extra -Raw | ConvertFrom-Json).PSObject.Properties) {
-        if ($p.Name -like "*_URL" -and $p.Value) { $urlsExtra[$p.Name] = $p.Value }
-    }
-    $soloTailnet = $urlsExtra.Count -gt 0
-    foreach ($u in $urlsExtra.Values) {
-        if ($u -notlike "*://100.*") { $soloTailnet = $false }
-    }
-    if ($porFunnel -and $soloTailnet) {
-        Write-Host "  omitido  $extra ($($urlsExtra.Keys -join ', ') es de la tailnet y esta compilación va por Funnel)"
-        continue
-    }
-    $configs += $extra
+foreach ($extra in @("tools/release/voz.json")) {
+    if (Test-Path $extra) { $configs += $extra }
+    else { Write-Warning "Falta ${extra}: lo que lleva no va a estar en el APK." }
 }
 $configs += $personal
 

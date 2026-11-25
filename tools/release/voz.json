@@ -1,0 +1,4 @@
+{
+  "_comentario": "Dirección del servidor de voz (tools/mlx): el Mac con Qwen3-TTS y Chatterbox, por su IP de Tailscale, que no cambia y funciona dentro y fuera de casa. Va en git porque la dirección no es secreta -es visible igual en cualquier APK ya distribuido, ver README.md, 'Lo que un APK no puede esconder'-; el token que la habilita va en tu .json personal, gitignorado. Si el Mac sale de la tailnet o cambia de cuenta, actualizar acá y recompilar.",
+  "VOICE_URL": "http://100.127.104.30:8765"
+}

@@ -1,12 +1,6 @@
 {
-  "_comentario": "Copia este fichero como <nombre>.json por cada persona. Los reales están gitignorados: llevan el token.",
-  "_kokoro": "KOKORO_URL ya no va acá: vive en kokoro.json (trackeado, misma dirección para cualquiera). Compilar combinando --dart-define-from-file=tools/release/<nombre>.json --dart-define-from-file=tools/release/kokoro.json (ver tools/release/README.md).",
-
-  "TTS_TOKEN": "el-token-de-esta-persona-sacado-de-tools-proxy-tokens-conf",
-
-  "_piper": "Piper solo en tu propia compilación: devuelve WAV sin comprimir, ~159 MB por hora, y eso no se le manda al plan de datos de otra persona. Borra la línea para los probadores.",
-  "PIPER_URL": "https://voicex-server.tu-tailnet.ts.net/piper",
-
-  "_f5": "Token del servidor de F5, distinto de TTS_TOKEN: a ese lo valida el proxy, y a éste el propio servidor (tools/f5/server.py), que no tiene proxy delante. Tiene que coincidir con el F5_TOKEN del .env de tools/f5. Deja la cadena vacía si tu servidor arranca sin token.",
-  "F5_TOKEN": "el-mismo-valor-que-tools-f5-punto-env"
+  "_comentario": "Copia este fichero como <nombre>.json por cada persona. Los reales están gitignorados: llevan token.",
+  "_direccion": "La dirección del servidor de voz no va acá: vive en voz.json, trackeado, igual para cualquiera. Compilar con compilar.ps1, que lo combina con este (ver README.md).",
+  "_voz": "Token del servidor de voz del Mac (tools/mlx). Sale de tools/mlx/.token y tiene que coincidir con el del servidor. Sin él, un servidor arrancado con token rechaza a la app con 401 y la app se repliega a Edge. Para un probador que no use tu Mac, borra la línea: los dos motores de voz clonada no aparecerán.",
+  "VOICE_TOKEN": "el-mismo-valor-que-tools-mlx-punto-token"
 }
