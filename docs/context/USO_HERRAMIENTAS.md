@@ -5,6 +5,68 @@ compilar) se lanza desde la terminal. Esta guía dice **desde dónde**, **con qu
 comando** y qué hacer cuando la terminal contesta `command not found` o
 `no such file or directory`.
 
+## Inicio rápido: bajar audio y pasarlo al celular
+
+Cada paso es un comando para copiar y pegar. Los nombres cortos (`servidor`,
+`traer-libros`, `bajar`, `pasar`) existen después de escribir `voicex`; si no lo
+tienes configurado, mira la sección 1.
+
+**1. Prepara la terminal** (una vez por terminal nueva):
+
+```bash
+voicex
+```
+
+**2. Enciende el servidor de voz** en *otra* terminal, y déjalo corriendo:
+
+```bash
+voicex
+servidor
+```
+
+**3. Conecta el celular por cable** y, en la app, toca
+*Ajustes → Almacenamiento → Ver qué ocupa cada libro → Dejar mis libros listos
+para el Mac*. Después, en el Mac, trae los libros:
+
+```bash
+traer-libros
+```
+
+**4. Mira qué capítulos hay**, cuántas horas son y cuáles ya tiene el celular:
+
+```bash
+bajar "epubs/del-telefono/Visión ciega.epub" --lista
+```
+
+**5. Genera el audio.** Cambia el `3` por el capítulo que quieras (`3-5` para varios):
+
+```bash
+bajar "epubs/del-telefono/Visión ciega.epub" 3
+```
+
+Si el capítulo es largo, genera solo una parte (por ejemplo 1,2 horas). Al
+terminar, te imprime el comando exacto para la siguiente parte:
+
+```bash
+bajar "epubs/del-telefono/Visión ciega.epub" 4 --horas 1.2
+```
+
+**6. Cópialo al celular:**
+
+```bash
+pasar
+```
+
+**7. En la app**, toca *Ajustes → Almacenamiento → Ver qué ocupa cada libro →
+Importar audios del Mac*. Te dice cuántos párrafos entraron; desde ahí se oyen
+sin conexión.
+
+Las comillas del nombre del libro son obligatorias: lleva espacios y tildes.
+Los pasos 2 y 3 solo se repiten si apagaste el servidor o si agregaste libros o
+descargaste algo en la app desde la última vez.
+
+---
+
 ## 1. Ponerse en la ruta correcta
 
 Casi todos los comandos son rutas **relativas a la raíz del proyecto**

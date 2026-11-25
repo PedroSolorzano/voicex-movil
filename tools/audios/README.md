@@ -4,6 +4,9 @@ Para escuchar sin descargar en tiempo real: generas capítulos completos en el
 Mac, conectas el teléfono y los pasas. Quedan como cualquier descarga: se oyen
 sin conexión y aparecen en *Descargas y caché*.
 
+**¿Solo quieres los comandos?** Están, uno por paso y listos para copiar, en
+[`docs/context/USO_HERRAMIENTAS.md`](../../docs/context/USO_HERRAMIENTAS.md#inicio-rápido-bajar-audio-y-pasarlo-al-celular).
+
 ```
 bajar.dart  ──►  tools/audios/salida/<libro>/  ──►  pasar.sh (adb)  ──►  teléfono  ──►  «Importar audios del Mac»
 ```

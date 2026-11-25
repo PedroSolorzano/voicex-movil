@@ -121,7 +121,8 @@ La instalación, las voces y el porqué de cada decisión están en
 
 Para moverse por las herramientas del Mac (ruta, PATH, `adb`, audios por cable,
 reportes) ver [`docs/context/USO_HERRAMIENTAS.md`](docs/context/USO_HERRAMIENTAS.md):
-`source tools/entorno.sh` deja la terminal lista.
+`source tools/entorno.sh` deja la terminal lista. Al principio de esa guía está el
+*inicio rápido* para generar audio y pasarlo al celular, paso a paso.
 
 La dirección **no se escribe en Ajustes**: va compilada en el APK. Compila con
 `compilar.sh` (o `compilar.ps1` en Windows), que pasa `voz.json` (la dirección) y tu `.json` personal (el
