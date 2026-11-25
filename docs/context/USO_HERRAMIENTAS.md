@@ -7,13 +7,25 @@ comando** y qué hacer cuando la terminal contesta `command not found` o
 
 ## Inicio rápido: bajar audio y pasarlo al celular
 
-Cada paso es un comando para copiar y pegar. Los nombres cortos (`servidor`,
-`traer-libros`, `bajar`, `pasar`) existen después de escribir `voicex`; si no lo
-tienes configurado, mira la sección 1.
+Cada paso es un comando para copiar y pegar. Las líneas que empiezan con `#` son
+**explicaciones, no parte del comando**: puedes copiarlas o no.
+
+**Dos palabras que no son lo mismo:**
+
+- `voicex` solo **prepara la terminal** (te lleva al proyecto y deja `adb` y
+  `dart` a mano). No genera nada.
+- `bajar` es el comando que **genera el audio**; lo que va después es su
+  información: el libro, el capítulo y el tope de horas.
+
+Por eso `bajar` no se puede omitir: `voicex "epubs/…" Teseo` intenta ejecutar el
+archivo del libro como si fuera un programa y falla con `permission denied`. Los
+nombres cortos (`servidor`, `traer-libros`, `bajar`, `pasar`) existen después de
+escribir `voicex`; si no lo tienes configurado, mira la sección 1.
 
 **1. Prepara la terminal** (una vez por terminal nueva):
 
 ```bash
+# Te lleva al proyecto y deja listos adb, dart y los atajos.
 voicex
 ```
 
@@ -21,6 +33,7 @@ voicex
 
 ```bash
 voicex
+# Arranca el servidor que genera la voz (Qwen3 y Chatterbox). No lo cierres.
 servidor
 ```
 
@@ -29,6 +42,7 @@ servidor
 para el Mac*. Después, en el Mac, trae los libros:
 
 ```bash
+# Copia del celular al Mac sus libros y el inventario de lo ya descargado.
 traer-libros
 ```
 
@@ -36,6 +50,7 @@ traer-libros
 párrafos del capítulo ya tiene el celular):
 
 ```bash
+# Solo lista capítulos; no genera audio.
 bajar "epubs/del-telefono/Visión ciega.epub" --indice
 ```
 
@@ -52,7 +67,10 @@ en lugar de `--indice`.
 **5. Genera el audio.** Pon el número del índice (`4-6` para varios) **o el nombre**:
 
 ```bash
+# Genera el capítulo 4 completo (lo que el celular ya tiene se salta).
 bajar "epubs/del-telefono/Visión ciega.epub" 4
+
+# Lo mismo, pidiéndolo por nombre.
 bajar "epubs/del-telefono/Visión ciega.epub" Teseo
 ```
 
@@ -63,12 +81,14 @@ Si el capítulo es largo, genera solo una parte (por ejemplo 1,2 horas). Al
 terminar, te imprime el comando exacto para la siguiente parte:
 
 ```bash
-bajar "epubs/del-telefono/Visión ciega.epub" 4 --horas 1.2
+# Genera ~1,2 horas de lo que falta de Teseo y se detiene (~40 minutos de espera).
+bajar "epubs/del-telefono/Visión ciega.epub" Teseo --horas 1.2
 ```
 
 **6. Cópialo al celular:**
 
 ```bash
+# Empuja por cable lo generado a la carpeta de la app en el celular.
 pasar
 ```
 
@@ -86,6 +106,8 @@ sin conexión.
   concreto; cuenta desde 0, y solo vale para el primer capítulo que pidas.
 - Las opciones van pegadas a los guiones: `--horas 1.2`, no `-- horas 1.2`. Si
   algo está mal escrito, la herramienta se detiene y lo dice; no sigue en silencio.
+- `voicex bajar "…"` en una sola línea también funciona: `voicex` prepara la
+  terminal y ejecuta lo que le sigue.
 
 Las comillas del nombre del libro son obligatorias: lleva espacios y tildes.
 Los pasos 2 y 3 solo se repiten si apagaste el servidor o si agregaste libros o
