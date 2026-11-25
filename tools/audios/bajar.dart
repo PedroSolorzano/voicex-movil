@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:voicex_movil/epub/models.dart';
 import 'package:voicex_movil/epub/parser.dart';
 
 const _defaultVoices = {'qwen3': 'esposa', 'chatterbox2': 'colombiana'};
@@ -55,12 +56,14 @@ const _formatTag = 'f96';
 
 Future<void> main(List<String> args) async {
   if (args.isEmpty ||
-      (args.length < 2 && !args.contains('--lista')) ||
+      (args.length < 2 &&
+          !args.contains('--lista') &&
+          !args.contains('--indice')) ||
       args.contains('--ayuda')) {
     stderr.writeln('''
 Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
 
-  <capítulos>        números como los ve la app (1 = primer capítulo): 3, 3-5, 1,4
+  <capítulos>        número como en --indice: 4, 4-6, 1,4; o el nombre: Teseo
   --motor <id>       chatterbox2 (por defecto) o qwen3
   --voz <nombre>     voz del servidor (por defecto: colombiana / esposa)
   --desde <n>        en el primer capítulo, empezar en el párrafo n (como en la app)
@@ -69,6 +72,7 @@ Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
   --salida <carpeta> por defecto tools/audios/salida
   --inventario <f>   inventario del teléfono; por defecto inventario.json junto al EPUB
   --sin-inventario   generar todo lo pedido aunque el teléfono ya lo tenga
+  --indice           solo la tabla: número, título y párrafos de cada capítulo
   --lista            capítulos con horas de escucha y tiempo de generación, y cómo
                      partir los largos; no genera nada
 ''');
@@ -105,6 +109,25 @@ Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
     stdout.writeln('Sin inventario del teléfono: se generará todo lo pedido. '
         'Para saltar lo que ya tiene, usa «Dejar mis libros listos para el '
         'Mac» y tools/audios/traer-libros.sh.');
+  }
+
+  if (args.contains('--indice')) {
+    final width = book.chapters
+        .map((c) => c.title.length)
+        .fold<int>(8, (a, b) => b > a ? (b > 42 ? 42 : b) : a);
+    stdout.writeln('\n${book.title} — ${book.author}\n');
+    stdout.writeln('  Nº  ${'Capítulo'.padRight(width)}  Párrafos');
+    for (final c in book.chapters) {
+      final title = c.title.length > 42 ? '${c.title.substring(0, 41)}…' : c.title;
+      final here = phone?.have[c.index]?.length ?? 0;
+      stdout.writeln('${(c.index + 1).toString().padLeft(4)}  '
+          '${title.padRight(width)}  ${c.paragraphs.length.toString().padLeft(8)}'
+          '${here > 0 ? '   (en el teléfono: $here)' : ''}');
+    }
+    stdout.writeln('\nUsa el número o el nombre:\n'
+        '  bajar "$epubPath" ${book.chapters.length > 3 ? 4 : 1}\n'
+        '  bajar "$epubPath" ${_firstWord(book)}');
+    return;
   }
 
   if (args.contains('--lista')) {
@@ -144,7 +167,7 @@ Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
     exit(64);
   }
 
-  final wanted = _parseChapters(args[1], book.chapters.length);
+  final wanted = _parseChapters(args[1], book.chapters);
   final skipUntil = int.tryParse(opt('--desde') ?? '') ?? 0;
   if (opt('--desde') != null && skipUntil < 0) {
     stderr.writeln('--desde espera un número de párrafo (0 o más).');
@@ -316,19 +339,55 @@ Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
   }
 }
 
-List<int> _parseChapters(String spec, int total) {
+String _plain(String t) {
+  const from = 'áéíóúüñ', to = 'aeiouun';
+  var out = t.toLowerCase();
+  for (var i = 0; i < from.length; i++) {
+    out = out.replaceAll(from[i], to[i]);
+  }
+  return out.trim();
+}
+
+String _firstWord(Book book) {
+  final t = book.chapters.length > 3 ? book.chapters[3].title : book.chapters.first.title;
+  return t.split(' ').first;
+}
+
+/// Chapters as numbers (`4`, `4-6`, `1,4`) or by name (`Teseo`). A name has to
+/// match exactly one chapter: guessing between two is how the wrong chapter
+/// gets generated.
+List<int> _parseChapters(String spec, List<Chapter> chapters) {
+  final total = chapters.length;
+  if (!RegExp(r'^[\d\s,\-]+$').hasMatch(spec)) {
+    final q = _plain(spec);
+    final hits = chapters.where((c) => _plain(c.title).contains(q)).toList();
+    if (hits.length == 1) return [hits.single.index + 1];
+    if (hits.isEmpty) {
+      stderr.writeln('Ningún capítulo se llama «$spec». Mira los nombres y '
+          'números con --indice.');
+    } else {
+      stderr.writeln('«$spec» coincide con ${hits.length} capítulos; usa el '
+          'número:');
+      for (final c in hits.take(8)) {
+        stderr.writeln('  ${c.index + 1}  ${c.title}');
+      }
+    }
+    exit(64);
+  }
   final out = <int>{};
   for (final part in spec.split(',')) {
     final m = RegExp(r'^\s*(\d+)\s*(?:-\s*(\d+))?\s*$').firstMatch(part);
     if (m == null) {
-      stderr.writeln('Capítulos no válidos: "$spec" (ejemplos: 3, 3-5, 1,4)');
+      stderr.writeln('Capítulos no válidos: "$spec" (ejemplos: 3, 3-5, 1,4, o '
+          'un nombre como Teseo). Mira los números con --indice.');
       exit(64);
     }
     final a = int.parse(m.group(1)!);
     final b = int.parse(m.group(2) ?? m.group(1)!);
     for (var n = a; n <= b; n++) {
       if (n < 1 || n > total) {
-        stderr.writeln('El capítulo $n no existe: el libro tiene $total.');
+        stderr.writeln('El capítulo $n no existe: el libro tiene $total. '
+            'Mira los números con --indice.');
         exit(64);
       }
       out.add(n);
@@ -409,7 +468,7 @@ const _flagsWithValue = {
   '--motor', '--voz', '--desde', '--horas', '--servidor', '--salida',
   '--inventario',
 };
-const _flagsAlone = {'--lista', '--sin-inventario', '--ayuda'};
+const _flagsAlone = {'--lista', '--indice', '--sin-inventario', '--ayuda'};
 
 /// A mistyped option used to be ignored without a word: `-- horas 1.2` (with a
 /// space) dropped the time limit and `--desde 100` on a 51-paragraph chapter

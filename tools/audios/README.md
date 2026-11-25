@@ -35,6 +35,10 @@ con una copia en el Mac o sin ella, se traen igual repitiendo los dos pasos.)
 
 ## 1. Ver los capítulos
 
+Para saber qué número tiene cada capítulo, sin más ruido, `--indice` imprime una
+tabla corta (número, título, párrafos y cuántos ya tiene el teléfono). Y al
+generar se puede pedir el capítulo **por nombre** (`Teseo`) en vez de por número.
+
 ```bash
 dart run tools/audios/bajar.dart "epubs/Visión ciega.epub" x --lista
 ```

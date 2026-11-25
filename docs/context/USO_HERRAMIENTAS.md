@@ -32,17 +32,32 @@ para el Mac*. Después, en el Mac, trae los libros:
 traer-libros
 ```
 
-**4. Mira qué capítulos hay**, cuántas horas son y cuáles ya tiene el celular:
+**4. Mira el índice** para saber qué número tiene cada capítulo (y cuántos
+párrafos del capítulo ya tiene el celular):
 
 ```bash
-bajar "epubs/del-telefono/Visión ciega.epub" --lista
+bajar "epubs/del-telefono/Visión ciega.epub" --indice
 ```
 
-**5. Genera el audio.** Cambia el `3` por el capítulo que quieras (`3-5` para varios):
+```
+  Nº  Capítulo             Párrafos
+   3  Prólogo                    51
+   4  Teseo                    1358   (en el teléfono: 102)
+   5  Rorschach                1012
+```
+
+Si además quieres las horas de escucha y cómo partir los largos, usa `--lista`
+en lugar de `--indice`.
+
+**5. Genera el audio.** Pon el número del índice (`4-6` para varios) **o el nombre**:
 
 ```bash
-bajar "epubs/del-telefono/Visión ciega.epub" 3
+bajar "epubs/del-telefono/Visión ciega.epub" 4
+bajar "epubs/del-telefono/Visión ciega.epub" Teseo
 ```
+
+El nombre no distingue mayúsculas ni tildes, y tiene que coincidir con un solo
+capítulo: si coincide con varios, te los lista para que uses el número.
 
 Si el capítulo es largo, genera solo una parte (por ejemplo 1,2 horas). Al
 terminar, te imprime el comando exacto para la siguiente parte:
@@ -63,7 +78,7 @@ sin conexión.
 
 **Cosas que confunden:**
 
-- El número de capítulo es el de la primera columna de `--lista` (en Visión ciega,
+- El número de capítulo es el de la primera columna de `--indice` o `--lista` (en Visión ciega,
   **Teseo es el 4**, no el 3: el 3 es el Prólogo, de 51 párrafos).
 - **No necesitas `--desde`** para no repetir: la herramienta ya salta los párrafos
   que el celular tiene, esté donde esté. `bajar "…" 4 --horas 1.2` genera las

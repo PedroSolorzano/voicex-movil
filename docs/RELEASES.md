@@ -35,7 +35,8 @@ hash del archivo y un nombre distinto o una edición distinta no coincide.
 *Dejar mis libros listos para el Mac* escribe además `inventario.json` con lo que
 el teléfono ya tiene descargado por libro y voz (solo archivos que existen, en el
 formato de caché vigente), y `bajar.dart` lo usa para no generar de nuevo esos
-párrafos (`AudioCacheRepo.downloadedParagraphs`). `bajar.dart` rechaza opciones mal escritas (un `-- horas` con espacio dejaba sin
+párrafos (`AudioCacheRepo.downloadedParagraphs`). `bajar.dart --indice` imprime la tabla de capítulos con su número y se puede pedir
+un capítulo por nombre (`Teseo`), que debe coincidir con uno solo. También rechaza opciones mal escritas (un `-- horas` con espacio dejaba sin
 tope la generación y no avisaba) y un `--desde` fuera del capítulo. Probado en un Galaxy S21 Ultra con Android 12: los libros salen con `adb pull`
 (la app los deja en modo 644 para que `adb` los lea) y el audio entra con
 `adb push` a la carpeta de la app, que se crea antes porque `adb push` no puede
