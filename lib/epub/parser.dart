@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:epubx/epubx.dart';
-import 'package:flutter/foundation.dart';
 import 'package:html/parser.dart' as html_parser;
+import 'package:meta/meta.dart';
 import '../errors.dart';
 import 'models.dart';
 
@@ -20,7 +21,12 @@ const maxEpubBytes = 200 * 1024 * 1024;
 
 /// Parses off the UI isolate. A full novel takes hundreds of milliseconds to
 /// unzip and walk, which visibly janks the reader on open when done inline.
-Future<Book> parseEpubInBackground(String path) => compute(_parseEpubIsolate, path);
+///
+/// No Flutter import on purpose: `tools/audios/bajar.dart` runs this same parser
+/// under plain `dart`, so the paragraph numbers it writes are the ones the app
+/// will look for.
+Future<Book> parseEpubInBackground(String path) =>
+    Isolate.run(() => _parseEpubIsolate(path));
 
 Future<Book> _parseEpubIsolate(String path) => parseEpub(path);
 

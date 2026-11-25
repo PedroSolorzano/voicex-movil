@@ -87,3 +87,6 @@ tools/mlx/reportes/
 
 # Libros de prueba para importar: tienen derechos de autor y no son del proyecto
 epubs/
+
+# Audio generado en el Mac, a la espera de pasarlo al teléfono
+tools/audios/salida/

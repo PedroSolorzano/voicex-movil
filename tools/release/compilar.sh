@@ -118,7 +118,12 @@ echo
 echo "APK correcto: $apk ($version, perfil $perfil)"
 
 if [[ $instalar -eq 1 ]]; then
-  adb install -r "$apk"
+  # Homebrew instala el SDK de Android pero no pone adb en el PATH.
+  adb="$(command -v adb || true)"
+  [[ -z "$adb" && -x /opt/homebrew/share/android-commandlinetools/platform-tools/adb ]] \
+    && adb=/opt/homebrew/share/android-commandlinetools/platform-tools/adb
+  [[ -n "$adb" ]] || { echo "No encuentro adb: ver docs/context/USO_HERRAMIENTAS.md" >&2; exit 1; }
+  "$adb" install -r "$apk"
   # Lo que dice el APK por dentro, no lo que dice el nombre del archivo.
-  adb shell dumpsys package com.pedrosolorzano.voicex_movil | grep versionName
+  "$adb" shell dumpsys package com.pedrosolorzano.voicex_movil | grep versionName
 fi
