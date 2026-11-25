@@ -18,6 +18,14 @@ era de quién, ni cuándo dejar de descargar.
 
 Sin cambios de esquema. Se compila con `compilar.sh -l`: cambió la versión.
 
+### Los marcadores ahora te llevan al pasaje
+
+Tocar un marcador (o un resultado de búsqueda) dentro del capítulo que ya estaba
+abierto no movía el texto: la pantalla solo se desplazaba si cambiaba de capítulo
+o si el audio llevaba la posición (`reader_screen.dart`, `shouldFollow`). Ahora
+todo salto explícito (`navigateChapter`) avisa por `readerJumpProvider` y la
+pantalla se desplaza, con o sin audio.
+
 ### Audios generados en el Mac, por cable
 
 Pedido en la misma nota: generar capítulos en el Mac y pasarlos al teléfono para

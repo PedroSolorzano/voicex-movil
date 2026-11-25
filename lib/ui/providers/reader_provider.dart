@@ -89,6 +89,9 @@ List<int> buildCharsPrefix(Book book) {
   return prefix;
 }
 
+/// Bumped on every explicit jump to a position so the screen scrolls there.
+final readerJumpProvider = StateProvider<int>((ref) => 0);
+
 class ReaderState {
   final Book? book;
   final int chapterIndex;
@@ -1299,6 +1302,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
       sentenceRanges: const [],
       clearActiveWord: true,
     );
+    // An explicit jump (bookmark, search, slider) must scroll the text even
+    // inside the same chapter and without audio; the state change alone does
+    // not, because silent scrolling also moves the paragraph index.
+    ref.read(readerJumpProvider.notifier).state++;
     await _saveProgress();
   }
 

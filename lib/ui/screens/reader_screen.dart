@@ -224,6 +224,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       ref.read(readingMilestoneProvider.notifier).state = null;
     });
 
+    ref.listen<int>(readerJumpProvider, (_, _) {
+      final target = ref.read(readerProvider).paragraphIndex;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _lastParagraphIndex = target;
+        _scrollTo(target);
+      });
+    });
+
     ref.listen<ReaderState>(readerProvider, (prev, next) {
       final startedPlaying = prev?.status != next.status &&
           next.status == ReaderStatus.playing;
