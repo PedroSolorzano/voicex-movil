@@ -110,7 +110,7 @@ archivo sirve a todas.
 |---|---|---|
 | `VOZ_TOKEN` | `.token` (lo lee `arrancar.sh`) | Credencial. Sin ella el servidor no pide nada, lo cual en una WiFi ajena enumera tus voces a cualquiera. |
 | `VOZ_PUERTO` | `8765` | Puerto. **No 5000 ni 7000**: macOS los usa para AirPlay. |
-| `VOZ_MOTORES` | `qwen3,chatterbox2` | Cuáles cargar. Con uno solo ahorra memoria. |
+| `VOZ_MOTORES` | `qwen3,chatterbox2` | Cuáles cargar. Con uno solo ahorra memoria; con `VOZ_MOTORES=""` no carga ninguno (~80 MB en vez de ~7,6 GB) y el servidor solo recibe reportes. |
 | `VOZ_MAX_CHARS` | `380` | A partir de cuándo se parte un párrafo. |
 | `VOZ_VOCES` | `./voices` | Carpeta de voces. |
 | `VOZ_REPORTES` | `./reportes` | Dónde se guardan los reportes y sus notas. |

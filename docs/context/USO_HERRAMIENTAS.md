@@ -178,6 +178,24 @@ tools/mlx/arrancar.sh        # o: servidor        — puerto 8765, token en tool
 Déjalo corriendo en su propia terminal. `Ctrl+C` lo detiene. Detalles:
 `tools/mlx/README.md`.
 
+**Solo para recibir reportes, sin gastar memoria.** Las dos voces cargadas
+ocupan unos 7,6 GB; el servidor sin voces, unos 80 MB. Si ya descargaste lo que
+vas a escuchar y solo quieres que lleguen los reportes de la app:
+
+```bash
+# Arranca el servidor SIN cargar Qwen3 ni Chatterbox: recibe reportes, no sintetiza.
+VOZ_MOTORES="" tools/mlx/arrancar.sh
+```
+
+`/health` dirá `status: error` y `engines: []`: es lo esperado, no una falla. Lo
+ya descargado en el teléfono suena igual; lo que no esté bajado caería a Edge, y
+una descarga se detendría avisando que el servidor no responde.
+
+**Para volver a generar audio:** detén ese servidor (`Ctrl+C`, o
+`pkill -f "uvicorn server:app"` si quedó en segundo plano) y arranca el normal
+con `servidor`, que sí carga las dos voces (tarda un rato en quedar listo). Para
+volcar los reportes que llegaron, corre `reportes` (más abajo).
+
 ### Reportes de testers («Contar un problema»)
 
 ```bash
