@@ -42,6 +42,10 @@ typedef SentenceMark = ({int startMs, int sentenceIdx});
 /// do. The two codecs coexist: the extension is stored per file.
 const _cacheFormatTag = 'f96';
 
+/// Public so the importer of audio made on the Mac files it under the tag the
+/// reader will look for.
+const cacheFormatTag = _cacheFormatTag;
+
 /// How often progress is persisted while audio is playing.
 const _progressSaveInterval = Duration(seconds: 5);
 
@@ -1466,6 +1470,18 @@ class ReaderNotifier extends Notifier<ReaderState> {
           ? ''
           : 'con ${providerLabel(dlKind)} (${providerLabel(settings.ttsProvider)} no disponible)';
 
+  String _serverLostMessage(AppSettings settings, int done) =>
+      '${providerLabel(settings.ttsProvider)} no responde: la descarga se '
+      'detuvo${done > 0 ? ' tras $done párrafos' : ''} en vez de guardar '
+      'audio de otra voz. Lo ya descargado se conserva.';
+
+  /// Refuses to start a download whose voice server is out of reach. A silent
+  /// prefetch says nothing; one the reader asked for explains why nothing began.
+  void _stopForServer(AppSettings settings, {required bool silent}) {
+    if (silent) return;
+    state = state.copyWith(statusMessage: _serverLostMessage(settings, 0));
+  }
+
   Future<void> downloadChapter() => downloadChapters(state.chapterIndex, 1);
 
   /// El motor con el que arrancaría una descarga **ahora mismo**.
@@ -1501,6 +1517,34 @@ class ReaderNotifier extends Notifier<ReaderState> {
     if (failed > 0) return 'Descarga incompleta: $failed párrafos fallaron';
     return 'Descargados $done párrafos con ${providerLabel(dlKind)}';
   }
+
+  /// Whether a download must stop instead of continuing with Edge.
+  ///
+  /// Falling back to Edge keeps *listening* alive when the voice server is
+  /// down, which is the point of it. A download is different: the reader chose
+  /// a specific voice to have it offline, and a chapter filled with Edge audio
+  /// is not what was asked for. A book in another language is not a fallback:
+  /// the server engines never read it, so Edge is the intended engine there.
+  @visibleForTesting
+  static bool downloadMustWaitForServer(
+          {required AppSettings settings,
+          required String resolvedKind,
+          required String language}) =>
+      settings.usesSelfHostedServer &&
+      language.toLowerCase().startsWith('es') &&
+      resolvedKind != settings.ttsProvider;
+
+  /// Whether a download that is already running must stop because the setting
+  /// that started it was switched off.
+  ///
+  /// Only a silent prefetch is owned by that setting: one the reader asked for
+  /// explicitly is not. The setting used to be read once, when the prefetch
+  /// started, so switching it off did not stop the one in flight: it went on
+  /// synthesizing, one paragraph after another, on the voice server.
+  @visibleForTesting
+  static bool prefetchSwitchedOff(
+          {required bool silent, required bool prefetchOnWifi}) =>
+      silent && !prefetchOnWifi;
 
   /// True from the moment a download is accepted, not from the moment the bar
   /// appears.
@@ -1561,6 +1605,11 @@ class ReaderNotifier extends Notifier<ReaderState> {
     // with even if the person changes engine in Ajustes while it runs; only
     // the server dropping out mid-download falls it back to Edge below.
     var dlKind = await _resolveEngineKind(settings, book.language);
+    if (downloadMustWaitForServer(
+        settings: settings, resolvedKind: dlKind, language: book.language)) {
+      _stopForServer(settings, silent: silent);
+      return;
+    }
     var dlProvider =
         getProvider(settings.copyWith(ttsProvider: dlKind), lang: book.language);
     // Resolve the engine up front: a download must be stored under whatever
@@ -1596,9 +1645,14 @@ class ReaderNotifier extends Notifier<ReaderState> {
     // servidor no arrastra una medición vieja.
     var serverTotal = Duration.zero;
     var serverSamples = 0;
+    var serverLost = false;
 
     for (var chapterIdx = from; chapterIdx < last; chapterIdx++) {
       for (final para in chapters[chapterIdx].paragraphs) {
+        if (prefetchSwitchedOff(
+            silent: silent, prefetchOnWifi: _settings.prefetchOnWifi)) {
+          _downloadCancelled = true;
+        }
         if (_downloadCancelled) break;
         if (chapterIdx == from && para.index < skipUntil) continue;
 
@@ -1620,6 +1674,14 @@ class ReaderNotifier extends Notifier<ReaderState> {
           // *kind* is re-checked here; the settings snapshot stays the one
           // taken when the download started (see above).
           final nuevoKind = await _resolveEngineKind(settings, book.language);
+          if (downloadMustWaitForServer(
+              settings: settings,
+              resolvedKind: nuevoKind,
+              language: book.language)) {
+            serverLost = true;
+            _downloadCancelled = true;
+            break;
+          }
           if (nuevoKind != dlKind) {
             unawaited(dlProvider.dispose());
             dlKind = nuevoKind;
@@ -1711,8 +1773,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
     final failed = state.downloadFailed;
     // `dlKind` es el motor del último párrafo, que es el que importa: si el
     // servidor se cayó a mitad, lo que quedó guardado lleva el otro nombre.
-    final summary =
-        _downloadSummaryFor(dlKind, settings, failed, state.downloadDone);
+    final summary = serverLost
+        ? _serverLostMessage(settings, state.downloadDone)
+        : _downloadSummaryFor(dlKind, settings, failed, state.downloadDone);
     state = state.copyWith(
       isDownloading: false,
       // Una prelectura no interrumpe: ni mensaje ni resumen. Es el mismo

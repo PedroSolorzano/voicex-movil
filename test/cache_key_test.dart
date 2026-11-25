@@ -95,4 +95,53 @@ void main() {
           'edge-es-MX-DaliaNeural');
     });
   });
+
+  group('prefetchSwitchedOff', () {
+    // Apagar «Descargar por adelantado» no paraba la descarga ya en marcha: el
+    // ajuste solo se leía al empezar, y el servidor seguía sintetizando.
+    test('a silent prefetch stops when its setting goes off', () {
+      expect(
+          ReaderNotifier.prefetchSwitchedOff(silent: true, prefetchOnWifi: false),
+          isTrue);
+    });
+
+    test('a silent prefetch keeps going while its setting is on', () {
+      expect(
+          ReaderNotifier.prefetchSwitchedOff(silent: true, prefetchOnWifi: true),
+          isFalse);
+    });
+
+    test('a download the reader asked for is not owned by that setting', () {
+      // "Descargar este capítulo" no depende de la descarga adelantada.
+      expect(
+          ReaderNotifier.prefetchSwitchedOff(silent: false, prefetchOnWifi: false),
+          isFalse);
+    });
+  });
+
+  group('downloadMustWaitForServer', () {
+    // Caer a Edge mantiene viva la escucha; en una descarga llenaba el capítulo
+    // con una voz que el lector no eligió.
+    bool stops(String resolved, {AppSettings? settings, String lang = 'es'}) =>
+        ReaderNotifier.downloadMustWaitForServer(
+            settings: settings ?? AppSettings(ttsProvider: 'chatterbox2'),
+            resolvedKind: resolved,
+            language: lang);
+
+    test('stops when the server engine fell back to Edge', () {
+      expect(stops('edge'), isTrue);
+    });
+
+    test('goes on while the server answers', () {
+      expect(stops('chatterbox2'), isFalse);
+    });
+
+    test('a book in another language is not a fallback', () {
+      expect(stops('edge', lang: 'en'), isFalse);
+    });
+
+    test('Edge chosen on purpose is never held back', () {
+      expect(stops('edge', settings: AppSettings(ttsProvider: 'edge')), isFalse);
+    });
+  });
 }
