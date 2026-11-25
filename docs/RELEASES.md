@@ -9,7 +9,19 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
-## Sin publicar
+## 0.13.0-preview.1 — 2026-11-24
+
+Edge vuelve a sonar, Qwen3 y Chatterbox —voces clonadas generadas en un Mac—
+reemplazan a Kokoro, Piper y F5, y un libro con un byte suelto en el CSS por fin
+se importa. También se arregló que lo descargado con el motor del teléfono
+desaparecía al abrir la app, y se actualizaron las herramientas de compilación.
+
+**Cambia lo que hay en disco.** La primera vez que se abre, la app borra el audio
+descargado con Kokoro, Piper, F5 y el Chatterbox anterior: ningún motor que
+queda puede reproducirlo. Sin cambios de esquema.
+
+Se compila con `compilar.sh -l` (o `compilar.ps1 -Limpio`): cambió la versión, y
+sin limpiar el APK saldría con el `versionName` viejo dentro.
 
 ### Edge vuelve a funcionar
 
