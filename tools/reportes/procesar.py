@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Vuelca los reportes de testers a los documentos del repo.
 
-Lee `tools/proxy/logs/reportes.jsonl`, transcribe localmente la nota de voz
+Lee `tools/mlx/reportes/reportes.jsonl`, transcribe localmente la nota de voz
 de cada reporte que traiga una (nunca se manda audio a un servicio en la
 nube: ver `tools/reportes/README.md`), y agrega cada entrada al documento que
 corresponde: `docs/bugs/REPORTES_TESTERS.md` para bugs y crashes,
 la sección "Sin triar" de `docs/tasks/IMPROVEMENTS.md` para mejoras.
 
-Pensado para correr solo desde el cron del host (`procesar.sh`), sin
-intervención humana en cada corrida. Nunca hace `git commit` -- a lo sumo
+Pensado para correr con `procesar.sh`, a mano o desde cron, sin intervención
+humana en cada corrida. Nunca hace `git commit` -- a lo sumo
 `git add` de los dos documentos, para que la revisión y el commit los siga
 haciendo la persona, como en el resto del repo.
 
@@ -41,11 +41,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-PROXY_LOGS = REPO / "tools" / "proxy" / "logs"
-RAW = PROXY_LOGS / "reportes.jsonl"
-PROCESSING = PROXY_LOGS / "reportes.processing.jsonl"
-NOTAS = PROXY_LOGS / "notas"
-PROCESADOS_DIR = PROXY_LOGS / "procesados"
+# Donde `tools/mlx/server.py` deja lo que recibe de la app: una línea por reporte
+# en reportes.jsonl y cada nota de voz en notas/.
+RECIBIDOS = REPO / "tools" / "mlx" / "reportes"
+RAW = RECIBIDOS / "reportes.jsonl"
+PROCESSING = RECIBIDOS / "reportes.processing.jsonl"
+NOTAS = RECIBIDOS / "notas"
+PROCESADOS_DIR = RECIBIDOS / "procesados"
 RETENCION_PROCESADOS = timedelta(days=3)
 
 AQUI = Path(__file__).resolve().parent
@@ -62,10 +64,11 @@ IMPROVEMENTS_DOC = REPO / "docs" / "tasks" / "IMPROVEMENTS.md"
 # de estado/, que es del probador). Ver tools/reportes/README.md.
 VERSIONES = AQUI / "versiones.jsonl"
 
-# Modelo balanceado a propósito hacia calidad: las notas duran <=90s y las
-# corridas son periódicas, no en vivo, así que unos segundos más de CPU
-# importan menos que entender bien una voz real, con ruido de fondo.
-MODELO_WHISPER = "small"
+# Modelo orientado a calidad: las notas duran <=90s y las corridas son
+# periódicas, no en vivo, así que unos segundos más importan menos que entender
+# bien una voz real, con ruido de fondo. Corre en la GPU del Mac por MLX, y es
+# el mismo que ya usa el banco de pruebas de voces, así que no hay descarga.
+MODELO_WHISPER = "mlx-community/whisper-large-v3-turbo"
 
 CORRELACION_TOLERANCIA = timedelta(minutes=5)
 
@@ -116,7 +119,12 @@ def agregar_al_ledger(ids: list[str]) -> None:
 
 def rotar() -> bool:
     """Deja el lote a procesar en PROCESSING. Devuelve False si no hay nada
-    que hacer, o si el proxy no está disponible para el `reopen`."""
+    que hacer.
+
+    Basta con renombrar: el servidor abre, escribe y cierra `reportes.jsonl` en
+    cada reporte, así que el siguiente crea el archivo de nuevo sin que haya que
+    avisarle. Con nginx delante hacía falta `nginx -s reopen`, porque mantenía
+    el archivo abierto y seguía escribiendo en el renombrado."""
     if not PROCESSING.exists():
         if not RAW.exists() or RAW.stat().st_size == 0:
             return False
@@ -125,14 +133,6 @@ def rotar() -> bool:
     else:
         log(f"{PROCESSING.name} ya existía (corrida anterior interrumpida), reintentando")
 
-    try:
-        subprocess.run(
-            ["docker", "exec", "voicex-proxy", "nginx", "-s", "reopen"],
-            check=True, capture_output=True, timeout=15, text=True,
-        )
-    except Exception as e:
-        log(f"nginx -s reopen falló, no se toca {PROCESSING.name} esta corrida: {e}")
-        return False
     return True
 
 
@@ -166,22 +166,12 @@ def resolver_nota(reporte: dict, correlacionar_por_cercania: bool,
     return Nota(mejor, aproximada=True) if mejor else None
 
 
-_modelo = None
-
-
-def cargar_modelo():
-    global _modelo
-    if _modelo is None:
-        from faster_whisper import WhisperModel
-        log(f"cargando modelo whisper '{MODELO_WHISPER}' (cpu, int8)")
-        _modelo = WhisperModel(MODELO_WHISPER, device="cpu", compute_type="int8")
-    return _modelo
-
-
 def transcribir(ruta: Path) -> str:
-    modelo = cargar_modelo()
-    segmentos, _info = modelo.transcribe(str(ruta), language="es", vad_filter=True)
-    return " ".join(s.text.strip() for s in segmentos).strip()
+    import mlx_whisper
+
+    log(f"transcribiendo {ruta.name} con '{MODELO_WHISPER}'")
+    return mlx_whisper.transcribe(
+        str(ruta), path_or_hf_repo=MODELO_WHISPER, language="es")["text"].strip()
 
 
 # Los caracteres con los que Markdown construye estructura.
@@ -303,7 +293,7 @@ def buscar_coincidencias(reporte: dict, transcripcion: str | None) -> list[dict]
 
 def bloque_bug(entrada: dict, reporte: dict, transcripcion: str | None,
                aproximada: bool) -> str:
-    # `tester` lo pone nginx desde el mapa de tokens, no el cliente: es de las
+    # `tester` lo pone el servidor (VOZ_TESTER), no el cliente: es de las
     # pocas cosas de esta línea en las que se puede confiar.
     tester = entrada.get("tester", "?")
     tipo = reporte.get("tipo", "?")
@@ -381,7 +371,7 @@ def bloque_mejora(entrada: dict, reporte: dict, transcripcion: str | None,
 
 BUGS_HEADER = """# Reportes crudos de probadores
 
-Volcado automático de `tools/proxy/logs/reportes.jsonl` por
+Volcado automático de `tools/mlx/reportes/reportes.jsonl` por
 `tools/reportes/procesar.py`, que corre solo desde el cron del host (ver
 `tools/reportes/README.md`). Se añade al final, nunca se edita ni se
 reordena a mano. Si algo de aquí se convierte en una investigación de
