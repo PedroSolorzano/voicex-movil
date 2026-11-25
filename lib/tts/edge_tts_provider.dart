@@ -4,10 +4,10 @@ import 'dart:io';
 import 'dart:developer' as dev;
 import 'dart:math';
 import 'dart:typed_data';
-import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'edge_drm.dart';
 import 'models.dart';
 import 'tts_provider.dart';
 
@@ -26,9 +26,15 @@ const _outputFormat = 'audio-24khz-96kbitrate-mono-mp3';
 // cannot outrun the 30 s timeout below.
 const _maxChunkChars = 1800;
 
-const _voicesUrl =
+const _voicesBaseUrl =
     'https://speech.platform.bing.com/consumer/speech/synthesize/'
     'readaloud/voices/list?trustedclienttoken=$_token';
+
+/// The voice list is signed like the WebSocket: since Microsoft moved to the
+/// version 2 token, an unsigned request is refused with 403.
+String _voicesUrl() => '$_voicesBaseUrl'
+    '&Sec-MS-GEC=${_generateSecMsGec()}'
+    '&Sec-MS-GEC-Version=$edgeSecMsGecVersionPrefix$_chromiumFullVersion';
 
 const _voicesCacheKey = 'edgeVoicesCacheJson';
 const _voicesCachedAtKey = 'edgeVoicesCachedAtMs';
@@ -49,19 +55,12 @@ String _generateMuid() {
   return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join().toUpperCase();
 }
 
-// Mirrors Python DRM.generate_sec_ms_gec():
-//   ticks = get_unix_timestamp() + WIN_EPOCH
-//   ticks -= ticks % 300
-//   ticks *= S_TO_NS / 100  (= 1e7)
-//   SHA256(f"{ticks:.0f}{token}").upper()
+// Mirrors Python DRM.generate_sec_ms_gec() (v2). The digest itself lives in
+// edge_drm.dart; this only supplies the skew-corrected clock.
 String _generateSecMsGec() {
   final unixSec =
       DateTime.now().toUtc().millisecondsSinceEpoch / 1000.0 + _clockSkewSeconds;
-  var ticks = unixSec + 11644473600;
-  ticks -= ticks % 300;
-  ticks *= 10000000;
-  final payload = '${ticks.toStringAsFixed(0)}$_token';
-  return sha256.convert(ascii.encode(payload)).toString().toUpperCase();
+  return generateSecMsGec(unixSec, _token);
 }
 
 // Mirrors Python DRM.headers_with_muid(WSS_HEADERS).
@@ -125,7 +124,7 @@ class EdgeTtsProvider implements TTSProvider {
   Future<void> _adjustClockSkew() async {
     final client = HttpClient();
     try {
-      final req = await client.getUrl(Uri.parse(_voicesUrl));
+      final req = await client.getUrl(Uri.parse(_voicesUrl()));
       req.headers.set('User-Agent', _userAgent());
       req.headers.set('Accept', 'application/json');
       final resp = await req.close();
@@ -233,7 +232,7 @@ class EdgeTtsProvider implements TTSProvider {
         '?TrustedClientToken=$_token'
         '&ConnectionId=$connectionId'
         '&Sec-MS-GEC=$secMsGec'
-        '&Sec-MS-GEC-Version=1-$_chromiumFullVersion';
+        '&Sec-MS-GEC-Version=$edgeSecMsGecVersionPrefix$_chromiumFullVersion';
 
     dev.log('[EdgeTTS] Connecting… (skew=${_clockSkewSeconds.toStringAsFixed(1)}s)');
 
@@ -407,7 +406,7 @@ class EdgeTtsProvider implements TTSProvider {
   Future<String> _fetchVoicesJson() async {
     final client = HttpClient();
     try {
-      final req = await client.getUrl(Uri.parse(_voicesUrl));
+      final req = await client.getUrl(Uri.parse(_voicesUrl()));
       req.headers.set('User-Agent', _userAgent());
       req.headers.set('Accept', 'application/json');
       final resp = await req.close();

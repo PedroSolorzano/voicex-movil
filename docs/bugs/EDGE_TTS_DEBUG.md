@@ -231,3 +231,24 @@ String _generateSecMsGec() {
 - [Issue #290](https://github.com/rany2/edge-tts/issues/290) — introducción del token Sec-MS-GEC
 - [Issue #401](https://github.com/rany2/edge-tts/issues/401) — 403 persistente, endpoint nuevo `api.msedgeservices.com`
 - [Issue #458](https://github.com/rany2/edge-tts/issues/458) — 403 por versión Chromium desactualizada
+
+---
+
+### Fix 4 — Token `Sec-MS-GEC` versión 2 (403 con el servicio vivo)
+**Fecha:** 2026-11-24
+**Síntoma:** Edge no suena. `WebSocketException: … was not upgraded to websocket, HTTP status code: 403`, y la lista de voces también devuelve 403. Los fixes 1 a 3 siguen en su sitio y son correctos.
+**Diagnóstico:** `edge-tts` 7.3.1 (Python) sintetiza sin problema desde la misma máquina, así que el servicio no cambió de sitio ni cayó. Probando a mano la conexión con cada token:
+
+| Token | `Sec-MS-GEC-Version` | Resultado |
+|---|---|---|
+| SHA-256 simple de `ticks + token` (lo que mandaba la app) | `1-143.0.3650.75` | **403** |
+| `<CS64>-<SHA256>` (lo que manda `edge-tts` 7.3.1) | `2-143.0.3650.75` | conecta |
+
+**Causa:** Microsoft pasó a exigir la versión 2 del token. El `SHA256` de esa versión **no es el estándar**: usa un estado inicial y unas constantes propias, y a él se suma un checksum CS64 calculado sobre los mismos bytes. `hashlib.sha256` no da el mismo resultado.
+**Cambios:**
+- Nuevo `lib/tts/edge_drm.dart`: port línea a línea de `src/edge_tts/drm.py`.
+- `edge_tts_provider.dart`: usa ese cálculo, manda `Sec-MS-GEC-Version=2-…`, y firma también la petición de la lista de voces (`_voicesUrl()`), que antes iba sin token.
+- `test/edge_drm_test.dart`: cuatro valores de referencia generados por la librería de Python en instantes fijos.
+
+**Resultado:** el token calculado en Dart conecta y devuelve audio (40 637 bytes para una frase corta).
+**Si vuelve a pasar:** comparar con la versión actual de `drm.py` de `rany2/edge-tts`. El constructo está pensado para que cambie; los valores de referencia del test se regeneran ejecutando `generate_sec_ms_gec_v2(<instante>)` de la librería.
