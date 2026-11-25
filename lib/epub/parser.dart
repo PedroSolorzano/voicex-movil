@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:archive/archive.dart';
 import 'package:epubx/epubx.dart';
 import 'package:flutter/foundation.dart';
 import 'package:html/parser.dart' as html_parser;
@@ -35,9 +38,139 @@ Future<Uint8List> readEpubBytes(String path, {int maxBytes = maxEpubBytes}) asyn
   return file.readAsBytes();
 }
 
+/// Reads the book, mending the archive once if epubx chokes on a file's encoding.
+///
+/// epubx decodes every text file in the archive as strict UTF-8, stylesheets
+/// and the package file included, and a single stray byte aborts the whole
+/// import with a [FormatException]. Real books carry them: Blindsight has a
+/// Latin-1 "ñ" in a CSS comment, nothing the reader ever sees. The mended copy
+/// is only built after the first attempt fails, so a book that already imports
+/// costs nothing extra.
+Future<EpubBook> _readBook(Uint8List bytes) async {
+  try {
+    return await EpubReader.readBook(bytes);
+  } on FormatException {
+    final repaired = repairEpubEncoding(bytes);
+    // Nothing to mend means the failure was something else (not a ZIP, say):
+    // surface the original error, not a second one about a rebuilt archive.
+    if (repaired == null) rethrow;
+    return EpubReader.readBook(repaired);
+  }
+}
+
+const _textExtensions = {
+  '.css', '.xhtml', '.html', '.htm', '.xml', '.opf', '.ncx', '.svg', '.txt',
+};
+
+/// Rewrites the text files of an EPUB that are not valid UTF-8, or returns
+/// null when there is nothing to rewrite or the archive cannot be opened.
+@visibleForTesting
+Uint8List? repairEpubEncoding(Uint8List bytes) {
+  final Archive original;
+  try {
+    original = ZipDecoder().decodeBytes(bytes);
+  } catch (_) {
+    return null;
+  }
+
+  var changed = false;
+  final mended = Archive();
+  for (final file in original.files) {
+    if (!file.isFile) continue;
+    var data = Uint8List.fromList(file.content as List<int>);
+    final dot = file.name.lastIndexOf('.');
+    final ext = dot < 0 ? '' : file.name.substring(dot).toLowerCase();
+    if (_textExtensions.contains(ext) && !_isValidUtf8(data)) {
+      data = utf8WithLatin1Fallback(data);
+      changed = true;
+    }
+    mended.addFile(ArchiveFile(file.name, data.length, data));
+  }
+  if (!changed) return null;
+
+  final encoded = ZipEncoder().encode(mended);
+  return encoded == null ? null : Uint8List.fromList(encoded);
+}
+
+bool _isValidUtf8(Uint8List data) {
+  try {
+    utf8.decode(data);
+    return true;
+  } on FormatException {
+    return false;
+  }
+}
+
+// What 0x80-0x9F mean in Windows-1252, the encoding that files declared as
+// "Latin-1" almost always are. Plain Latin-1 puts control codes there, which
+// is never what the author typed. The five unassigned slots stay as they are.
+const _windows1252High = <int>[
+  0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021,
+  0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0x008D, 0x017D, 0x008F,
+  0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014,
+  0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x009D, 0x017E, 0x0178,
+];
+
+/// Length of the well-formed UTF-8 sequence starting at [i], or 0 if the byte
+/// there does not begin one.
+int _utf8SequenceLength(Uint8List b, int i) {
+  final lead = b[i];
+  if (lead < 0x80) return 1;
+
+  // The allowed range of the second byte rules out overlong forms, UTF-16
+  // surrogates and code points past U+10FFFF.
+  int length;
+  var lowest = 0x80, highest = 0xBF;
+  if (lead >= 0xC2 && lead <= 0xDF) {
+    length = 2;
+  } else if (lead >= 0xE0 && lead <= 0xEF) {
+    length = 3;
+    if (lead == 0xE0) lowest = 0xA0;
+    if (lead == 0xED) highest = 0x9F;
+  } else if (lead >= 0xF0 && lead <= 0xF4) {
+    length = 4;
+    if (lead == 0xF0) lowest = 0x90;
+    if (lead == 0xF4) highest = 0x8F;
+  } else {
+    return 0;
+  }
+
+  if (i + length > b.length) return 0;
+  if (b[i + 1] < lowest || b[i + 1] > highest) return 0;
+  for (var k = 2; k < length; k++) {
+    if (b[i + k] < 0x80 || b[i + k] > 0xBF) return 0;
+  }
+  return length;
+}
+
+/// Valid UTF-8 stays byte for byte; each byte that is not part of a valid
+/// sequence is read as a Windows-1252 character and written as UTF-8.
+///
+/// Per byte rather than per file on purpose: a file that is mostly UTF-8 with
+/// one stray byte keeps its accents, which decoding the whole file as Latin-1
+/// would turn into mojibake.
+@visibleForTesting
+Uint8List utf8WithLatin1Fallback(Uint8List b) {
+  final out = BytesBuilder(copy: false);
+  var i = 0;
+  while (i < b.length) {
+    final n = _utf8SequenceLength(b, i);
+    if (n > 0) {
+      out.add(Uint8List.sublistView(b, i, i + n));
+      i += n;
+    } else {
+      final c = b[i];
+      final code = c >= 0x80 && c <= 0x9F ? _windows1252High[c - 0x80] : c;
+      out.add(utf8.encode(String.fromCharCode(code)));
+      i++;
+    }
+  }
+  return out.takeBytes();
+}
+
 Future<Book> parseEpub(String path, {int maxBytes = maxEpubBytes}) async {
   final bytes = await readEpubBytes(path, maxBytes: maxBytes);
-  final epub = await EpubReader.readBook(bytes);
+  final epub = await _readBook(bytes);
 
   final title = epub.Title ?? 'Sin título';
   final author = epub.Author ?? 'Desconocido';
@@ -318,7 +451,7 @@ class EpubExtras {
 Future<EpubExtras> extractEpubExtras(String path,
     {int maxBytes = maxEpubBytes}) async {
   final bytes = await readEpubBytes(path, maxBytes: maxBytes);
-  final epub = await EpubReader.readBook(bytes);
+  final epub = await _readBook(bytes);
 
   // ── Cover image ───────────────────────────────────────────────────────────
   Uint8List? coverBytes;
