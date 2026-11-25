@@ -32,7 +32,10 @@ generación de cada uno y propone partirlos, y `--horas 1.2` genera solo esa
 parte y dice cómo seguir. El EPUB para generar se trae del propio teléfono (*Dejar mis libros listos para
 el Mac* y `tools/audios/traer-libros.sh`), porque el audio se reconoce por el
 hash del archivo y un nombre distinto o una edición distinta no coincide.
-Probado en un Galaxy S21 Ultra con Android 12: los libros salen con `adb pull`
+*Dejar mis libros listos para el Mac* escribe además `inventario.json` con lo que
+el teléfono ya tiene descargado por libro y voz (solo archivos que existen, en el
+formato de caché vigente), y `bajar.dart` lo usa para no generar de nuevo esos
+párrafos (`AudioCacheRepo.downloadedParagraphs`). Probado en un Galaxy S21 Ultra con Android 12: los libros salen con `adb pull`
 (la app los deja en modo 644 para que `adb` los lea) y el audio entra con
 `adb push` a la carpeta de la app, que se crea antes porque `adb push` no puede
 crear carpetas ahí. Instrucciones en `tools/audios/README.md`.

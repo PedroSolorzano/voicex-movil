@@ -67,6 +67,8 @@ Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
   --horas <h>        parar tras ~h horas de escucha (1, 1.5…) y decir cómo seguir
   --servidor <url>   por defecto http://127.0.0.1:8765
   --salida <carpeta> por defecto tools/audios/salida
+  --inventario <f>   inventario del teléfono; por defecto inventario.json junto al EPUB
+  --sin-inventario   generar todo lo pedido aunque el teléfono ya lo tenga
   --lista            capítulos con horas de escucha y tiempo de generación, y cómo
                      partir los largos; no genera nada
 ''');
@@ -80,6 +82,28 @@ Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
 
   final epubPath = args[0];
   final book = await parseEpub(epubPath);
+  final hash =
+      (await sha256.bind(File(epubPath).openRead()).first).toString();
+
+  // What the phone already has, from the inventory the app writes with
+  // "Dejar mis libros listos para el Mac". Next to the EPUB by default.
+  final listEngine = opt('--motor') ?? 'chatterbox2';
+  final listVoice = opt('--voz') ?? _defaultVoices[listEngine];
+  final phone = args.contains('--sin-inventario') || listVoice == null
+      ? null
+      : _loadPhone(
+          opt('--inventario') ?? '${File(epubPath).parent.path}/inventario.json',
+          hash,
+          '$listEngine-$listVoice');
+  if (phone != null) {
+    stdout.writeln('Inventario del teléfono: ${phone.when} '
+        '(${phone.total} párrafos de este libro con esta voz). Si descargaste '
+        'algo desde entonces, repite «Dejar mis libros listos» y traer-libros.sh.');
+  } else if (!args.contains('--sin-inventario')) {
+    stdout.writeln('Sin inventario del teléfono: se generará todo lo pedido. '
+        'Para saltar lo que ya tiene, usa «Dejar mis libros listos para el '
+        'Mac» y tools/audios/traer-libros.sh.');
+  }
 
   if (args.contains('--lista')) {
     stdout.writeln('${book.title} — ${book.author} (${book.language})');
@@ -88,10 +112,12 @@ Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
     for (final c in book.chapters) {
       final chars = c.paragraphs.map((p) => p.rawText.length).toList();
       final h = _hours(chars.fold(0, (a, b) => a + b));
+      final here = phone?.have[c.index]?.length ?? 0;
       stdout.writeln('${(c.index + 1).toString().padLeft(3)}  '
           '${c.paragraphs.length.toString().padLeft(5)} párr.  '
           '${_fmtHours(h).padLeft(9)} de audio  '
-          '(generar ~${_fmtHours(h / _generationSpeed)})  ${c.title}');
+          '(generar ~${_fmtHours(h / _generationSpeed)})  ${c.title}'
+          '${here > 0 ? '  · en el teléfono: $here/${c.paragraphs.length}' : ''}');
       if (h > _comfortableHours) {
         final starts = _partStarts(chars, _comfortableHours);
         final n = starts.length;
@@ -130,8 +156,6 @@ Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
       .replaceAll(RegExp(r'/+$'), '');
   final token = _token();
 
-  final hash =
-      (await sha256.bind(File(epubPath).openRead()).first).toString();
   // Plain ASCII: the folder name travels through adb into Android/data.
   const accents = {'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ü': 'u', 'ñ': 'n'};
   final slug = book.title
@@ -166,7 +190,7 @@ Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
   final client = HttpClient()
     ..connectionTimeout = const Duration(seconds: 10)
     ..idleTimeout = const Duration(seconds: 30);
-  var made = 0, reused = 0, failed = 0;
+  var made = 0, reused = 0, failed = 0, onPhone = 0;
   final started = DateTime.now();
 
   Future<void> save() async {
@@ -189,14 +213,24 @@ Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
   for (final chapterNumber in wanted) {
     final chapter = book.chapters[chapterNumber - 1];
     final first = chapterNumber == wanted.first ? skipUntil : 0;
-    final pending = chapter.paragraphs
-        .where((p) => p.index >= first)
-        .fold<int>(0, (a, p) => a + p.rawText.length);
+    bool onThePhone(int paragraph) =>
+        phone?.have[chapter.index]?.contains(paragraph) ?? false;
+    final toDo = chapter.paragraphs
+        .where((p) => p.index >= first && !onThePhone(p.index))
+        .toList();
+    final pending = toDo.fold<int>(0, (a, p) => a + p.rawText.length);
     stdout.writeln('\n[$chapterNumber] ${chapter.title} — '
-        '${chapter.paragraphs.length - first} párrafos, ~${_fmtHours(_hours(pending))} '
+        '${toDo.length} párrafos por generar'
+        '${phone == null ? '' : ' (el teléfono ya tiene ${chapter.paragraphs.length - first - toDo.length})'}, '
+        '~${_fmtHours(_hours(pending))} '
         'de audio (generar ~${_fmtHours(_hours(pending) / _generationSpeed)})');
     for (final para in chapter.paragraphs) {
       if (para.index < first) continue;
+      // Already on the phone: nothing to generate, and it costs no budget.
+      if (onThePhone(para.index)) {
+        onPhone++;
+        continue;
+      }
       if (budgetChars != null && budgetChars <= 0) {
         stoppedAt = (chapter: chapterNumber, paragraph: para.index);
         break;
@@ -239,6 +273,9 @@ Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
     if (stoppedAt != null) break;
   }
   client.close();
+  if (onPhone > 0) {
+    stdout.writeln('\n\nSaltados: $onPhone párrafos que el teléfono ya tiene.');
+  }
   stdout.writeln('\n\nListo: $made párrafos nuevos, $reused ya estaban'
       '${failed > 0 ? ', $failed fallaron (repite el comando)' : ''}.');
   final stop = stoppedAt;
@@ -250,7 +287,11 @@ Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
         '--horas $hoursBudget');
   }
   stdout.writeln('Carpeta: ${root.path}');
-  stdout.writeln('Siguiente paso: tools/audios/pasar.sh');
+  if (made > 0) {
+    stdout.writeln('Siguiente paso: tools/audios/pasar.sh');
+  } else if (onPhone > 0) {
+    stdout.writeln('Nada nuevo que pasar: el teléfono ya tiene todo lo pedido.');
+  }
 }
 
 List<int> _parseChapters(String spec, int total) {
@@ -295,4 +336,49 @@ Future<List<int>> _synthesize(HttpClient client, String server, String token,
   }
   if (body.isEmpty) throw 'el servidor devolvió un audio vacío';
   return body;
+}
+
+/// What the phone reported for one book and one voice.
+class _Phone {
+  final String when;
+
+  /// Chapter index → paragraphs already downloaded.
+  final Map<int, Set<int>> have;
+
+  _Phone(this.when, this.have);
+
+  int get total => have.values.fold(0, (a, s) => a + s.length);
+}
+
+_Phone? _loadPhone(String path, String hash, String voiceId) {
+  final file = File(path);
+  if (!file.existsSync()) return null;
+  try {
+    final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+    if (json['format'] != _formatTag) {
+      stderr.writeln('El inventario es de otro formato de caché '
+          '(${json['format']}): se ignora. Repite «Dejar mis libros listos».');
+      return null;
+    }
+    final book = (json['books'] as Map<String, dynamic>)[hash];
+    // This book is not on the phone with this EPUB, or has nothing downloaded.
+    final chapters = book == null
+        ? null
+        : ((book as Map<String, dynamic>)['voices']
+            as Map<String, dynamic>)[voiceId] as Map<String, dynamic>?;
+    final have = <int, Set<int>>{
+      for (final e in (chapters ?? const <String, dynamic>{}).entries)
+        int.parse(e.key): {for (final n in e.value as List) n as int},
+    };
+    final when = DateTime.tryParse('${json['generated']}');
+    return _Phone(
+        when == null
+            ? 'sin fecha'
+            : '${when.day}/${when.month} ${when.hour.toString().padLeft(2, '0')}:'
+                '${when.minute.toString().padLeft(2, '0')}',
+        have);
+  } catch (e) {
+    stderr.writeln('No pude leer $path ($e): se ignora.');
+    return null;
+  }
 }

@@ -19,6 +19,14 @@ el EPUB que tenga a mano, sino el que tiene el teléfono. Con el cable puesto:
 2. En el Mac: `tools/audios/traer-libros.sh`. Los deja, con el nombre del libro,
    en `epubs/del-telefono/`.
 
+Ese mismo botón deja también un **inventario** (`inventario.json`) de lo que el
+teléfono ya tiene descargado, por libro y por voz. `traer-libros.sh` lo trae junto
+a los EPUB, y `bajar.dart` lo lee solo (si está junto al EPUB) para **no generar
+lo que el teléfono ya tiene**: `--lista` marca por capítulo cuántos párrafos hay
+ya en el teléfono, y al generar salta esos. Lo saltado tampoco gasta el tope de
+`--horas`. Es una foto del momento: si descargaste algo desde entonces, repite
+los dos pasos. `--sin-inventario` lo ignora y `--inventario <archivo>` usa otro.
+
 Desde ahí se usan en los comandos de abajo. (Los libros que importes después,
 con una copia en el Mac o sin ella, se traen igual repitiendo los dos pasos.)
 

@@ -163,12 +163,14 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       _said('Este teléfono no tiene dónde dejar los libros.');
       return;
     }
-    final n = await exportLibraryBooks(Directory('${inbox.parent.path}/libros'));
+    final n = await exportLibraryBooks(
+        Directory('${inbox.parent.path}/libros'),
+        formatTag: cacheFormatTag);
     _said(n == 0
         ? 'No hay libros en la biblioteca.'
         : n == 1
             ? '1 libro listo para el Mac. Ahí: tools/audios/traer-libros.sh'
-            : '$n libros listos para el Mac. Ahí: tools/audios/traer-libros.sh');
+            : '$n libros y lo que ya tienes descargado, listos para el Mac. Ahí: tools/audios/traer-libros.sh');
   }
 
   Future<void> _freeOrphans() async {

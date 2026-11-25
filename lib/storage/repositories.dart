@@ -834,6 +834,31 @@ class AudioCacheRepo {
     return {for (final r in rows) r['file_path'] as String};
   }
 
+  /// Every downloaded paragraph in [speedHash] format whose file is still on
+  /// disk, as `(book, voice, chapter, paragraph)`.
+  ///
+  /// This is what the phone tells the Mac so it does not generate again what is
+  /// already here. A row whose file is gone does not count: it would make the
+  /// Mac skip a paragraph the phone cannot actually play.
+  Future<List<({int bookId, String voiceId, int chapter, int paragraph})>>
+      downloadedParagraphs(String speedHash) async {
+    final db = await _db;
+    final rows = await db.query('audio_cache',
+        columns: ['book_id', 'voice_id', 'chapter_idx', 'para_idx', 'file_path'],
+        where: 'pinned = 1 AND speed_hash = ?',
+        whereArgs: [speedHash]);
+    return [
+      for (final r in rows)
+        if (File(r['file_path'] as String).existsSync())
+          (
+            bookId: r['book_id'] as int,
+            voiceId: r['voice_id'] as String,
+            chapter: r['chapter_idx'] as int,
+            paragraph: r['para_idx'] as int,
+          )
+    ];
+  }
+
   /// Deletes one chapter's audio. Returns the KB freed.
   Future<int> deleteChapter(int bookId, int chapterIdx) =>
       _deleteWhere('book_id = ? AND chapter_idx = ?', [bookId, chapterIdx]);

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -75,5 +76,72 @@ void main() {
 
   test('an empty library exports nothing', () async {
     expect(await exportLibraryBooks(out), 0);
+  });
+
+  group('inventory of what the phone already has', () {
+    Future<Map<String, dynamic>> inventory() async => jsonDecode(
+        await File('${out.path}/inventario.json').readAsString())
+        as Map<String, dynamic>;
+
+    Future<void> pin(int book, int ch, int para, String voice,
+        {bool file = true, String fmt = 'f96'}) async {
+      final f = File('${tmp.path}/a_${book}_${ch}_${para}_$voice.mp3');
+      if (file) f.writeAsBytesSync(List.filled(1500, 1));
+      await AudioCacheRepo().savePin(book, ch, para, voice, fmt, f.path, 2);
+    }
+
+    test('lists downloaded paragraphs per book hash, voice and chapter',
+        () async {
+      await addBook('Visión ciega', [1], hash: 'hashV');
+      final id = (await LibraryRepo().all()).single['id'] as int;
+      await pin(id, 2, 46, 'chatterbox2-colombiana');
+      await pin(id, 2, 45, 'chatterbox2-colombiana');
+      await pin(id, 3, 0, 'qwen3-esposa');
+
+      await exportLibraryBooks(out, formatTag: 'f96');
+
+      final voices = (await inventory())['books']['hashV']['voices']
+          as Map<String, dynamic>;
+      expect(voices['chatterbox2-colombiana']['2'], [45, 46]);
+      expect(voices['qwen3-esposa']['3'], [0]);
+    });
+
+    test('a row whose file is gone is not claimed as downloaded', () async {
+      await addBook('Libro', [1], hash: 'h1');
+      final id = (await LibraryRepo().all()).single['id'] as int;
+      await pin(id, 0, 0, 'chatterbox2-colombiana', file: false);
+
+      await exportLibraryBooks(out, formatTag: 'f96');
+
+      expect((await inventory())['books'], isEmpty);
+    });
+
+    test('another cache format is not listed: the Mac would skip audio the '
+        'reader cannot find', () async {
+      await addBook('Libro', [1], hash: 'h1');
+      final id = (await LibraryRepo().all()).single['id'] as int;
+      await pin(id, 0, 0, 'chatterbox2-colombiana', fmt: 'f80');
+
+      await exportLibraryBooks(out, formatTag: 'f96');
+
+      expect((await inventory())['books'], isEmpty);
+    });
+
+    test('audio of a book no longer in the library is left out', () async {
+      await addBook('Libro', [1], hash: 'h1');
+      await pin(999, 0, 0, 'chatterbox2-colombiana');
+
+      await exportLibraryBooks(out, formatTag: 'f96');
+
+      expect((await inventory())['books'], isEmpty);
+    });
+
+    test('without a format tag no inventory is written', () async {
+      await addBook('Libro', [1], hash: 'h1');
+
+      await exportLibraryBooks(out);
+
+      expect(File('${out.path}/inventario.json').existsSync(), isFalse);
+    });
   });
 }

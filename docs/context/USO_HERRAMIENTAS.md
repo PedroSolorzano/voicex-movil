@@ -88,7 +88,11 @@ Teléfono conectado por USB, servidor corriendo. Detalles: `tools/audios/README.
 #    «Dejar mis libros listos para el Mac». Luego, en el Mac:
 tools/audios/traer-libros.sh                       # o: traer-libros → epubs/del-telefono/
 
-# 1. Qué capítulos hay, cuántas horas de escucha son y cómo partirlos
+#    (también deja un inventario de lo que ya tienes: bajar.dart lo usa para
+#     no generar de nuevo lo que el teléfono ya tiene)
+
+# 1. Qué capítulos hay, cuántas horas de escucha son, cuáles ya tiene el teléfono
+#    y cómo partir los largos
 dart run tools/audios/bajar.dart "epubs/del-telefono/Visión ciega.epub" --lista
 
 # 2. Generar (un capítulo, un rango, o solo ~1,2 horas de uno largo)

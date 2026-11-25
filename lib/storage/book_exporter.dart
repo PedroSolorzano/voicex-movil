@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'repositories.dart';
@@ -10,8 +11,14 @@ import 'repositories.dart';
 /// bytes: a copy with another name, or another edition of the same title, would
 /// not. Taking the file from here removes the guessing.
 ///
+/// With [formatTag] it also writes `inventario.json`: which paragraphs of each
+/// book the phone already has, per voice, so `tools/audios/bajar.dart` skips
+/// them instead of generating audio the phone would only report as "ya
+/// estaban".
+///
 /// Returns how many books are in the folder afterwards.
-Future<int> exportLibraryBooks(Directory outDir, {LibraryRepo? library}) async {
+Future<int> exportLibraryBooks(Directory outDir,
+    {LibraryRepo? library, AudioCacheRepo? cache, String? formatTag}) async {
   final rows = await (library ?? LibraryRepo()).all();
   await outDir.create(recursive: true);
 
@@ -38,6 +45,10 @@ Future<int> exportLibraryBooks(Directory outDir, {LibraryRepo? library}) async {
     await _shareWithAdb(dest);
   }
 
+  if (formatTag != null) {
+    await _writeInventory(outDir, rows, cache ?? AudioCacheRepo(), formatTag);
+  }
+
   // A book removed from the library should not linger on the cable.
   await for (final e in outDir.list(followLinks: false)) {
     if (e is File && e.path.endsWith('.epub') && !keep.contains(e.path)) {
@@ -62,4 +73,43 @@ Future<void> _shareWithAdb(File f) async {
   try {
     await Process.run('chmod', ['644', f.path]);
   } catch (_) {}
+}
+
+Future<void> _writeInventory(Directory outDir, List<Map<String, dynamic>> rows,
+    AudioCacheRepo cache, String formatTag) async {
+  final hashOf = {
+    for (final r in rows)
+      if ((r['content_hash'] as String?)?.isNotEmpty ?? false)
+        r['id'] as int: r['content_hash'] as String
+  };
+  final titleOf = {for (final r in rows) r['id'] as int: r['title'] as String? ?? ''};
+
+  final books = <String, Map<String, dynamic>>{};
+  for (final p in await cache.downloadedParagraphs(formatTag)) {
+    final hash = hashOf[p.bookId];
+    if (hash == null) continue; // audio of a book no longer in the library
+    final book = books.putIfAbsent(
+        hash, () => {'title': titleOf[p.bookId], 'voices': <String, dynamic>{}});
+    final voices = book['voices'] as Map<String, dynamic>;
+    final chapters = voices.putIfAbsent(p.voiceId, () => <String, dynamic>{})
+        as Map<String, dynamic>;
+    (chapters.putIfAbsent('${p.chapter}', () => <int>[]) as List<int>)
+        .add(p.paragraph);
+  }
+  for (final b in books.values) {
+    for (final voice in (b['voices'] as Map<String, dynamic>).values) {
+      for (final list in (voice as Map<String, dynamic>).values) {
+        (list as List<int>).sort();
+      }
+    }
+  }
+
+  final file = File('${outDir.path}/inventario.json');
+  await file.writeAsString(jsonEncode({
+    'version': 1,
+    'generated': DateTime.now().toIso8601String(),
+    'format': formatTag,
+    'books': books,
+  }));
+  await _shareWithAdb(file);
 }
