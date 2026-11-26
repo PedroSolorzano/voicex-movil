@@ -13,6 +13,7 @@ import '../../tts/tts_factory.dart';
 import '../../epub/models.dart';
 import '../../epub/search.dart';
 import '../../epub/text_align.dart';
+import '../../storage/offline_ahead.dart';
 import '../providers/reader_provider.dart';
 import '../providers/reading_stats_provider.dart';
 import '../providers/settings_provider.dart';
@@ -117,7 +118,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     super.initState();
     _positionsListener.itemPositions.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(readerProvider.notifier).loadBook(widget.bookId, widget.filePath);
+      ref
+          .read(readerProvider.notifier)
+          .loadBook(widget.bookId, widget.filePath);
     });
   }
 
@@ -156,10 +159,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     // The first paragraph that is actually on screen, not merely clipping it.
     // Taking the topmost with any visible pixel picked the paragraph half
     // scrolled off the top, which is the one already read.
-    final candidates = positions
-        .where((p) => p.itemLeadingEdge >= -_partiallyVisible)
-        .toList()
-      ..sort((a, b) => a.itemLeadingEdge.compareTo(b.itemLeadingEdge));
+    final candidates =
+        positions.where((p) => p.itemLeadingEdge >= -_partiallyVisible).toList()
+          ..sort((a, b) => a.itemLeadingEdge.compareTo(b.itemLeadingEdge));
     if (candidates.isEmpty) return;
     final index = candidates.first.index;
 
@@ -194,8 +196,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     _programmaticScroll = true;
     _scrollSettleTimer?.cancel();
     _programmaticScrollTimer?.cancel();
-    _programmaticScrollTimer = Timer(duration + const Duration(milliseconds: 250),
-        () => _programmaticScroll = false);
+    _programmaticScrollTimer = Timer(
+      duration + const Duration(milliseconds: 250),
+      () => _programmaticScroll = false,
+    );
 
     _scrollController.scrollTo(
       index: index,
@@ -214,13 +218,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     _aplicarWakelock(settings.keepScreenOn);
 
     final palette = ReaderPalette.of(
-        settings.readerTheme, MediaQuery.platformBrightnessOf(context));
+      settings.readerTheme,
+      MediaQuery.platformBrightnessOf(context),
+    );
     _palette = palette;
 
     ref.listen<String?>(readingMilestoneProvider, (_, message) {
       if (message == null) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
       ref.read(readingMilestoneProvider.notifier).state = null;
     });
 
@@ -234,8 +241,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     });
 
     ref.listen<ReaderState>(readerProvider, (prev, next) {
-      final startedPlaying = prev?.status != next.status &&
-          next.status == ReaderStatus.playing;
+      final startedPlaying =
+          prev?.status != next.status && next.status == ReaderStatus.playing;
 
       // Playback started or stopped: drop anything the previous state queued,
       // so a pending update cannot be applied under the new one.
@@ -261,8 +268,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
       // Follow along only while audio drives the position; during silent
       // reading the user owns the scroll.
-      final shouldFollow = chapterChanged ||
-          (settings.followAudioScroll && next.isOnAudio);
+      final shouldFollow =
+          chapterChanged || (settings.followAudioScroll && next.isOnAudio);
       if (shouldFollow && next.paragraphIndex != _lastParagraphIndex) {
         _lastParagraphIndex = next.paragraphIndex;
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -281,7 +288,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                      const Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: Colors.red,
+                      ),
                       const SizedBox(height: 16),
                       Text(reader.statusMessage, textAlign: TextAlign.center),
                     ],
@@ -313,8 +324,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               onTap: _toggleChrome,
               child: paragraphs.isEmpty
                   ? Center(
-                      child: Text('Sin contenido',
-                          style: TextStyle(color: palette.muted)))
+                      child: Text(
+                        'Sin contenido',
+                        style: TextStyle(color: palette.muted),
+                      ),
+                    )
                   : ScrollablePositionedList.builder(
                       itemScrollController: _scrollController,
                       itemPositionsListener: _positionsListener,
@@ -328,7 +342,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                         // Must clear the whole bottom bar, which grows with the
                         // practice row and the download progress. Too little and
                         // the last lines of a chapter sit under the controls.
-                        bottom: MediaQuery.paddingOf(context).bottom +
+                        bottom:
+                            MediaQuery.paddingOf(context).bottom +
                             _bottomChromeHeight(reader),
                       ),
                       itemBuilder: (_, i) {
@@ -340,13 +355,19 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                           sentenceRange: isActive
                               ? _rangeForSentence(
                                   reader.sentenceRanges,
-                                  reader.highlightedSentence)
+                                  reader.highlightedSentence,
+                                )
                               : null,
                           wordRange: isActive ? reader.activeWord : null,
                           settings: settings,
                           palette: palette,
                           onWordLongPress: (word) => _showWordSheet(
-                              context, word, book.language, i, para),
+                            context,
+                            word,
+                            book.language,
+                            i,
+                            para,
+                          ),
                         );
                       },
                     ),
@@ -381,8 +402,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             bottom: _chromeVisible
                 ? 0
                 : -(_bottomChromeHeight(reader) +
-                    MediaQuery.paddingOf(context).bottom +
-                    16),
+                      MediaQuery.paddingOf(context).bottom +
+                      16),
             left: 0,
             right: 0,
             child: _BottomBar(
@@ -420,7 +441,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       case _TopAction.cancelDownload:
         ref.read(readerProvider.notifier).cancelDownload();
       case _TopAction.settings:
-        context.push('/settings');
+        // Back from Ajustes the engine, the voice or the downloads may have
+        // changed (importing the Mac's audio lives there): recount.
+        unawaited(context.push('/settings').then((_) =>
+            ref.read(readerProvider.notifier).refreshDownloadedCount()));
     }
   }
 
@@ -431,63 +455,70 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final settings = ref.read(settingsProvider).valueOrNull ?? AppSettings();
     showModalBottomSheet(
       context: context,
-      builder: (ctx) => _themed(SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text('Descargar para escuchar sin conexión',
-                  style: Theme.of(ctx).textTheme.titleMedium),
-            ),
-            const Divider(height: 1),
-            for (final opcion in <(_DownloadScope, String)>[
-              (_DownloadScope.chapter, 'Este capítulo (completo)'),
-              // En el párrafo 0, "desde aquí" y "este capítulo" son la misma
-              // descarga: ofrecer las dos solo obliga a elegir entre opciones
-              // idénticas.
-              if (reader.paragraphIndex > 0)
-                (
-                  _DownloadScope.fromHere,
-                  'Desde aquí hasta el final del capítulo'
+      builder: (ctx) => _themed(
+        SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'Descargar para escuchar sin conexión',
+                  style: Theme.of(ctx).textTheme.titleMedium,
                 ),
-              // Cuenta el capítulo en el que estás: `downloadChapters` arranca en
-              // él. Decir "los próximos" sin número dejaba creer que eran los
-              // siguientes, y en una novela con capítulos de horas son horas de más.
-              (
-                _DownloadScope.ahead,
-                'Este capítulo y los siguientes (${settings.prefetchChapters} en total)'
               ),
-              (_DownloadScope.book, 'Libro completo'),
-            ])
-              ListTile(
-                leading: const Icon(Icons.download_outlined),
-                title: Text(opcion.$2),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  unawaited(_download(context, opcion.$1, settings));
-                },
-              ),
-            if (reader.book?.id != null) ...[
               const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.folder_open_outlined),
-                title: const Text('Ver y borrar lo descargado de este libro'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  context.push('/downloads/${reader.book!.id}');
-                },
-              ),
+              for (final opcion in <(_DownloadScope, String)>[
+                (_DownloadScope.chapter, 'Este capítulo (completo)'),
+                // En el párrafo 0, "desde aquí" y "este capítulo" son la misma
+                // descarga: ofrecer las dos solo obliga a elegir entre opciones
+                // idénticas.
+                if (reader.paragraphIndex > 0)
+                  (
+                    _DownloadScope.fromHere,
+                    'Desde aquí hasta el final del capítulo',
+                  ),
+                // Cuenta el capítulo en el que estás: `downloadChapters` arranca en
+                // él. Decir "los próximos" sin número dejaba creer que eran los
+                // siguientes, y en una novela con capítulos de horas son horas de más.
+                (
+                  _DownloadScope.ahead,
+                  'Este capítulo y los siguientes (${settings.prefetchChapters} en total)',
+                ),
+                (_DownloadScope.book, 'Libro completo'),
+              ])
+                ListTile(
+                  leading: const Icon(Icons.download_outlined),
+                  title: Text(opcion.$2),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    unawaited(_download(context, opcion.$1, settings));
+                  },
+                ),
+              if (reader.book?.id != null) ...[
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.folder_open_outlined),
+                  title: const Text('Ver y borrar lo descargado de este libro'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    context.push('/downloads/${reader.book!.id}');
+                  },
+                ),
+              ],
             ],
-          ],
+          ),
         ),
-      )),
+      ),
     );
   }
 
   /// Pre-synthesizes audio so it can be heard away from the home server.
   Future<void> _download(
-      BuildContext context, _DownloadScope scope, AppSettings settings) async {
+    BuildContext context,
+    _DownloadScope scope,
+    AppSettings settings,
+  ) async {
     final notifier = ref.read(readerProvider.notifier);
     final reader = ref.read(readerProvider);
     final chapters = reader.book?.chapters.length ?? 0;
@@ -497,13 +528,14 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       _DownloadScope.chapter => (1, 'este capítulo'),
       _DownloadScope.fromHere => (1, 'desde aquí hasta el final del capítulo'),
       _DownloadScope.ahead => (
-          settings.prefetchChapters,
-          'este capítulo y los siguientes (${settings.prefetchChapters} en total)'
-        ),
+        settings.prefetchChapters,
+        'este capítulo y los siguientes (${settings.prefetchChapters} en total)',
+      ),
       _DownloadScope.book => (chapters - from, 'el resto del libro'),
     };
-    final fromParagraph =
-        scope == _DownloadScope.fromHere ? reader.paragraphIndex : 0;
+    final fromParagraph = scope == _DownloadScope.fromHere
+        ? reader.paragraphIndex
+        : 0;
 
     // Estimate before starting: chapters in this book run to ~450 paragraphs,
     // so even "the next three" is over an hour with Kokoro. Confirm whenever
@@ -512,7 +544,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     var paragraphs = 0;
     if (book != null) {
       for (var c = from; c < (from + count).clamp(0, chapters); c++) {
-        paragraphs += book.chapters[c].paragraphs.length -
+        paragraphs +=
+            book.chapters[c].paragraphs.length -
             (c == from ? fromParagraph : 0);
       }
     }
@@ -525,12 +558,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
     // Con el motor real, no con el elegido: Edge es un orden de magnitud más
     // rápido que F5, y un estimado hecho con el que no va a correr no sirve.
-    final estimate = (paragraphs *
-            ReaderNotifier.estimatedSecondsPerParagraph(
-                settings.copyWith(ttsProvider: engine)))
-        .round();
+    final estimate =
+        (paragraphs *
+                ReaderNotifier.estimatedSecondsPerParagraph(
+                  settings.copyWith(ttsProvider: engine),
+                ))
+            .round();
 
-    final cost = 'Son $paragraphs párrafos: alrededor de '
+    final cost =
+        'Son $paragraphs párrafos: alrededor de '
         '${_shortDuration(estimate)} de síntesis con ${providerLabel(engine)}, '
         'y unos ${(paragraphs * 0.25).round()} MB.';
 
@@ -543,20 +579,24 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         context: context,
         builder: (_) => AlertDialog(
           title: Text('Descargar $label'),
-          content: Text(replaced
-              ? '${providerLabel(settings.ttsProvider)} no está disponible '
-                  'ahora, así que esto se descargaría con '
-                  '${providerLabel(engine)} — otra voz, y guardada aparte: '
-                  'cuando ${providerLabel(settings.ttsProvider)} vuelva, esta '
-                  'descarga no se va a usar.\n\n$cost'
-              : '$cost\n\nConviene dejar la app abierta mientras tanto.'),
+          content: Text(
+            replaced
+                ? '${providerLabel(settings.ttsProvider)} no está disponible '
+                      'ahora, así que esto se descargaría con '
+                      '${providerLabel(engine)} — otra voz, y guardada aparte: '
+                      'cuando ${providerLabel(settings.ttsProvider)} vuelva, esta '
+                      'descarga no se va a usar.\n\n$cost'
+                : '$cost\n\nConviene dejar la app abierta mientras tanto.',
+          ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancelar')),
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
             TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: Text(replaced ? 'Descargar igual' : 'Descargar')),
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(replaced ? 'Descargar igual' : 'Descargar'),
+            ),
           ],
         ),
       );
@@ -566,8 +606,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     if (!context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(SnackBar(content: Text('Descargando $label…')));
-    final ran = await notifier.downloadChapters(from, count,
-        fromParagraph: fromParagraph);
+    final ran = await notifier.downloadChapters(
+      from,
+      count,
+      fromParagraph: fromParagraph,
+    );
     if (!ran) return;
 
     // Y al terminar, decir con qué se descargó de verdad. El aviso de repliegue
@@ -576,34 +619,39 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     // horas después, al escuchar la voz equivocada.
     final summary = ref.read(readerProvider).downloadSummary;
     if (summary.isEmpty) return;
-    messenger.showSnackBar(SnackBar(
-      content: Text(summary),
-      duration: Duration(seconds: summary.length > 60 ? 8 : 4),
-    ));
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(summary),
+        duration: Duration(seconds: summary.length > 60 ? 8 : 4),
+      ),
+    );
   }
 
   /// Long-pressing a word offers to hear it, define it, or send it elsewhere.
   Future<void> _showWordSheet(
-      BuildContext context,
-      ({String text, int offset}) word,
-      String language,
-      int paragraphIndex,
-      Paragraph para) {
+    BuildContext context,
+    ({String text, int offset}) word,
+    String language,
+    int paragraphIndex,
+    Paragraph para,
+  ) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       showDragHandle: false,
-      builder: (_) => _themed(WordSheet(
-        word: word.text,
-        language: language,
-        paragraph: para,
-        offset: word.offset,
-        onPronounce: () => _pronounceWord(word),
-        onReadFromHere: () {
-          Navigator.pop(context);
-          unawaited(_readFromParagraph(paragraphIndex));
-        },
-      )),
+      builder: (_) => _themed(
+        WordSheet(
+          word: word.text,
+          language: language,
+          paragraph: para,
+          offset: word.offset,
+          onPronounce: () => _pronounceWord(word),
+          onReadFromHere: () {
+            Navigator.pop(context);
+            unawaited(_readFromParagraph(paragraphIndex));
+          },
+        ),
+      ),
     );
   }
 
@@ -626,11 +674,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final clip = notifier.wordClipAt(word.offset);
     if (clip != null) {
       try {
-        await _wordPlayer.setAudioSource(ja.ClippingAudioSource(
-          child: ja.AudioSource.file(clip.path),
-          start: Duration(milliseconds: clip.startMs),
-          end: Duration(milliseconds: clip.endMs),
-        ));
+        await _wordPlayer.setAudioSource(
+          ja.ClippingAudioSource(
+            child: ja.AudioSource.file(clip.path),
+            start: Duration(milliseconds: clip.startMs),
+            end: Duration(milliseconds: clip.endMs),
+          ),
+        );
         await _wordPlayer.play();
         return true;
       } catch (_) {
@@ -652,24 +702,26 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   Future<void> _addBookmark(BuildContext context) async {
     final id = await ref.read(readerProvider.notifier).addBookmark();
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: const Text('Marcador guardado'),
-      // Guardar sigue siendo una sola pulsación; la nota es opcional y llega
-      // después, que es cuando alguien sabe si tiene algo que decir.
-      action: id == null
-          ? null
-          : SnackBarAction(
-              label: 'Añadir nota',
-              onPressed: () {
-                // This snackbar is hosted above the route, so it survives
-                // leaving the reader: by the time it is tapped this State can
-                // be gone and showDialog throws inside Navigator.of. The note
-                // is still reachable from the bookmarks sheet.
-                if (!mounted) return;
-                unawaited(_editBookmarkNote(context, id, null));
-              },
-            ),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Marcador guardado'),
+        // Guardar sigue siendo una sola pulsación; la nota es opcional y llega
+        // después, que es cuando alguien sabe si tiene algo que decir.
+        action: id == null
+            ? null
+            : SnackBarAction(
+                label: 'Añadir nota',
+                onPressed: () {
+                  // This snackbar is hosted above the route, so it survives
+                  // leaving the reader: by the time it is tapped this State can
+                  // be gone and showDialog throws inside Navigator.of. The note
+                  // is still reachable from the bookmarks sheet.
+                  if (!mounted) return;
+                  unawaited(_editBookmarkNote(context, id, null));
+                },
+              ),
+      ),
+    );
   }
 
   /// Pide el texto de una nota y lo guarda contra [id].
@@ -677,7 +729,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   /// Devuelve si se guardó y con qué texto, para que la hoja de marcadores
   /// pueda mostrarlo sin recargar la lista entera.
   Future<(bool, String?)> _editBookmarkNote(
-      BuildContext context, int id, String? actual) async {
+    BuildContext context,
+    int id,
+    String? actual,
+  ) async {
     final controller = TextEditingController(text: actual ?? '');
     final nota = await showDialog<String>(
       context: context,
@@ -696,11 +751,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancelar')),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
           TextButton(
-              onPressed: () => Navigator.pop(ctx, controller.text),
-              child: const Text('Guardar')),
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Guardar'),
+          ),
         ],
       ),
     );
@@ -717,21 +774,26 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     if (!context.mounted) return;
     showModalBottomSheet(
       context: context,
-      builder: (_) => _themed(_BookmarksSheet(
-        bookmarks: bookmarks,
-        chapters: ref.read(readerProvider).book?.chapters ?? const [],
-        onJump: (b) {
-          Navigator.pop(context);
-          ref.read(readerProvider.notifier).jumpToBookmark(
-                b['chapter_index'] as int,
-                b['paragraph_index'] as int,
-                b['sentence_index'] as int? ?? 0,
-              );
-        },
-        onDelete: (id) => ref.read(readerProvider.notifier).deleteBookmark(id),
-        onEditNote: (b) => _editBookmarkNote(
-            context, b['id'] as int, b['note'] as String?),
-      )),
+      builder: (_) => _themed(
+        _BookmarksSheet(
+          bookmarks: bookmarks,
+          chapters: ref.read(readerProvider).book?.chapters ?? const [],
+          onJump: (b) {
+            Navigator.pop(context);
+            ref
+                .read(readerProvider.notifier)
+                .jumpToBookmark(
+                  b['chapter_index'] as int,
+                  b['paragraph_index'] as int,
+                  b['sentence_index'] as int? ?? 0,
+                );
+          },
+          onDelete: (id) =>
+              ref.read(readerProvider.notifier).deleteBookmark(id),
+          onEditNote: (b) =>
+              _editBookmarkNote(context, b['id'] as int, b['note'] as String?),
+        ),
+      ),
     );
   }
 
@@ -752,18 +814,25 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         minChildSize: 0.4,
         maxChildSize: 0.95,
         expand: false,
-        builder: (ctx, scrollCtrl) => _themed(_SearchSheet(
-          book: book,
-          scrollController: scrollCtrl,
-          onSelect: (hit) {
-            Navigator.pop(context);
-            // Sin arrancar el audio, igual que un marcador: buscar algo no
-            // es pedir que te lo lean.
-            unawaited(ref.read(readerProvider.notifier).navigateChapter(
-                hit.chapterIndex,
-                paragraph: hit.paragraphIndex));
-          },
-        )),
+        builder: (ctx, scrollCtrl) => _themed(
+          _SearchSheet(
+            book: book,
+            scrollController: scrollCtrl,
+            onSelect: (hit) {
+              Navigator.pop(context);
+              // Sin arrancar el audio, igual que un marcador: buscar algo no
+              // es pedir que te lo lean.
+              unawaited(
+                ref
+                    .read(readerProvider.notifier)
+                    .navigateChapter(
+                      hit.chapterIndex,
+                      paragraph: hit.paragraphIndex,
+                    ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -783,15 +852,17 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         minChildSize: 0.3,
         maxChildSize: 0.92,
         expand: false,
-        builder: (ctx, scrollCtrl) => _themed(_TocSheet(
-          chapters: book.chapters,
-          currentIndex: reader.chapterIndex,
-          scrollController: scrollCtrl,
-          onSelect: (idx) {
-            Navigator.pop(context);
-            ref.read(readerProvider.notifier).navigateChapter(idx);
-          },
-        )),
+        builder: (ctx, scrollCtrl) => _themed(
+          _TocSheet(
+            chapters: book.chapters,
+            currentIndex: reader.chapterIndex,
+            scrollController: scrollCtrl,
+            onSelect: (idx) {
+              Navigator.pop(context);
+              ref.read(readerProvider.notifier).navigateChapter(idx);
+            },
+          ),
+        ),
       ),
     );
   }
@@ -921,7 +992,7 @@ enum _TopAction {
   bookmarks,
   download,
   cancelDownload,
-  settings
+  settings,
 }
 
 class _TopBar extends StatelessWidget {
@@ -965,15 +1036,16 @@ class _TopBar extends StatelessWidget {
                 title,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                    color: palette.text, fontWeight: FontWeight.w600),
+                  color: palette.text,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             // Una descarga en curso tiene que verse sin abrir el menú.
             if (isDownloading)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: Icon(Icons.downloading,
-                    size: 20, color: palette.muted),
+                child: Icon(Icons.downloading, size: 20, color: palette.muted),
               ),
             IconButton(
               icon: const Icon(Icons.toc),
@@ -1083,6 +1155,7 @@ class _BottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final progress = reader.progressFraction;
     final remaining = _remainingLabel(notifier.charsRemaining, settings);
+    final offline = _offlineLabel(notifier.offlineAhead, settings);
 
     return Material(
       color: palette.background,
@@ -1095,10 +1168,16 @@ class _BottomBar extends StatelessWidget {
             // Un control, no un indicador: hasta ahora moverse por el libro
             // solo se podía por el índice de capítulos o párrafo a párrafo.
             _ProgressSlider(
-                reader: reader, notifier: notifier, palette: palette),
+              reader: reader,
+              notifier: notifier,
+              palette: palette,
+            ),
             if (reader.isDownloading)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
                 child: Column(
                   children: [
                     LinearProgressIndicator(
@@ -1118,10 +1197,11 @@ class _BottomBar extends StatelessWidget {
               reader: reader,
               palette: palette,
               speed: settings.playbackSpeed,
-              onPreviousChapter:
-                  reader.chapterIndex > 0 ? notifier.previousChapter : null,
-              onNextChapter: reader.chapterIndex <
-                      (reader.book?.chapters.length ?? 1) - 1
+              onPreviousChapter: reader.chapterIndex > 0
+                  ? notifier.previousChapter
+                  : null,
+              onNextChapter:
+                  reader.chapterIndex < (reader.book?.chapters.length ?? 1) - 1
                   ? notifier.nextChapter
                   : null,
               onPreviousParagraph: notifier.previousParagraph,
@@ -1155,16 +1235,19 @@ class _BottomBar extends StatelessWidget {
                       child: TextButton.icon(
                         icon: const Icon(Icons.replay, size: 18),
                         label: const Text('Repetir'),
-                        style:
-                            TextButton.styleFrom(foregroundColor: palette.text),
+                        style: TextButton.styleFrom(
+                          foregroundColor: palette.text,
+                        ),
                         onPressed: notifier.repeatSentence,
                       ),
                     ),
                     const SizedBox(width: 8),
                     FilterChip(
-                      avatar: Icon(Icons.loop,
-                          size: 18,
-                          color: reader.sentenceLoop ? null : palette.muted),
+                      avatar: Icon(
+                        Icons.loop,
+                        size: 18,
+                        color: reader.sentenceLoop ? null : palette.muted,
+                      ),
                       label: const Text('Bucle'),
                       tooltip: 'Repetir la oración en bucle',
                       selected: reader.sentenceLoop,
@@ -1182,11 +1265,11 @@ class _BottomBar extends StatelessWidget {
                     [
                       '${(progress * 100).toStringAsFixed(0)}%',
                       if (remaining.isNotEmpty) remaining,
-                      // Named by engine: what was downloaded with another one
-                      // will not be used.
-                      if (reader.downloadedChapters > 0)
-                        '${reader.downloadedChapters} cap. en '
-                            '${providerLabel(settings.ttsProvider)}',
+                      // How long it can keep going without the network, from
+                      // here: what matters before a drive. It replaced "2 cap.
+                      // en Chatterbox", which said the same thing in a unit
+                      // nobody plans with, and counted chapters already read.
+                      ?offline,
                     ].join('  ·  '),
                     style: TextStyle(fontSize: 11, color: palette.muted),
                   ),
@@ -1234,6 +1317,13 @@ class _BottomBar extends StatelessWidget {
   /// aquí significaba recorrer todos los párrafos que faltaban del libro en
   /// cada reconstrucción, y esta barra se reconstruye con cada palabra que se
   /// resalta.
+  /// "sin conexión 1 h 45 min", at the current playback speed. Only the
+  /// engine selected counts: audio downloaded with another one is not played.
+  static String? _offlineLabel(OfflineAhead? ahead, AppSettings settings) {
+    if (ahead == null) return null;
+    return 'sin conexión ${formatListening(ahead.seconds / settings.playbackSpeed)}';
+  }
+
   static String _remainingLabel(int chars, AppSettings settings) {
     if (chars <= 0) return '';
     final seconds = chars / (_charsPerSecond * settings.playbackSpeed);
@@ -1277,8 +1367,7 @@ class _ProgressSliderState extends State<_ProgressSlider> {
       );
     }
 
-    final valor =
-        _arrastrando ?? widget.reader.globalParagraph.toDouble();
+    final valor = _arrastrando ?? widget.reader.globalParagraph.toDouble();
     return SliderTheme(
       data: SliderThemeData(
         trackHeight: 2,
@@ -1343,7 +1432,8 @@ class _TocSheetState extends State<_TocSheet> {
     final ctrl = widget.scrollController;
     if (!ctrl.hasClients) return;
     final position = ctrl.position;
-    final target = widget.currentIndex * _itemExtent -
+    final target =
+        widget.currentIndex * _itemExtent -
         position.viewportDimension / 2 +
         _itemExtent / 2;
     ctrl.jumpTo(target.clamp(0.0, position.maxScrollExtent));
@@ -1378,29 +1468,33 @@ class _TocSheetState extends State<_TocSheet> {
               final ch = chapters[i];
               final isCurrent = i == currentIndex;
               return ListTile(
-                leading: Text('${i + 1}.',
-                    style: TextStyle(
-                      color: isCurrent
-                          ? Theme.of(context).colorScheme.primary
-                          : null,
-                      fontWeight:
-                          isCurrent ? FontWeight.bold : FontWeight.normal,
-                    )),
+                leading: Text(
+                  '${i + 1}.',
+                  style: TextStyle(
+                    color: isCurrent
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                    fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
                 title: Text(
                   ch.title,
                   style: TextStyle(
-                    fontWeight:
-                        isCurrent ? FontWeight.bold : FontWeight.normal,
+                    fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
                     color: isCurrent
                         ? Theme.of(context).colorScheme.primary
                         : null,
                   ),
                 ),
-                subtitle: Text('${ch.paragraphs.length} párrafos',
-                    style: Theme.of(context).textTheme.bodySmall),
+                subtitle: Text(
+                  '${ch.paragraphs.length} párrafos',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
                 trailing: isCurrent
-                    ? Icon(Icons.play_arrow,
-                        color: Theme.of(context).colorScheme.primary)
+                    ? Icon(
+                        Icons.play_arrow,
+                        color: Theme.of(context).colorScheme.primary,
+                      )
                     : null,
                 onTap: () => widget.onSelect(i),
               );
@@ -1513,19 +1607,26 @@ class _SearchSheetState extends State<_SearchSheet> {
                         : capitulo,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall
-                        ?.copyWith(color: theme.colorScheme.primary),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                    ),
                   ),
                   subtitle: Text.rich(
-                    TextSpan(children: [
-                      TextSpan(text: hit.snippet.substring(0, hit.matchStart)),
-                      TextSpan(
-                        text: hit.snippet
-                            .substring(hit.matchStart, hit.matchEnd),
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      TextSpan(text: hit.snippet.substring(hit.matchEnd)),
-                    ]),
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: hit.snippet.substring(0, hit.matchStart),
+                        ),
+                        TextSpan(
+                          text: hit.snippet.substring(
+                            hit.matchStart,
+                            hit.matchEnd,
+                          ),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        TextSpan(text: hit.snippet.substring(hit.matchEnd)),
+                      ],
+                    ),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1591,10 +1692,7 @@ class _BookmarksSheetState extends State<_BookmarksSheet> {
 
     if (p < 0 || p >= chapter.paragraphs.length) return (titulo, null);
     final texto = chapter.paragraphs[p].rawText;
-    return (
-      titulo,
-      texto.length > 90 ? '${texto.substring(0, 90)}…' : texto,
-    );
+    return (titulo, texto.length > 90 ? '${texto.substring(0, 90)}…' : texto);
   }
 
   @override
@@ -1604,8 +1702,10 @@ class _BookmarksSheetState extends State<_BookmarksSheet> {
       children: [
         Padding(
           padding: const EdgeInsets.all(16),
-          child:
-              Text('Marcadores', style: Theme.of(context).textTheme.titleMedium),
+          child: Text(
+            'Marcadores',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
         ),
         // Previously both the empty message and the list were rendered, giving
         // two Expanded siblings fighting for the same space.
@@ -1625,8 +1725,11 @@ class _BookmarksSheetState extends State<_BookmarksSheet> {
                 final nota = b['note'] as String?;
                 return ListTile(
                   leading: const Icon(Icons.bookmark),
-                  title: Text(titulo,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  title: Text(
+                    titulo,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   subtitle: fragmento == null && nota == null
                       ? null
                       : Column(
@@ -1634,16 +1737,17 @@ class _BookmarksSheetState extends State<_BookmarksSheet> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (fragmento != null)
-                              Text(fragmento,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis),
+                              Text(
+                                fragmento,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             if (nota != null && nota.isNotEmpty)
-                              Text(nota,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(
-                                          fontStyle: FontStyle.italic)),
+                              Text(
+                                nota,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(fontStyle: FontStyle.italic),
+                              ),
                           ],
                         ),
                   isThreeLine: fragmento != null && (nota?.isNotEmpty ?? false),
@@ -1658,7 +1762,9 @@ class _BookmarksSheetState extends State<_BookmarksSheet> {
                           // La fila se reescribe entera en vez de tocar el mapa
                           // que devolvió sqflite, que es de solo lectura.
                           if (guardada && mounted) {
-                            setState(() => _bookmarks[i] = {...b, 'note': texto});
+                            setState(
+                              () => _bookmarks[i] = {...b, 'note': texto},
+                            );
                           }
                         },
                       ),

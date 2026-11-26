@@ -13,6 +13,7 @@ import '../../epub/models.dart';
 import '../../epub/parser.dart';
 import '../../epub/text_align.dart';
 import '../../services/reporter.dart';
+import '../../storage/offline_ahead.dart';
 import '../../storage/repositories.dart';
 import '../../stats/reader_rank.dart';
 import '../../stats/reading_credit.dart';
@@ -102,9 +103,11 @@ class ReaderState {
   final List<SentenceMark> sentenceMarks;
   final List<WordMark> wordMarks;
   final List<SentenceRange> sentenceRanges;
+
   /// Character range of the word being spoken, or null.
   final (int, int)? activeWord;
   final int sessionDataKb;
+
   /// Engine actually used for the last synthesis, so a fallback is visible.
   final String engineLabel;
 
@@ -198,6 +201,7 @@ class ReaderState {
     String? currentAudioPath,
     bool? sentenceLoop,
     DateTime? sleepAt,
+
     /// Apagar el temporizador: `sleepAt: null` no se distingue de "no lo
     /// toques", que es lo que significa omitirlo.
     bool clearSleepAt = false,
@@ -210,35 +214,33 @@ class ReaderState {
     double? downloadSecondsPerParagraph,
     String? downloadEngineNotice,
     String? downloadSummary,
-  }) =>
-      ReaderState(
-        book: book ?? this.book,
-        chapterIndex: chapterIndex ?? this.chapterIndex,
-        paragraphIndex: paragraphIndex ?? this.paragraphIndex,
-        highlightedSentence: highlightedSentence ?? this.highlightedSentence,
-        status: status ?? this.status,
-        statusMessage: statusMessage ?? this.statusMessage,
-        sentenceMarks: sentenceMarks ?? this.sentenceMarks,
-        wordMarks: wordMarks ?? this.wordMarks,
-        sentenceRanges: sentenceRanges ?? this.sentenceRanges,
-        activeWord: clearActiveWord ? null : (activeWord ?? this.activeWord),
-        sessionDataKb: sessionDataKb ?? this.sessionDataKb,
-        engineLabel: engineLabel ?? this.engineLabel,
-        currentAudioPath: currentAudioPath ?? this.currentAudioPath,
-        sentenceLoop: sentenceLoop ?? this.sentenceLoop,
-        sleepAt: clearSleepAt ? null : (sleepAt ?? this.sleepAt),
-        sleepAtChapterEnd: sleepAtChapterEnd ?? this.sleepAtChapterEnd,
-        downloadedChapters: downloadedChapters ?? this.downloadedChapters,
-        isDownloading: isDownloading ?? this.isDownloading,
-        downloadDone: downloadDone ?? this.downloadDone,
-        downloadTotal: downloadTotal ?? this.downloadTotal,
-        downloadFailed: downloadFailed ?? this.downloadFailed,
-        downloadSecondsPerParagraph:
-            downloadSecondsPerParagraph ?? this.downloadSecondsPerParagraph,
-        downloadEngineNotice:
-            downloadEngineNotice ?? this.downloadEngineNotice,
-        downloadSummary: downloadSummary ?? this.downloadSummary,
-      );
+  }) => ReaderState(
+    book: book ?? this.book,
+    chapterIndex: chapterIndex ?? this.chapterIndex,
+    paragraphIndex: paragraphIndex ?? this.paragraphIndex,
+    highlightedSentence: highlightedSentence ?? this.highlightedSentence,
+    status: status ?? this.status,
+    statusMessage: statusMessage ?? this.statusMessage,
+    sentenceMarks: sentenceMarks ?? this.sentenceMarks,
+    wordMarks: wordMarks ?? this.wordMarks,
+    sentenceRanges: sentenceRanges ?? this.sentenceRanges,
+    activeWord: clearActiveWord ? null : (activeWord ?? this.activeWord),
+    sessionDataKb: sessionDataKb ?? this.sessionDataKb,
+    engineLabel: engineLabel ?? this.engineLabel,
+    currentAudioPath: currentAudioPath ?? this.currentAudioPath,
+    sentenceLoop: sentenceLoop ?? this.sentenceLoop,
+    sleepAt: clearSleepAt ? null : (sleepAt ?? this.sleepAt),
+    sleepAtChapterEnd: sleepAtChapterEnd ?? this.sleepAtChapterEnd,
+    downloadedChapters: downloadedChapters ?? this.downloadedChapters,
+    isDownloading: isDownloading ?? this.isDownloading,
+    downloadDone: downloadDone ?? this.downloadDone,
+    downloadTotal: downloadTotal ?? this.downloadTotal,
+    downloadFailed: downloadFailed ?? this.downloadFailed,
+    downloadSecondsPerParagraph:
+        downloadSecondsPerParagraph ?? this.downloadSecondsPerParagraph,
+    downloadEngineNotice: downloadEngineNotice ?? this.downloadEngineNotice,
+    downloadSummary: downloadSummary ?? this.downloadSummary,
+  );
 
   /// Estimated seconds left in the current download.
   int get downloadSecondsLeft {
@@ -261,8 +263,7 @@ class ReaderState {
   /// scrolling used to move the reading position, and resuming carried on with
   /// the old clip, so the highlight ended up on one paragraph while the audio
   /// was reading another.
-  bool get isOnAudio =>
-      isBusy || status == ReaderStatus.paused;
+  bool get isOnAudio => isBusy || status == ReaderStatus.paused;
 
   /// Fraction of the book already consumed, counting paragraphs across chapters.
   /// Párrafos del libro entero, y en cuál va la lectura. Los necesita la barra
@@ -402,8 +403,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
       final maxPara = book.chapters.isEmpty
           ? 0
           : (book.chapters[chapterIdx].paragraphs.isEmpty
-              ? 0
-              : book.chapters[chapterIdx].paragraphs.length - 1);
+                ? 0
+                : book.chapters[chapterIdx].paragraphs.length - 1);
       final paraIdx = progress.paragraph.clamp(0, maxPara);
 
       // Resume mid-paragraph rather than restarting it.
@@ -421,8 +422,12 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
       // Backfill the book length so the library can draw a progress bar
       // without opening the EPUB again.
-      unawaited(LibraryRepo()
-          .updateTotalParagraphs(bookId, _totalParagraphs(bookWithId)));
+      unawaited(
+        LibraryRepo().updateTotalParagraphs(
+          bookId,
+          _totalParagraphs(bookWithId),
+        ),
+      );
 
       unawaited(refreshDownloadedCount());
 
@@ -515,7 +520,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
             : state.highlightedSentence;
         final word = settings.highlightWords ? (mark.start, mark.end) : null;
 
-        final wordChanged = word?.$1 != state.activeWord?.$1 ||
+        final wordChanged =
+            word?.$1 != state.activeWord?.$1 ||
             word?.$2 != state.activeWord?.$2;
         if (sentIdx != state.highlightedSentence || wordChanged) {
           state = state.copyWith(
@@ -580,14 +586,18 @@ class ReaderNotifier extends Notifier<ReaderState> {
   // Distributes WordTimestamps across sentences sequentially by word count,
   // producing the start time of each sentence for use in _onTick.
   List<SentenceMark> _buildSentenceMarks(
-      List<WordTimestamp> timestamps, List<Sentence> sentences) {
+    List<WordTimestamp> timestamps,
+    List<Sentence> sentences,
+  ) {
     if (timestamps.isEmpty || sentences.isEmpty) return [];
     final result = <SentenceMark>[];
     int wordIdx = 0;
     for (final sentence in sentences) {
       if (wordIdx >= timestamps.length) break;
-      result.add(
-          (startMs: timestamps[wordIdx].offsetMs, sentenceIdx: sentence.index));
+      result.add((
+        startMs: timestamps[wordIdx].offsetMs,
+        sentenceIdx: sentence.index,
+      ));
       wordIdx += sentence.text
           .split(RegExp(r'\s+'))
           .where((w) => w.isNotEmpty)
@@ -600,17 +610,18 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// sentences across the clip proportionally to their length. Approximate, but
   /// enough to keep the highlight moving instead of frozen.
   List<SentenceMark> _estimateSentenceMarks(
-      List<Sentence> sentences, int durationMs) {
+    List<Sentence> sentences,
+    int durationMs,
+  ) {
     if (sentences.isEmpty || durationMs <= 0) return [];
-    final totalChars =
-        sentences.fold<int>(0, (sum, s) => sum + s.text.length);
+    final totalChars = sentences.fold<int>(0, (sum, s) => sum + s.text.length);
     if (totalChars == 0) return [];
     final marks = <SentenceMark>[];
     var acc = 0;
     for (final s in sentences) {
       marks.add((
         startMs: (durationMs * acc / totalChars).round(),
-        sentenceIdx: s.index
+        sentenceIdx: s.index,
       ));
       acc += s.text.length;
     }
@@ -699,8 +710,11 @@ class ReaderNotifier extends Notifier<ReaderState> {
       final url = settings.selfHostedUrl;
       _lastHealth = url.trim().isEmpty
           ? ServerHealth.unreachable
-          : await VoiceServerTtsProvider.healthOf(url,
-              token: settings.serverToken, engine: kind);
+          : await VoiceServerTtsProvider.healthOf(
+              url,
+              token: settings.serverToken,
+              engine: kind,
+            );
       if (!_lastHealth.isUsable) {
         dev.log('[Reader] $kind ${_lastHealth.name} → falling back to Edge');
         kind = 'edge';
@@ -714,8 +728,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
     final key = '$kind/$lang';
     if (_ttsProvider == null || _ttsProviderKind != key) {
       final old = _ttsProvider;
-      _ttsProvider =
-          getProvider(settings.copyWith(ttsProvider: kind), lang: lang);
+      _ttsProvider = getProvider(
+        settings.copyWith(ttsProvider: kind),
+        lang: lang,
+      );
       _ttsProviderKind = key;
       if (old != null) unawaited(old.dispose());
     }
@@ -757,16 +773,21 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
   /// Returns the on-disk audio for [para], synthesizing and caching it on a miss.
   Future<_Audio> _ensureAudio(
-      Book book, int chapterIdx, Paragraph para, AppSettings settings) async {
+    Book book,
+    int chapterIdx,
+    Paragraph para,
+    AppSettings settings,
+  ) async {
     Future<_Audio?> lookup(String key) async {
       final cached = await _cacheRepo.get(
-          book.id!, chapterIdx, para.index, key, _cacheFormatTag);
-      if (cached == null) return null;
-      return (
-        path: cached,
-        timestamps: await _readSidecar(cached),
-        freshKb: 0
+        book.id!,
+        chapterIdx,
+        para.index,
+        key,
+        _cacheFormatTag,
       );
+      if (cached == null) return null;
+      return (path: cached, timestamps: await _readSidecar(cached), freshKb: 0);
     }
 
     // Only the engine the reader chose. Consulting Edge's key here as well —
@@ -814,7 +835,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
     // Keep the real extension: the engines do not all write the same format.
     final ext = result.filePath.split('.').last;
     final cacheDir = await getTemporaryDirectory();
-    final dest = '${cacheDir.path}/'
+    final dest =
+        '${cacheDir.path}/'
         '${book.id}_${chapterIdx}_${para.index}_${voice}_$_cacheFormatTag.$ext';
 
     await File(result.filePath).copy(dest);
@@ -836,20 +858,33 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
     final sizeKb = (bytes / 1024).ceil();
     await _cacheRepo.save(
-        book.id!, chapterIdx, para.index, voice, _cacheFormatTag, dest, sizeKb);
+      book.id!,
+      chapterIdx,
+      para.index,
+      voice,
+      _cacheFormatTag,
+      dest,
+      sizeKb,
+    );
     await _writeSidecar(dest, result.timestamps);
 
     return (path: dest, timestamps: result.timestamps, freshKb: sizeKb);
   }
 
   Future<void> _writeSidecar(String dest, List<WordTimestamp> ts) async {
-    await File('$dest.ts.json').writeAsString(jsonEncode(ts
-        .map((t) => {
-              'word': t.word,
-              'offsetMs': t.offsetMs,
-              'durationMs': t.durationMs,
-            })
-        .toList()));
+    await File('$dest.ts.json').writeAsString(
+      jsonEncode(
+        ts
+            .map(
+              (t) => {
+                'word': t.word,
+                'offsetMs': t.offsetMs,
+                'durationMs': t.durationMs,
+              },
+            )
+            .toList(),
+      ),
+    );
   }
 
   Future<List<WordTimestamp>> _readSidecar(String path) async {
@@ -858,11 +893,13 @@ class ReaderNotifier extends Notifier<ReaderState> {
       if (!await f.exists()) return [];
       final raw = jsonDecode(await f.readAsString()) as List;
       return raw
-          .map((e) => WordTimestamp(
-                word: e['word'] as String,
-                offsetMs: e['offsetMs'] as int,
-                durationMs: e['durationMs'] as int,
-              ))
+          .map(
+            (e) => WordTimestamp(
+              word: e['word'] as String,
+              offsetMs: e['offsetMs'] as int,
+              durationMs: e['durationMs'] as int,
+            ),
+          )
           .toList();
     } catch (_) {
       return [];
@@ -881,12 +918,19 @@ class ReaderNotifier extends Notifier<ReaderState> {
     final settings = _settings;
     _listening = true;
     state = state.copyWith(
-        status: ReaderStatus.synthesizing, statusMessage: 'Sintetizando…');
+      status: ReaderStatus.synthesizing,
+      statusMessage: 'Sintetizando…',
+    );
     _synthesizing = true;
     final continuing = audioHandler.holding;
 
     try {
-      final audio = await _ensureAudio(book, state.chapterIndex, para, settings);
+      final audio = await _ensureAudio(
+        book,
+        state.chapterIndex,
+        para,
+        settings,
+      );
 
       // Paused from the lock screen or the headset while this paragraph was
       // being synthesized: the audio stays cached, but it does not start.
@@ -917,7 +961,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
       }
 
       if (audio.freshKb > 0) {
-        state = state.copyWith(sessionDataKb: state.sessionDataKb + audio.freshKb);
+        state = state.copyWith(
+          sessionDataKb: state.sessionDataKb + audio.freshKb,
+        );
       }
 
       state = state.copyWith(
@@ -935,8 +981,11 @@ class ReaderNotifier extends Notifier<ReaderState> {
       _publishNowPlaying(book, para);
       _loadedChapter = state.chapterIndex;
       _loadedParagraph = para.index;
-      await audioHandler.playFile(audio.path,
-          startMs: startMs, speed: settings.playbackSpeed);
+      await audioHandler.playFile(
+        audio.path,
+        startMs: startMs,
+        speed: settings.playbackSpeed,
+      );
 
       // No word boundaries (offline engine): approximate from the real duration,
       // which is only known once the file is loaded.
@@ -950,7 +999,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
     } catch (e) {
       audioHandler.release();
       state = state.copyWith(
-          status: ReaderStatus.error, statusMessage: _friendlyError(e));
+        status: ReaderStatus.error,
+        statusMessage: _friendlyError(e),
+      );
     } finally {
       _synthesizing = false;
     }
@@ -1022,7 +1073,12 @@ class ReaderNotifier extends Notifier<ReaderState> {
       try {
         final voice = _cacheKeyVoice(settings, book);
         final hit = await _cacheRepo.get(
-            book.id!, chapterIdx, para.index, voice, _cacheFormatTag);
+          book.id!,
+          chapterIdx,
+          para.index,
+          voice,
+          _cacheFormatTag,
+        );
         if (hit != null || token != _prefetchToken) return;
         await _ensureAudio(book, chapterIdx, para, settings);
         dev.log('[Reader] Prefetched paragraph ${para.index}');
@@ -1046,7 +1102,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
     if (_loadedParagraph >= 0 &&
         (state.paragraphIndex != _loadedParagraph ||
             state.chapterIndex != _loadedChapter)) {
-      dev.log('[Reader] Resume re-synced to ch$_loadedChapter/$_loadedParagraph');
+      dev.log(
+        '[Reader] Resume re-synced to ch$_loadedChapter/$_loadedParagraph',
+      );
       state = state.copyWith(
         chapterIndex: _loadedChapter,
         paragraphIndex: _loadedParagraph,
@@ -1076,7 +1134,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
       unawaited(pause());
     });
     state = state.copyWith(
-        sleepAt: DateTime.now().add(d), sleepAtChapterEnd: false);
+      sleepAt: DateTime.now().add(d),
+      sleepAtChapterEnd: false,
+    );
   }
 
   /// La variante sin reloj: parar cuando termine el capítulo en curso.
@@ -1101,8 +1161,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// [continuing] says another paragraph is played right after, so the audio
   /// service keeps the foreground through the gap instead of being torn down
   /// (see `VoiceXAudioHandler.holdForNext`).
-  Future<void> _stopPlayback(
-      {required bool endSession, bool continuing = false}) async {
+  Future<void> _stopPlayback({
+    required bool endSession,
+    bool continuing = false,
+  }) async {
     if (endSession) _listening = false;
     await _saveProgress(offsetMs: audioHandler.elapsedMs);
     if (continuing) {
@@ -1112,10 +1174,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
     }
     // The sentence highlight stays: it is the "you were here" marker. Only the
     // word underline goes, since nothing is being spoken any more.
-    state = state.copyWith(
-      status: ReaderStatus.idle,
-      clearActiveWord: true,
-    );
+    state = state.copyWith(status: ReaderStatus.idle, clearActiveWord: true);
   }
 
   /// Millisecond span of the sentence being spoken, derived from the word marks
@@ -1206,24 +1265,36 @@ class ReaderNotifier extends Notifier<ReaderState> {
       return;
     }
     if (state.paragraphIndex < chapter.paragraphs.length - 1) {
-      unawaited(navigateParagraph(state.paragraphIndex + 1, continuing: true)
-          .then((_) => play()));
+      unawaited(
+        navigateParagraph(
+          state.paragraphIndex + 1,
+          continuing: true,
+        ).then((_) => play()),
+      );
     } else if (state.chapterIndex < (state.book?.chapters.length ?? 1) - 1) {
       if (state.sleepAtChapterEnd) {
         // Aquí acaba el capítulo, que es donde se pidió parar. `_onEnd` ya
         // dejó el estado en idle, así que basta con no avanzar.
         audioHandler.release();
         state = state.copyWith(
-            sleepAtChapterEnd: false, statusMessage: 'Fin del capítulo');
+          sleepAtChapterEnd: false,
+          statusMessage: 'Fin del capítulo',
+        );
         return;
       }
-      unawaited(navigateChapter(state.chapterIndex + 1,
-              paragraph: 0, continuing: true)
-          .then((_) => play()));
+      unawaited(
+        navigateChapter(
+          state.chapterIndex + 1,
+          paragraph: 0,
+          continuing: true,
+        ).then((_) => play()),
+      );
     } else {
       audioHandler.release();
       state = state.copyWith(
-          statusMessage: 'Fin del libro', status: ReaderStatus.idle);
+        statusMessage: 'Fin del libro',
+        status: ReaderStatus.idle,
+      );
     }
   }
 
@@ -1235,8 +1306,11 @@ class ReaderNotifier extends Notifier<ReaderState> {
     if (state.paragraphIndex < chapter.paragraphs.length - 1) {
       await navigateParagraph(state.paragraphIndex + 1, continuing: wasPlaying);
     } else if (state.chapterIndex < (state.book?.chapters.length ?? 1) - 1) {
-      await navigateChapter(state.chapterIndex + 1,
-          paragraph: 0, continuing: wasPlaying);
+      await navigateChapter(
+        state.chapterIndex + 1,
+        paragraph: 0,
+        continuing: wasPlaying,
+      );
     } else {
       return;
     }
@@ -1251,10 +1325,14 @@ class ReaderNotifier extends Notifier<ReaderState> {
       await navigateParagraph(state.paragraphIndex - 1, continuing: wasPlaying);
     } else if (state.chapterIndex > 0) {
       final prev = state.book?.chapters.elementAtOrNull(state.chapterIndex - 1);
-      final lastPara =
-          prev == null || prev.paragraphs.isEmpty ? 0 : prev.paragraphs.length - 1;
-      await navigateChapter(state.chapterIndex - 1,
-          paragraph: lastPara, continuing: wasPlaying);
+      final lastPara = prev == null || prev.paragraphs.isEmpty
+          ? 0
+          : prev.paragraphs.length - 1;
+      await navigateChapter(
+        state.chapterIndex - 1,
+        paragraph: lastPara,
+        continuing: wasPlaying,
+      );
     } else {
       return;
     }
@@ -1270,8 +1348,11 @@ class ReaderNotifier extends Notifier<ReaderState> {
     final wasPlaying = state.isBusy;
     final total = state.book?.chapters.length ?? 1;
     if (state.chapterIndex >= total - 1) return;
-    await navigateChapter(state.chapterIndex + 1,
-        paragraph: 0, continuing: wasPlaying);
+    await navigateChapter(
+      state.chapterIndex + 1,
+      paragraph: 0,
+      continuing: wasPlaying,
+    );
     if (wasPlaying) await play();
   }
 
@@ -1282,13 +1363,19 @@ class ReaderNotifier extends Notifier<ReaderState> {
   Future<void> previousChapter() async {
     final wasPlaying = state.isBusy;
     if (state.chapterIndex <= 0) return;
-    await navigateChapter(state.chapterIndex - 1,
-        paragraph: 0, continuing: wasPlaying);
+    await navigateChapter(
+      state.chapterIndex - 1,
+      paragraph: 0,
+      continuing: wasPlaying,
+    );
     if (wasPlaying) await play();
   }
 
-  Future<void> navigateChapter(int index,
-      {int paragraph = 0, bool continuing = false}) async {
+  Future<void> navigateChapter(
+    int index, {
+    int paragraph = 0,
+    bool continuing = false,
+  }) async {
     _prefetchToken++;
     await _stopPlayback(endSession: false, continuing: continuing);
     state = state.copyWith(
@@ -1361,18 +1448,24 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// share — the log would be right but the rank arithmetic would not.
   Future<void> _awards = Future.value();
 
-  void _queueAward(Credit credit, CreditSource source,
-          {required int paragraphs}) =>
-      _awards = _awards
-          .then((_) => _award(credit, source, paragraphs: paragraphs));
+  void _queueAward(
+    Credit credit,
+    CreditSource source, {
+    required int paragraphs,
+  }) => _awards = _awards.then(
+    (_) => _award(credit, source, paragraphs: paragraphs),
+  );
 
   /// Records what [credit] earned, and says so when it crosses a rank or ends
   /// the book.
   ///
   /// Never lets a failure reach the reader: losing a paragraph's credit is a
   /// shame, interrupting the book over it would be a bug.
-  Future<void> _award(Credit credit, CreditSource source,
-      {required int paragraphs}) async {
+  Future<void> _award(
+    Credit credit,
+    CreditSource source, {
+    required int paragraphs,
+  }) async {
     final book = state.book;
     try {
       if (credit.chars > 0) {
@@ -1417,8 +1510,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
       book!.id!,
       state.chapterIndex,
       state.paragraphIndex,
-      sentenceIndex:
-          state.highlightedSentence < 0 ? 0 : state.highlightedSentence,
+      sentenceIndex: state.highlightedSentence < 0
+          ? 0
+          : state.highlightedSentence,
       offsetMs: offsetMs,
       globalIndex: _globalIndex(),
     );
@@ -1431,7 +1525,9 @@ class ReaderNotifier extends Notifier<ReaderState> {
   Future<int?> addBookmark() async {
     final book = state.book;
     if (book?.id == null) return null;
-    final sentenceIdx = state.highlightedSentence < 0 ? 0 : state.highlightedSentence;
+    final sentenceIdx = state.highlightedSentence < 0
+        ? 0
+        : state.highlightedSentence;
     return _bookmarkRepo.add(
       book!.id!,
       state.chapterIndex,
@@ -1460,7 +1556,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// sonar de golpe. Si ya estaba sonando, sigue sonando desde el marcador, que
   /// es lo que se espera.
   Future<void> jumpToBookmark(
-      int chapterIndex, int paragraphIndex, int sentenceIndex) async {
+    int chapterIndex,
+    int paragraphIndex,
+    int sentenceIndex,
+  ) async {
     final sonaba = state.isBusy;
     await navigateChapter(chapterIndex, paragraph: paragraphIndex);
     _pendingSentenceIdx = sentenceIndex;
@@ -1474,8 +1573,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// Ajustes → Almacenamiento.
   String _downloadEngineNotice(String dlKind, AppSettings settings) =>
       dlKind == settings.ttsProvider
-          ? ''
-          : 'con ${providerLabel(dlKind)} (${providerLabel(settings.ttsProvider)} no disponible)';
+      ? ''
+      : 'con ${providerLabel(dlKind)} (${providerLabel(settings.ttsProvider)} no disponible)';
 
   String _serverLostMessage(AppSettings settings, int done) =>
       '${providerLabel(settings.ttsProvider)} no responde: la descarga se '
@@ -1509,7 +1608,11 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// notan y se vuelven a pedir, mientras que un capítulo entero con la voz
   /// equivocada parece una descarga perfecta hasta que suena.
   static String _downloadSummaryFor(
-      String dlKind, AppSettings settings, int failed, int done) {
+    String dlKind,
+    AppSettings settings,
+    int failed,
+    int done,
+  ) {
     final replaced = dlKind != settings.ttsProvider;
     if (replaced && failed > 0) {
       return 'Descargado con ${providerLabel(dlKind)} '
@@ -1533,10 +1636,11 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// is not what was asked for. A book in another language is not a fallback:
   /// the server engines never read it, so Edge is the intended engine there.
   @visibleForTesting
-  static bool downloadMustWaitForServer(
-          {required AppSettings settings,
-          required String resolvedKind,
-          required String language}) =>
+  static bool downloadMustWaitForServer({
+    required AppSettings settings,
+    required String resolvedKind,
+    required String language,
+  }) =>
       settings.usesSelfHostedServer &&
       language.toLowerCase().startsWith('es') &&
       resolvedKind != settings.ttsProvider;
@@ -1549,9 +1653,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// started, so switching it off did not stop the one in flight: it went on
   /// synthesizing, one paragraph after another, on the voice server.
   @visibleForTesting
-  static bool prefetchSwitchedOff(
-          {required bool silent, required bool prefetchOnWifi}) =>
-      silent && !prefetchOnWifi;
+  static bool prefetchSwitchedOff({
+    required bool silent,
+    required bool prefetchOnWifi,
+  }) => silent && !prefetchOnWifi;
 
   /// True from the moment a download is accepted, not from the moment the bar
   /// appears.
@@ -1578,21 +1683,33 @@ class ReaderNotifier extends Notifier<ReaderState> {
   /// not opened.
   /// Devuelve `false` si la descarga ni siquiera arrancó porque ya había otra
   /// en curso: quien la pidió no debe anunciar el resultado de la anterior.
-  Future<bool> downloadChapters(int from, int count,
-      {int fromParagraph = 0, bool silent = false}) async {
+  Future<bool> downloadChapters(
+    int from,
+    int count, {
+    int fromParagraph = 0,
+    bool silent = false,
+  }) async {
     if (_downloading) return false;
     _downloading = true;
     try {
-      await _runDownload(from, count,
-          fromParagraph: fromParagraph, silent: silent);
+      await _runDownload(
+        from,
+        count,
+        fromParagraph: fromParagraph,
+        silent: silent,
+      );
     } finally {
       _downloading = false;
     }
     return true;
   }
 
-  Future<void> _runDownload(int from, int count,
-      {required int fromParagraph, required bool silent}) async {
+  Future<void> _runDownload(
+    int from,
+    int count, {
+    required int fromParagraph,
+    required bool silent,
+  }) async {
     final book = state.book;
     if (book == null) return;
 
@@ -1613,12 +1730,17 @@ class ReaderNotifier extends Notifier<ReaderState> {
     // the server dropping out mid-download falls it back to Edge below.
     var dlKind = await _resolveEngineKind(settings, book.language);
     if (downloadMustWaitForServer(
-        settings: settings, resolvedKind: dlKind, language: book.language)) {
+      settings: settings,
+      resolvedKind: dlKind,
+      language: book.language,
+    )) {
       _stopForServer(settings, silent: silent);
       return;
     }
-    var dlProvider =
-        getProvider(settings.copyWith(ttsProvider: dlKind), lang: book.language);
+    var dlProvider = getProvider(
+      settings.copyWith(ttsProvider: dlKind),
+      lang: book.language,
+    );
     // Resolve the engine up front: a download must be stored under whatever
     // actually synthesizes it, not under what was selected. This first reading
     // only decides what to skip; each paragraph re-derives its own key below.
@@ -1630,7 +1752,7 @@ class ReaderNotifier extends Notifier<ReaderState> {
     // pedir.
     final totalParagraphs = [
       for (var c = from; c < last; c++)
-        chapters[c].paragraphs.length - (c == from ? skipUntil : 0)
+        chapters[c].paragraphs.length - (c == from ? skipUntil : 0),
     ].fold<int>(0, (a, b) => a + b);
 
     _downloadCancelled = false;
@@ -1657,14 +1779,21 @@ class ReaderNotifier extends Notifier<ReaderState> {
     for (var chapterIdx = from; chapterIdx < last; chapterIdx++) {
       for (final para in chapters[chapterIdx].paragraphs) {
         if (prefetchSwitchedOff(
-            silent: silent, prefetchOnWifi: _settings.prefetchOnWifi)) {
+          silent: silent,
+          prefetchOnWifi: _settings.prefetchOnWifi,
+        )) {
           _downloadCancelled = true;
         }
         if (_downloadCancelled) break;
         if (chapterIdx == from && para.index < skipUntil) continue;
 
         final alreadyPinned = await _cacheRepo.isPinnedParagraph(
-            book.id!, chapterIdx, para.index, skipKey, _cacheFormatTag);
+          book.id!,
+          chapterIdx,
+          para.index,
+          skipKey,
+          _cacheFormatTag,
+        );
         if (alreadyPinned) {
           state = state.copyWith(downloadDone: state.downloadDone + 1);
           continue;
@@ -1682,9 +1811,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
           // taken when the download started (see above).
           final nuevoKind = await _resolveEngineKind(settings, book.language);
           if (downloadMustWaitForServer(
-              settings: settings,
-              resolvedKind: nuevoKind,
-              language: book.language)) {
+            settings: settings,
+            resolvedKind: nuevoKind,
+            language: book.language,
+          )) {
             serverLost = true;
             _downloadCancelled = true;
             break;
@@ -1692,10 +1822,13 @@ class ReaderNotifier extends Notifier<ReaderState> {
           if (nuevoKind != dlKind) {
             unawaited(dlProvider.dispose());
             dlKind = nuevoKind;
-            dlProvider = getProvider(settings.copyWith(ttsProvider: dlKind),
-                lang: book.language);
+            dlProvider = getProvider(
+              settings.copyWith(ttsProvider: dlKind),
+              lang: book.language,
+            );
             state = state.copyWith(
-                downloadEngineNotice: _downloadEngineNotice(dlKind, settings));
+              downloadEngineNotice: _downloadEngineNotice(dlKind, settings),
+            );
           }
           final voice = _cacheKeyFor(dlKind, settings, book);
 
@@ -1729,7 +1862,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
           }
 
           final ext = result.filePath.split('.').last;
-          final dest = '${docsDir.path}/dl_${book.id}_${chapterIdx}_'
+          final dest =
+              '${docsDir.path}/dl_${book.id}_${chapterIdx}_'
               '${para.index}_${voice}_$_cacheFormatTag.$ext';
           await File(result.filePath).copy(dest);
           try {
@@ -1738,13 +1872,21 @@ class ReaderNotifier extends Notifier<ReaderState> {
 
           await _writeSidecar(dest, result.timestamps);
           final sizeKb = (await File(dest).length() / 1024).ceil();
-          await _cacheRepo.savePin(book.id!, chapterIdx, para.index, voice,
-              _cacheFormatTag, dest, sizeKb);
+          await _cacheRepo.savePin(
+            book.id!,
+            chapterIdx,
+            para.index,
+            voice,
+            _cacheFormatTag,
+            dest,
+            sizeKb,
+          );
           synthesized++;
           // Refine the estimate from real timings instead of the static guess.
           final elapsed = DateTime.now().difference(startedAt).inMilliseconds;
           state = state.copyWith(
-              downloadSecondsPerParagraph: elapsed / 1000 / synthesized);
+            downloadSecondsPerParagraph: elapsed / 1000 / synthesized,
+          );
         } on TimeoutException catch (e) {
           dev.log('[Reader] Download ch$chapterIdx para ${para.index}: $e');
           state = state.copyWith(downloadFailed: state.downloadFailed + 1);
@@ -1794,8 +1936,10 @@ class ReaderNotifier extends Notifier<ReaderState> {
       dev.log('[Reader] Download finished with $failed failures');
     }
     if (dlKind != settings.ttsProvider) {
-      dev.log('[Reader] Download finished with $dlKind, not '
-          '${settings.ttsProvider}');
+      dev.log(
+        '[Reader] Download finished with $dlKind, not '
+        '${settings.ttsProvider}',
+      );
     }
     await refreshDownloadedCount();
   }
@@ -1844,8 +1988,8 @@ class ReaderNotifier extends Notifier<ReaderState> {
     // its audio is cached paragraph by paragraph as it plays. El servidor solo
     // vale la pena si el libro está en español -- mismo criterio que
     // _resolveEngineKind.
-    final hasServer = settings.hasServer &&
-        book.language.toLowerCase().startsWith('es');
+    final hasServer =
+        settings.hasServer && book.language.toLowerCase().startsWith('es');
     if (!settings.usesSelfHostedServer || !hasServer) {
       return;
     }
@@ -1856,22 +2000,81 @@ class ReaderNotifier extends Notifier<ReaderState> {
       return;
     }
     final reachable = await VoiceServerTtsProvider.isReachable(
-        settings.selfHostedUrl,
-        token: settings.serverToken,
-        engine: settings.ttsProvider);
+      settings.selfHostedUrl,
+      token: settings.serverToken,
+      engine: settings.ttsProvider,
+    );
     if (!reachable) {
       dev.log('[Reader] Prefetch skipped: server unreachable');
       return;
     }
 
     await downloadChapters(
-        state.chapterIndex, settings.prefetchChapters, silent: true);
+      state.chapterIndex,
+      settings.prefetchChapters,
+      silent: true,
+    );
   }
 
-  /// Recomputes [ReaderState.downloadedChapters] for the selected engine.
+  /// Recomputes [ReaderState.downloadedChapters] for the selected engine, and
+  /// the durations behind [offlineAhead].
   Future<void> refreshDownloadedCount() async {
     final count = await downloadedChapterCount();
+    await _loadOfflineSeconds();
     state = state.copyWith(downloadedChapters: count);
+  }
+
+  /// Duration of each downloaded paragraph of the open book, for the selected
+  /// engine and voice. Loaded when the book opens and after a download, not
+  /// per paragraph: [offlineAhead] runs on every rebuild of the bottom bar.
+  Map<(int, int), double> _offlineSeconds = const {};
+  ({int chapter, int paragraph, OfflineAhead? value})? _offlineMemo;
+
+  Future<void> _loadOfflineSeconds() async {
+    final book = state.book;
+    _offlineMemo = null;
+    if (book?.id == null) {
+      _offlineSeconds = const {};
+      return;
+    }
+    final paths = await _cacheRepo.pinnedPaths(
+      book!.id!,
+      _cacheKeyVoice(_settings, book),
+      _cacheFormatTag,
+    );
+    final seconds = <(int, int), double>{};
+    for (final e in paths.entries) {
+      final s = await storedAudioSeconds(e.value);
+      if (s != null) seconds[e.key] = s;
+    }
+    _offlineSeconds = seconds;
+    _offlineMemo = null;
+  }
+
+  /// Downloaded audio from the reading position on, until the first paragraph
+  /// that would need the network. At normal speed: the bar divides by the
+  /// playback speed.
+  OfflineAhead? get offlineAhead {
+    final book = state.book;
+    if (book == null || _offlineSeconds.isEmpty) return null;
+    final memo = _offlineMemo;
+    if (memo != null &&
+        memo.chapter == state.chapterIndex &&
+        memo.paragraph == state.paragraphIndex) {
+      return memo.value;
+    }
+    final value = offlineAheadFrom(
+      chapterLengths: [for (final c in book.chapters) c.paragraphs.length],
+      chapter: state.chapterIndex,
+      paragraph: state.paragraphIndex,
+      secondsByParagraph: _offlineSeconds,
+    );
+    _offlineMemo = (
+      chapter: state.chapterIndex,
+      paragraph: state.paragraphIndex,
+      value: value,
+    );
+    return value;
   }
 
   /// How many chapters of this book are fully pinned, for the download screen.
@@ -1884,7 +2087,11 @@ class ReaderNotifier extends Notifier<ReaderState> {
       final total = book.chapters[c].paragraphs.length;
       if (total == 0) continue;
       final pinned = await _cacheRepo.countPinned(
-          book.id!, c, voice, _cacheFormatTag);
+        book.id!,
+        c,
+        voice,
+        _cacheFormatTag,
+      );
       if (pinned >= total) complete++;
     }
     return complete;
@@ -1918,5 +2125,6 @@ class ReaderNotifier extends Notifier<ReaderState> {
   }
 }
 
-final readerProvider =
-    NotifierProvider<ReaderNotifier, ReaderState>(ReaderNotifier.new);
+final readerProvider = NotifierProvider<ReaderNotifier, ReaderState>(
+  ReaderNotifier.new,
+);

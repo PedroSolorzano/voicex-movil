@@ -457,6 +457,23 @@ class AudioCacheRepo {
     );
   }
 
+  /// Path of every downloaded paragraph of a book for one voice and format,
+  /// keyed by (chapter, paragraph). One query for the whole book: the reader
+  /// adds up their durations to say how much can be heard offline.
+  Future<Map<(int, int), String>> pinnedPaths(
+      int bookId, String voiceId, String speedHash) async {
+    final db = await _db;
+    final rows = await db.query('audio_cache',
+        columns: ['chapter_idx', 'para_idx', 'file_path'],
+        where: 'book_id=? AND voice_id=? AND speed_hash=? AND pinned=1',
+        whereArgs: [bookId, voiceId, speedHash]);
+    return {
+      for (final r in rows)
+        (r['chapter_idx'] as int, r['para_idx'] as int):
+            r['file_path'] as String
+    };
+  }
+
   Future<bool> isPinnedParagraph(int bookId, int chapterIdx, int paraIdx,
       String voiceId, String speedHash) async {
     final db = await _db;
