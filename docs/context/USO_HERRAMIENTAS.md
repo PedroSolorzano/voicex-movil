@@ -100,18 +100,22 @@ sin conexión.
 
 - El número de capítulo es el de la primera columna de `--indice` o `--lista` (en Visión ciega,
   **Teseo es el 4**, no el 3: el 3 es el Prólogo, de 51 párrafos).
-- **No necesitas `--desde`** para no repetir: la herramienta ya salta los párrafos
-  que el celular tiene, esté donde esté. `bajar "…" 4 --horas 1.2` genera las
-  siguientes ~1,2 horas **de lo que falta**. Úsalo solo para empezar en un punto
-  concreto; cuenta desde 0, y solo vale para el primer capítulo que pidas.
+- **No necesitas `--desde`**: la herramienta empieza en el párrafo donde vas
+  leyendo (lo trae el inventario) y salta los que el celular ya tiene.
+  `bajar "…" 4 --horas 1.2` genera ~1,2 horas **desde donde vas**. Úsalo solo
+  para empezar en otro punto (`--desde 0`, el inicio del capítulo); cuenta desde
+  0, y solo vale para el primer capítulo que pidas. Para que la posición esté al
+  día, toca *Dejar mis libros listos para el Mac* y corre `traer-libros` antes
+  de `bajar`.
 - Las opciones van pegadas a los guiones: `--horas 1.2`, no `-- horas 1.2`. Si
   algo está mal escrito, la herramienta se detiene y lo dice; no sigue en silencio.
 - `voicex bajar "…"` en una sola línea también funciona: `voicex` prepara la
   terminal y ejecuta lo que le sigue.
 
 Las comillas del nombre del libro son obligatorias: lleva espacios y tildes.
-Los pasos 2 y 3 solo se repiten si apagaste el servidor o si agregaste libros o
-descargaste algo en la app desde la última vez.
+Los pasos 2 y 3 solo se repiten si apagaste el servidor o si agregaste libros,
+descargaste o **leíste** algo en la app desde la última vez: el inventario es lo
+que le dice a `bajar` dónde vas.
 
 ---
 

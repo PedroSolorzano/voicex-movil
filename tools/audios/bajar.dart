@@ -66,12 +66,15 @@ Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
   <capítulos>        número como en --indice: 4, 4-6, 1,4; o el nombre: Teseo
   --motor <id>       chatterbox2 (por defecto) o qwen3
   --voz <nombre>     voz del servidor (por defecto: colombiana / esposa)
-  --desde <n>        en el primer capítulo, empezar en el párrafo n (como en la app)
+  --desde <n>        en el primer capítulo, empezar en el párrafo n (como en la app).
+                     Sin él, empieza donde vas leyendo según el inventario del
+                     teléfono; --desde 0 genera desde el inicio del capítulo
   --horas <h>        parar tras ~h horas de escucha (1, 1.5…) y decir cómo seguir
   --servidor <url>   por defecto http://127.0.0.1:8765
   --salida <carpeta> por defecto tools/audios/salida
   --inventario <f>   inventario del teléfono; por defecto inventario.json junto al EPUB
-  --sin-inventario   generar todo lo pedido aunque el teléfono ya lo tenga
+  --sin-inventario   generar todo lo pedido aunque el teléfono ya lo tenga (la
+                     posición de lectura se sigue usando)
   --indice           solo la tabla: número, título y párrafos de cada capítulo
   --lista            capítulos con horas de escucha y tiempo de generación, y cómo
                      partir los largos; no genera nada
@@ -91,20 +94,22 @@ Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
   final hash =
       (await sha256.bind(File(epubPath).openRead()).first).toString();
 
-  // What the phone already has, from the inventory the app writes with
-  // "Dejar mis libros listos para el Mac". Next to the EPUB by default.
+  // What the phone already has, and where the person is reading, from the
+  // inventory the app writes with "Dejar mis libros listos para el Mac". Next
+  // to the EPUB by default.
   final listEngine = opt('--motor') ?? 'chatterbox2';
   final listVoice = opt('--voz') ?? _defaultVoices[listEngine];
-  final phone = args.contains('--sin-inventario') || listVoice == null
+  final phone = listVoice == null
       ? null
       : _loadPhone(
           opt('--inventario') ?? '${File(epubPath).parent.path}/inventario.json',
           hash,
-          '$listEngine-$listVoice');
-  if (phone != null) {
+          '$listEngine-$listVoice',
+          ignoreDownloads: args.contains('--sin-inventario'));
+  if (phone != null && !args.contains('--sin-inventario')) {
     stdout.writeln('Inventario del teléfono: ${phone.when} '
         '(${phone.total} párrafos de este libro con esta voz). Si descargaste '
-        'algo desde entonces, repite «Dejar mis libros listos» y traer-libros.sh.');
+        'o leíste algo desde entonces, repite «Dejar mis libros listos» y traer-libros.sh.');
   } else if (!args.contains('--sin-inventario')) {
     stdout.writeln('Sin inventario del teléfono: se generará todo lo pedido. '
         'Para saltar lo que ya tiene, usa «Dejar mis libros listos para el '
@@ -120,9 +125,11 @@ Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
     for (final c in book.chapters) {
       final title = c.title.length > 42 ? '${c.title.substring(0, 41)}…' : c.title;
       final here = phone?.have[c.index]?.length ?? 0;
+      final reading = phone?.position;
       stdout.writeln('${(c.index + 1).toString().padLeft(4)}  '
           '${title.padRight(width)}  ${c.paragraphs.length.toString().padLeft(8)}'
-          '${here > 0 ? '   (en el teléfono: $here)' : ''}');
+          '${here > 0 ? '   (en el teléfono: $here)' : ''}'
+          '${reading?.chapter == c.index ? '   ◀ vas en el párrafo ${reading!.paragraph}' : ''}');
     }
     stdout.writeln('\nUsa el número o el nombre:\n'
         '  bajar "$epubPath" ${book.chapters.length > 3 ? 4 : 1}\n'
@@ -167,11 +174,37 @@ Uso: dart run tools/audios/bajar.dart <libro.epub> <capítulos> [opciones]
     exit(64);
   }
 
-  final wanted = _parseChapters(args[1], book.chapters);
-  final skipUntil = int.tryParse(opt('--desde') ?? '') ?? 0;
+  var wanted = _parseChapters(args[1], book.chapters);
+  var skipUntil = int.tryParse(opt('--desde') ?? '') ?? 0;
   if (opt('--desde') != null && skipUntil < 0) {
     stderr.writeln('--desde espera un número de párrafo (0 o más).');
     exit(64);
+  }
+
+  // Without --desde, start where the person is. Starting at paragraph 0 by
+  // default spent half an hour of generation on a chapter already read, and
+  // the hour asked for ended a few paragraphs past the reading position.
+  final pos = phone?.position;
+  if (opt('--desde') == null && pos != null) {
+    final at = pos.chapter + 1; // chapter number, as the command line counts
+    if (wanted.contains(at)) {
+      final skipped = wanted.where((n) => n < at).toList();
+      final chapter = book.chapters[pos.chapter];
+      wanted = wanted.where((n) => n >= at).toList();
+      skipUntil = pos.paragraph.clamp(0, chapter.paragraphs.length - 1);
+      final text = chapter.paragraphs[skipUntil].rawText.replaceAll(RegExp(r'\s+'), ' ');
+      stdout.writeln('\nVas en el capítulo $at, párrafo $skipUntil '
+          '(según el teléfono, ${pos.when}): empiezo ahí.\n'
+          '  «${text.length > 70 ? '${text.substring(0, 70)}…' : text}»\n'
+          'Para otro punto: --desde <n>; --desde 0 empieza el capítulo.');
+      if (skipped.isNotEmpty) {
+        stdout.writeln('Salto ${skipped.length == 1 ? 'el capítulo' : 'los capítulos'} '
+            '${skipped.join(', ')}: ya ${skipped.length == 1 ? 'lo' : 'los'} pasaste.');
+      }
+    } else if (wanted.every((n) => n < at)) {
+      stdout.writeln('\nOjo: según el teléfono (${pos.when}) ya vas en el '
+          'capítulo $at, y lo pedido es anterior. Se genera igual.');
+    }
   }
   final firstChapter = book.chapters[wanted.first - 1];
   if (skipUntil >= firstChapter.paragraphs.length) {
@@ -426,12 +459,17 @@ class _Phone {
   /// Chapter index → paragraphs already downloaded.
   final Map<int, Set<int>> have;
 
-  _Phone(this.when, this.have);
+  /// Where the person is reading (chapter index, as in [have]), if the
+  /// inventory says.
+  final ({int chapter, int paragraph, String when})? position;
+
+  _Phone(this.when, this.have, this.position);
 
   int get total => have.values.fold(0, (a, s) => a + s.length);
 }
 
-_Phone? _loadPhone(String path, String hash, String voiceId) {
+_Phone? _loadPhone(String path, String hash, String voiceId,
+    {bool ignoreDownloads = false}) {
   final file = File(path);
   if (!file.existsSync()) return null;
   try {
@@ -448,21 +486,33 @@ _Phone? _loadPhone(String path, String hash, String voiceId) {
         : ((book as Map<String, dynamic>)['voices']
             as Map<String, dynamic>)[voiceId] as Map<String, dynamic>?;
     final have = <int, Set<int>>{
-      for (final e in (chapters ?? const <String, dynamic>{}).entries)
-        int.parse(e.key): {for (final n in e.value as List) n as int},
+      if (!ignoreDownloads)
+        for (final e in (chapters ?? const <String, dynamic>{}).entries)
+          int.parse(e.key): {for (final n in e.value as List) n as int},
     };
-    final when = DateTime.tryParse('${json['generated']}');
+    // Inventories written before the position was added have none.
+    final p = book is Map<String, dynamic> ? book['position'] : null;
+    final position = p is Map &&
+            p['chapter'] is int &&
+            p['paragraph'] is int
+        ? (
+            chapter: p['chapter'] as int,
+            paragraph: p['paragraph'] as int,
+            when: _fmtWhen(DateTime.tryParse('${p['updated']}')),
+          )
+        : null;
     return _Phone(
-        when == null
-            ? 'sin fecha'
-            : '${when.day}/${when.month} ${when.hour.toString().padLeft(2, '0')}:'
-                '${when.minute.toString().padLeft(2, '0')}',
-        have);
+        _fmtWhen(DateTime.tryParse('${json['generated']}')), have, position);
   } catch (e) {
     stderr.writeln('No pude leer $path ($e): se ignora.');
     return null;
   }
 }
+
+String _fmtWhen(DateTime? t) => t == null
+    ? 'sin fecha'
+    : '${t.day}/${t.month} ${t.hour.toString().padLeft(2, '0')}:'
+        '${t.minute.toString().padLeft(2, '0')}';
 
 const _flagsWithValue = {
   '--motor', '--voz', '--desde', '--horas', '--servidor', '--salida',

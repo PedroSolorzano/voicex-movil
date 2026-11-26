@@ -14,11 +14,16 @@ import 'repositories.dart';
 /// With [formatTag] it also writes `inventario.json`: which paragraphs of each
 /// book the phone already has, per voice, so `tools/audios/bajar.dart` skips
 /// them instead of generating audio the phone would only report as "ya
-/// estaban".
+/// estaban". And where the person is in each book, so `bajar.dart` starts
+/// there instead of at paragraph 0 of the chapter: generating half an hour of a
+/// chapter already read is what happened without it.
 ///
 /// Returns how many books are in the folder afterwards.
 Future<int> exportLibraryBooks(Directory outDir,
-    {LibraryRepo? library, AudioCacheRepo? cache, String? formatTag}) async {
+    {LibraryRepo? library,
+    AudioCacheRepo? cache,
+    ProgressRepo? progress,
+    String? formatTag}) async {
   final rows = await (library ?? LibraryRepo()).all();
   await outDir.create(recursive: true);
 
@@ -46,7 +51,8 @@ Future<int> exportLibraryBooks(Directory outDir,
   }
 
   if (formatTag != null) {
-    await _writeInventory(outDir, rows, cache ?? AudioCacheRepo(), formatTag);
+    await _writeInventory(outDir, rows, cache ?? AudioCacheRepo(),
+        progress ?? ProgressRepo(), formatTag);
   }
 
   // A book removed from the library should not linger on the cable.
@@ -76,7 +82,7 @@ Future<void> _shareWithAdb(File f) async {
 }
 
 Future<void> _writeInventory(Directory outDir, List<Map<String, dynamic>> rows,
-    AudioCacheRepo cache, String formatTag) async {
+    AudioCacheRepo cache, ProgressRepo progress, String formatTag) async {
   final hashOf = {
     for (final r in rows)
       if ((r['content_hash'] as String?)?.isNotEmpty ?? false)
@@ -85,11 +91,25 @@ Future<void> _writeInventory(Directory outDir, List<Map<String, dynamic>> rows,
   final titleOf = {for (final r in rows) r['id'] as int: r['title'] as String? ?? ''};
 
   final books = <String, Map<String, dynamic>>{};
+  Map<String, dynamic> entry(String hash, int bookId) => books.putIfAbsent(
+      hash, () => {'title': titleOf[bookId], 'voices': <String, dynamic>{}});
+
+  // A book that was opened but has nothing downloaded still gets an entry:
+  // its position is what tells the Mac where to start.
+  for (final e in (await progress.allPositions()).entries) {
+    final hash = hashOf[e.key];
+    if (hash == null) continue;
+    entry(hash, e.key)['position'] = {
+      'chapter': e.value.chapter,
+      'paragraph': e.value.paragraph,
+      'updated': e.value.updatedAt,
+    };
+  }
+
   for (final p in await cache.downloadedParagraphs(formatTag)) {
     final hash = hashOf[p.bookId];
     if (hash == null) continue; // audio of a book no longer in the library
-    final book = books.putIfAbsent(
-        hash, () => {'title': titleOf[p.bookId], 'voices': <String, dynamic>{}});
+    final book = entry(hash, p.bookId);
     final voices = book['voices'] as Map<String, dynamic>;
     final chapters = voices.putIfAbsent(p.voiceId, () => <String, dynamic>{})
         as Map<String, dynamic>;

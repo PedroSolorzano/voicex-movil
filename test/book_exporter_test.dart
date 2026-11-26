@@ -136,6 +136,33 @@ void main() {
       expect((await inventory())['books'], isEmpty);
     });
 
+    test('carries where the person is, so the Mac starts there', () async {
+      await addBook('Visión ciega', [1], hash: 'hashV');
+      final id = (await LibraryRepo().all()).single['id'] as int;
+      await pin(id, 3, 10, 'chatterbox2-colombiana');
+      await ProgressRepo().save(id, 3, 467);
+
+      await exportLibraryBooks(out, formatTag: 'f96');
+
+      final book = (await inventory())['books']['hashV'];
+      expect(book['position']['chapter'], 3);
+      expect(book['position']['paragraph'], 467);
+      expect(book['voices']['chatterbox2-colombiana']['3'], [10]);
+    });
+
+    test('a book read but with nothing downloaded still has its position',
+        () async {
+      await addBook('Libro', [1], hash: 'h1');
+      final id = (await LibraryRepo().all()).single['id'] as int;
+      await ProgressRepo().save(id, 2, 5);
+
+      await exportLibraryBooks(out, formatTag: 'f96');
+
+      final book = (await inventory())['books']['h1'];
+      expect(book['position']['paragraph'], 5);
+      expect(book['voices'], isEmpty);
+    });
+
     test('without a format tag no inventory is written', () async {
       await addBook('Libro', [1], hash: 'h1');
 

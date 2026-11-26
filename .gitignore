@@ -89,4 +89,4 @@ tools/mlx/reportes/
 epubs/
 
 # Audio generado en el Mac, a la espera de pasarlo al teléfono
-tools/audios/salida/
+tools/audios/salida*/

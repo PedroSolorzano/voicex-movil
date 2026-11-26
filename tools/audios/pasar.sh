@@ -48,4 +48,5 @@ done
 
 echo
 echo "Listo. En la app: Ajustes → Almacenamiento → Ver qué ocupa cada libro → Importar audios del Mac."
-echo "Cuando la app confirme, borra la salida del Mac si no la quieres: rm -rf $SALIDA"
+echo "La salida del Mac se queda como respaldo: el servidor de voz la sirve, y la app"
+echo "también puede traerla por Tailscale con el mismo botón, sin cable."

@@ -146,6 +146,23 @@ class ProgressRepo {
     );
   }
 
+  /// Chapter and paragraph of every book that has been opened, keyed by book
+  /// id. The Mac's inventory carries it so `bajar.dart` starts generating
+  /// where the person is instead of at the top of the chapter.
+  Future<Map<int, ({int chapter, int paragraph, String updatedAt})>>
+      allPositions() async {
+    final db = await _db;
+    final rows = await db.query('reading_progress');
+    return {
+      for (final r in rows)
+        r['book_id'] as int: (
+          chapter: r['chapter_index'] as int,
+          paragraph: r['paragraph_index'] as int,
+          updatedAt: r['updated_at'] as String? ?? '',
+        )
+    };
+  }
+
   /// Absolute position of every book, keyed by book id — lets the library show
   /// per-book progress with one query instead of parsing each EPUB.
   Future<Map<int, int>> allGlobalIndices() async {

@@ -9,6 +9,10 @@ y token. Ver README.md para el porqué de cada decisión.
 
     POST /report                reporte de error o mejora de la app (JSON)
     PUT  /report/audio/<id>.m4a nota de voz que acompaña a un reporte
+
+    GET  /audios                       libros generados con bajar.dart (sus manifest)
+    GET  /audios/<libro>/<archivo>     un párrafo de esos, para que el teléfono lo
+                                       traiga por Tailscale en vez de por cable
 """
 import hmac
 import json
@@ -27,7 +31,7 @@ from pathlib import Path
 
 import numpy as np
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 log = logging.getLogger("voz")
@@ -48,6 +52,17 @@ MAX_POR_MINUTO = 20            # un reporte es un acto humano, no un bucle
 # El nombre lo impone esta expresión, así que un cliente no puede elegir dónde
 # escribe: es un UUID y la extensión de la nota, nada más.
 NOTA_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f-]{27}\.m4a$")
+
+# Audio generado con `tools/audios/bajar.dart`: una carpeta por libro, con su
+# manifest.json. El teléfono la lee por la red con «Importar audios del Mac». Se
+# sirve tal cual y no se borra: queda en el Mac como respaldo de lo procesado.
+AUDIOS = Path(os.environ.get(
+    "VOZ_AUDIOS", Path(__file__).resolve().parent.parent / "audios" / "salida"))
+# Las dos expresiones imponen el nombre, así que una ruta no puede salir de
+# AUDIOS: `bajar.dart` escribe carpetas en minúsculas y guiones, y archivos
+# cN_pM.mp3 (las mismas que acepta `audio_importer.dart` en la app).
+CARPETA_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,99}$")
+ARCHIVO_RE = re.compile(r"^c\d+_p\d+\.(mp3|m4a|wav)$")
 
 # Un párrafo de diálogo cabe entero (así se midió: 0 % de errores). Solo lo que
 # lo supera se parte, por oraciones, porque los modelos autorregresivos pueden
@@ -251,6 +266,34 @@ async def _leer_cuerpo(request: Request, tope: int) -> bytes:
         if len(cuerpo) > tope:
             raise HTTPException(413, "cuerpo demasiado grande")
     return bytes(cuerpo)
+
+
+@app.get("/audios", dependencies=[Depends(exigir_token)])
+def audios() -> dict:
+    """Cada libro generado, con su manifest. No toca la GPU: sirve también con
+    el servidor en modo solo reportes, sin voces cargadas."""
+    libros = []
+    if AUDIOS.is_dir():
+        for carpeta in sorted(AUDIOS.iterdir()):
+            manifest = carpeta / "manifest.json"
+            if not (CARPETA_RE.match(carpeta.name) and manifest.is_file()):
+                continue
+            try:
+                libros.append({"carpeta": carpeta.name,
+                               "manifest": json.loads(manifest.read_text("utf-8"))})
+            except (OSError, ValueError):
+                log.warning("manifest ilegible en %s", carpeta)
+    return {"libros": libros}
+
+
+@app.get("/audios/{carpeta}/{archivo}", dependencies=[Depends(exigir_token)])
+def audio(carpeta: str, archivo: str) -> FileResponse:
+    if not (CARPETA_RE.match(carpeta) and ARCHIVO_RE.match(archivo)):
+        raise HTTPException(404, "no existe")
+    ruta = AUDIOS / carpeta / archivo
+    if not ruta.is_file():
+        raise HTTPException(404, "no existe")
+    return FileResponse(ruta, media_type="audio/mpeg" if archivo.endswith(".mp3") else None)
 
 
 @app.post("/report", dependencies=[Depends(exigir_token)], status_code=204)

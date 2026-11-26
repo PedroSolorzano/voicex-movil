@@ -7,14 +7,18 @@ import 'package:path_provider/path_provider.dart';
 import '../../storage/audio_importer.dart';
 import '../../storage/audio_usage.dart';
 import '../../storage/book_exporter.dart';
+import '../../config/server_config.dart';
+import '../../storage/mac_audio_fetcher.dart';
 import '../../storage/repositories.dart';
 import '../providers/reader_provider.dart' show cacheFormatTag;
 import '../widgets/audio_labels.dart';
 
 /// Where the app keeps the audio it writes: the cache in the temporary folder,
 /// downloads in the documents one.
-Future<List<Directory>> defaultAudioDirs() async =>
-    [await getApplicationDocumentsDirectory(), await getTemporaryDirectory()];
+Future<List<Directory>> defaultAudioDirs() async => [
+  await getApplicationDocumentsDirectory(),
+  await getTemporaryDirectory(),
+];
 
 /// Where `tools/audios/pasar.sh` leaves the audio generated on the Mac: the
 /// app's own folder on shared storage, which `adb push` can write and this app
@@ -42,11 +46,19 @@ class DownloadsScreen extends StatefulWidget {
   /// Where imported audio ends up: the same folder a download writes to.
   final Future<Directory> Function() docsDir;
 
+  /// The Mac's voice server, which also hands out the audio generated there.
+  /// Empty URL: import only what arrived by cable.
+  final ({String url, String token}) macServer;
+
   const DownloadsScreen({
     super.key,
     this.audioDirs = defaultAudioDirs,
     this.importInbox = defaultImportInbox,
     this.docsDir = getApplicationDocumentsDirectory,
+    this.macServer = (
+      url: TtsServerConfig.voiceUrl,
+      token: TtsServerConfig.voiceToken,
+    ),
   });
 
   @override
@@ -59,6 +71,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   List<BookAudioUsage>? _books;
   StrayAudio _stray = StrayAudio.none;
 
+  /// Progress of a network fetch from the Mac, while one runs.
+  ({int done, int total})? _fetching;
+
   @override
   void initState() {
     super.initState();
@@ -68,7 +83,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   Future<void> _load() async {
     final books = await _repo.usageByBook();
     final stray = await findStrayAudio(
-        await widget.audioDirs(), await _repo.knownPaths());
+      await widget.audioDirs(),
+      await _repo.knownPaths(),
+    );
     if (!mounted) return;
     setState(() {
       _books = books;
@@ -76,17 +93,18 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     });
   }
 
-  int get _downloadsKb => _books?.fold<int>(0, (n, b) => n + b.downloadsKb) ?? 0;
+  int get _downloadsKb =>
+      _books?.fold<int>(0, (n, b) => n + b.downloadsKb) ?? 0;
   int get _cacheKb => _books?.fold<int>(0, (n, b) => n + b.cacheKb) ?? 0;
-  int get _orphanKb => _books
-          ?.where((b) => b.orphaned)
-          .fold<int>(0, (n, b) => n + b.totalKb) ??
+  int get _orphanKb =>
+      _books?.where((b) => b.orphaned).fold<int>(0, (n, b) => n + b.totalKb) ??
       0;
   int get _orphanBooks => _books?.where((b) => b.orphaned).length ?? 0;
 
   /// Audio from a retired engine in books that still exist. What belongs to a
   /// deleted book is counted there, not twice.
-  int get _retiredKb => _books
+  int get _retiredKb =>
+      _books
           ?.where((b) => !b.orphaned)
           .fold<int>(0, (n, b) => n + b.retiredKb) ??
       0;
@@ -101,11 +119,13 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         content: Text(body),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
           TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(action)),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(action),
+          ),
         ],
       ),
     );
@@ -114,8 +134,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 
   void _said(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _importFromMac() async {
@@ -124,6 +145,23 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       _said('Este teléfono no tiene dónde recibir audios.');
       return;
     }
+    // First over the network (Tailscale), then whatever is in the inbox:
+    // what came by cable and what was just fetched go through the same import.
+    setState(() => _fetching = (done: 0, total: 0));
+    FetchResult fetch;
+    try {
+      fetch = await fetchMacAudio(
+        baseUrl: widget.macServer.url,
+        token: widget.macServer.token,
+        inbox: inbox,
+        formatTag: cacheFormatTag,
+        onProgress: (done, total) {
+          if (mounted) setState(() => _fetching = (done: done, total: total));
+        },
+      );
+    } finally {
+      if (mounted) setState(() => _fetching = null);
+    }
     final result = await importMacAudio(
       inbox: inbox,
       docsDir: await widget.docsDir(),
@@ -131,14 +169,21 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     );
     await _load();
     if (!mounted) return;
-    if (result.nothingFound) {
-      _said('No hay audios esperando. En el Mac: tools/audios/pasar.sh');
+    if (result.nothingFound && fetch.problems.isEmpty) {
+      _said(
+        widget.macServer.url.isEmpty
+            ? 'No hay audios esperando. En el Mac: tools/audios/pasar.sh'
+            : 'Nada nuevo en el Mac: ya tienes todo lo que generó.',
+      );
       return;
     }
     final lines = [
+      ...fetch.problems,
       if (result.imported > 0)
-        'Se importaron ${paragraphsLabel(result.imported)}; ya se oyen sin '
-            'conexión.',
+        result.imported == 1
+            ? 'Se importó 1 párrafo; ya se oye sin conexión.'
+            : 'Se importaron ${paragraphsLabel(result.imported)}; ya se oyen '
+                'sin conexión.',
       if (result.alreadyThere > 0)
         '${paragraphsLabel(result.alreadyThere)} ya estaban descargados.',
       ...result.problems,
@@ -150,8 +195,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         content: Text(lines.join('\n\n')),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Entendido')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Entendido'),
+          ),
         ],
       ),
     );
@@ -164,22 +210,26 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       return;
     }
     final n = await exportLibraryBooks(
-        Directory('${inbox.parent.path}/libros'),
-        formatTag: cacheFormatTag);
-    _said(n == 0
-        ? 'No hay libros en la biblioteca.'
-        : n == 1
-            ? '1 libro listo para el Mac. Ahí: tools/audios/traer-libros.sh'
-            : '$n libros y lo que ya tienes descargado, listos para el Mac. Ahí: tools/audios/traer-libros.sh');
+      Directory('${inbox.parent.path}/libros'),
+      formatTag: cacheFormatTag,
+    );
+    _said(
+      n == 0
+          ? 'No hay libros en la biblioteca.'
+          : n == 1
+          ? '1 libro listo para el Mac. Ahí: tools/audios/traer-libros.sh'
+          : '$n libros y lo que ya tienes descargado, listos para el Mac. Ahí: tools/audios/traer-libros.sh',
+    );
   }
 
   Future<void> _freeOrphans() async {
     final kb = _orphanKb;
     if (!await _confirm(
-        'Audio de libros eliminados',
-        'Son ${formatSize(kb)} de audio de libros que ya no están en tu '
-            'biblioteca. Nadie puede reproducirlo: se borra sin perder nada.',
-        'Borrar')) {
+      'Audio de libros eliminados',
+      'Son ${formatSize(kb)} de audio de libros que ya no están en tu '
+          'biblioteca. Nadie puede reproducirlo: se borra sin perder nada.',
+      'Borrar',
+    )) {
       return;
     }
     await _repo.deleteOrphans();
@@ -190,11 +240,12 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   Future<void> _freeRetired() async {
     final kb = _retiredKb;
     if (!await _confirm(
-        'Audio de motores retirados',
-        'Son ${formatSize(kb)} hechos con motores que la app ya no tiene '
-            '(Kokoro, Piper, F5…). Ninguno de los motores actuales puede '
-            'reproducirlo.',
-        'Borrar')) {
+      'Audio de motores retirados',
+      'Son ${formatSize(kb)} hechos con motores que la app ya no tiene '
+          '(Kokoro, Piper, F5…). Ninguno de los motores actuales puede '
+          'reproducirlo.',
+      'Borrar',
+    )) {
       return;
     }
     await _repo.deleteRetiredEngines();
@@ -205,11 +256,12 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   Future<void> _freeStray() async {
     final kb = _stray.kb;
     if (!await _confirm(
-        'Archivos sin registro',
-        'Son ${formatSize(kb)} en ${_stray.files.length} archivos de audio que '
-            'la app no tiene anotados en ningún libro. Se pueden borrar sin '
-            'perder nada.',
-        'Borrar')) {
+      'Archivos sin registro',
+      'Son ${formatSize(kb)} en ${_stray.files.length} archivos de audio que '
+          'la app no tiene anotados en ningún libro. Se pueden borrar sin '
+          'perder nada.',
+      'Borrar',
+    )) {
       return;
     }
     await deleteStrayAudio(_stray);
@@ -219,10 +271,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 
   Future<void> _deleteOrphanBook(BookAudioUsage book) async {
     if (!await _confirm(
-        'Libro eliminado',
-        'Borrar los ${formatSize(book.totalKb)} de audio de un libro que ya no '
-            'está en tu biblioteca.',
-        'Borrar')) {
+      'Libro eliminado',
+      'Borrar los ${formatSize(book.totalKb)} de audio de un libro que ya no '
+          'está en tu biblioteca.',
+      'Borrar',
+    )) {
       return;
     }
     await _repo.deleteForBook(book.bookId);
@@ -231,11 +284,12 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 
   Future<void> _deleteEverything() async {
     if (!await _confirm(
-        'Borrar todo el audio',
-        'Se eliminarán ${formatSize(_totalKb)}: todas las descargas, la caché y '
-            'los archivos sueltos, de todos los libros. Lo que quieras volver a '
-            'oír habrá que generarlo otra vez.',
-        'Borrar todo')) {
+      'Borrar todo el audio',
+      'Se eliminarán ${formatSize(_totalKb)}: todas las descargas, la caché y '
+          'los archivos sueltos, de todos los libros. Lo que quieras volver a '
+          'oír habrá que generarlo otra vez.',
+      'Borrar todo',
+    )) {
       return;
     }
     await _repo.deleteEverything();
@@ -257,15 +311,21 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 _Summary(
-                    totalKb: _totalKb,
-                    downloadsKb: _downloadsKb,
-                    cacheKb: _cacheKb,
-                    strayKb: _stray.kb),
+                  totalKb: _totalKb,
+                  downloadsKb: _downloadsKb,
+                  cacheKb: _cacheKb,
+                  strayKb: _stray.kb,
+                ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
-                  icon: const Icon(Icons.usb),
-                  label: const Text('Importar audios del Mac'),
-                  onPressed: _importFromMac,
+                  icon: const Icon(Icons.download_for_offline_outlined),
+                  label: Text(switch (_fetching) {
+                    null => 'Importar audios del Mac',
+                    (done: _, total: 0) => 'Buscando en el Mac…',
+                    (:final done, :final total) =>
+                      'Trayendo del Mac: $done de $total',
+                  }),
+                  onPressed: _fetching == null ? _importFromMac : null,
                 ),
                 TextButton.icon(
                   icon: const Icon(Icons.menu_book_outlined, size: 18),
@@ -274,17 +334,21 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                 ),
                 if (_orphanKb > 0 || _retiredKb > 0 || _stray.kb > 0) ...[
                   const SizedBox(height: 16),
-                  Text('Se puede liberar sin perder nada',
-                      style: theme.textTheme.titleSmall),
+                  Text(
+                    'Se puede liberar sin perder nada',
+                    style: theme.textTheme.titleSmall,
+                  ),
                   const SizedBox(height: 4),
                   Text(
-                      'Audio que ningún libro de tu biblioteca ni ningún motor '
-                      'actual puede reproducir.',
-                      style: theme.textTheme.bodySmall),
+                    'Audio que ningún libro de tu biblioteca ni ningún motor '
+                    'actual puede reproducir.',
+                    style: theme.textTheme.bodySmall,
+                  ),
                   if (_orphanKb > 0)
                     _Reclaim(
                       title: 'Libros que ya no están en tu biblioteca',
-                      detail: '${formatSize(_orphanKb)} · '
+                      detail:
+                          '${formatSize(_orphanKb)} · '
                           '${_orphanBooks == 1 ? '1 libro' : '$_orphanBooks libros'}',
                       onTap: _freeOrphans,
                     ),
@@ -297,7 +361,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                   if (_stray.kb > 0)
                     _Reclaim(
                       title: 'Archivos sin registro',
-                      detail: '${formatSize(_stray.kb)} · '
+                      detail:
+                          '${formatSize(_stray.kb)} · '
                           '${_stray.files.length} archivos',
                       onTap: _freeStray,
                     ),
@@ -308,8 +373,10 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                 if (books.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 24),
-                    child: Text('No hay audio guardado.',
-                        style: theme.textTheme.bodyMedium),
+                    child: Text(
+                      'No hay audio guardado.',
+                      style: theme.textTheme.bodyMedium,
+                    ),
                   ),
                 for (final book in books)
                   _BookTile(
@@ -327,7 +394,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                     icon: const Icon(Icons.delete_forever_outlined),
                     label: Text('Borrar todo (${formatSize(_totalKb)})'),
                     style: OutlinedButton.styleFrom(
-                        foregroundColor: theme.colorScheme.error),
+                      foregroundColor: theme.colorScheme.error,
+                    ),
                     onPressed: _deleteEverything,
                   ),
               ],
@@ -350,14 +418,14 @@ class _Summary extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     Widget row(String label, int kb) => Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Row(
-            children: [
-              Expanded(child: Text(label, style: theme.textTheme.bodyMedium)),
-              Text(formatSize(kb), style: theme.textTheme.bodyMedium),
-            ],
-          ),
-        );
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: theme.textTheme.bodyMedium)),
+          Text(formatSize(kb), style: theme.textTheme.bodyMedium),
+        ],
+      ),
+    );
 
     return Card(
       child: Padding(
@@ -383,16 +451,19 @@ class _Reclaim extends StatelessWidget {
   final String title, detail;
   final VoidCallback onTap;
 
-  const _Reclaim(
-      {required this.title, required this.detail, required this.onTap});
+  const _Reclaim({
+    required this.title,
+    required this.detail,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) => ListTile(
-        contentPadding: EdgeInsets.zero,
-        title: Text(title),
-        subtitle: Text(detail),
-        trailing: TextButton(onPressed: onTap, child: const Text('Liberar')),
-      );
+    contentPadding: EdgeInsets.zero,
+    title: Text(title),
+    subtitle: Text(detail),
+    trailing: TextButton(onPressed: onTap, child: const Text('Liberar')),
+  );
 }
 
 class _BookTile extends StatelessWidget {
@@ -407,8 +478,11 @@ class _BookTile extends StatelessWidget {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       onTap: onOpen,
-      title: Text(book.title ?? 'Libro eliminado de la biblioteca',
-          maxLines: 2, overflow: TextOverflow.ellipsis),
+      title: Text(
+        book.title ?? 'Libro eliminado de la biblioteca',
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -422,8 +496,10 @@ class _BookTile extends StatelessWidget {
                 Chip(
                   visualDensity: VisualDensity.compact,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  label: Text('${keyLabel(k.info)}  ${formatSize(k.totalKb)}',
-                      style: theme.textTheme.labelSmall),
+                  label: Text(
+                    '${keyLabel(k.info)}  ${formatSize(k.totalKb)}',
+                    style: theme.textTheme.labelSmall,
+                  ),
                   backgroundColor: k.info.retired
                       ? theme.colorScheme.errorContainer
                       : null,
@@ -432,7 +508,9 @@ class _BookTile extends StatelessWidget {
           ),
         ],
       ),
-      trailing: Icon(book.orphaned ? Icons.delete_outline : Icons.chevron_right),
+      trailing: Icon(
+        book.orphaned ? Icons.delete_outline : Icons.chevron_right,
+      ),
     );
   }
 }

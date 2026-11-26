@@ -30,6 +30,22 @@ ya en el teléfono, y al generar salta esos. Lo saltado tampoco gasta el tope de
 `--horas`. Es una foto del momento: si descargaste algo desde entonces, repite
 los dos pasos. `--sin-inventario` lo ignora y `--inventario <archivo>` usa otro.
 
+**Sin cable.** El servidor de voz sirve `tools/audios/salida` (o la de
+`VOZ_AUDIOS`) en `GET /audios`, y *Importar audios del Mac* la trae por Tailscale
+antes de mirar la carpeta del cable. Solo pide los párrafos que el teléfono no
+tiene, y funciona también con el servidor en modo solo reportes. Lo generado se
+queda en el Mac: es el respaldo si un día borras audio del teléfono.
+
+El inventario lleva además **en qué capítulo y párrafo vas** de cada libro
+(`reading_progress`, la misma posición con la que la app reanuda). Sin `--desde`,
+`bajar.dart` empieza ahí si es uno de los capítulos pedidos, salta los pedidos
+anteriores y muestra el comienzo de ese párrafo para que lo reconozcas. Sin esto
+empezaba en el párrafo 0: el 25/11, «Teseo --horas 1.2» generó los párrafos 0–459
+con la lectura en el 445, y la hora pedida se acabó a los pocos párrafos de
+escucha. `--desde 0` sigue generando el capítulo desde el inicio. `--indice`
+marca el capítulo donde vas. La posición también es de cuando tocaste el botón:
+si leíste después, repite los dos pasos.
+
 Desde ahí se usan en los comandos de abajo. (Los libros que importes después,
 con una copia en el Mac o sin ella, se traen igual repitiendo los dos pasos.)
 
