@@ -4,6 +4,7 @@ import 'dart:developer' as dev;
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:sqflite/sqflite.dart';
 
 import '../config/server_config.dart';
@@ -65,7 +66,18 @@ class Reporter {
       unawaited(recordCrash(error, stack));
       return true;
     };
+
+    // Moments when the server may be back. Before, the queue only moved when
+    // a new report was written or the phone changed networks: a report made
+    // with the Mac off waited even after the Mac was on again.
+    onServerAnswered = () => unawaited(flush());
+    _lifecycle = AppLifecycleListener(onResume: () => unawaited(flush()));
+    unawaited(flush());
   }
+
+  // Kept so the listener is not collected; it lives as long as the app.
+  // ignore: unused_field
+  static AppLifecycleListener? _lifecycle;
 
   /// Strips anything that could be book text, and caps what is left.
   ///
@@ -196,18 +208,22 @@ class Reporter {
 
   /// Delivers everything queued, oldest first. Silent by design.
   static Future<void> flush() async {
-    if (_flushing || !canDeliver) return;
-    final base = TtsServerConfig.voiceUrl;
+    if (!canDeliver) return;
+    await flushTo(TtsServerConfig.voiceUrl);
+  }
 
+  /// [flush] against [base]: the compiled address cannot be swapped in a test.
+  @visibleForTesting
+  static Future<void> flushTo(String base) async {
+    if (_flushing) return;
     _flushing = true;
     try {
       final db = await getDatabase();
       final rows = await db.query('reports', orderBy: 'id', limit: 10);
       for (final row in rows) {
         final id = row['id'] as int;
-        final sent = await _send(base, row['body'] as String,
-            row['audio_path'] as String?);
-        if (sent) {
+        final done = await _deliver(db, base, id, row);
+        if (done) {
           await db.delete('reports', where: 'id = ?', whereArgs: [id]);
         } else {
           // Se corta al primer fallo: si el servidor no está, los siguientes
@@ -224,20 +240,32 @@ class Reporter {
     }
   }
 
-  static Future<bool> _send(String base, String body, String? audioPath) async {
+  /// Sends what is still missing of one report: the text, then the voice note.
+  /// True when nothing is left to send.
+  ///
+  /// The two go apart, and the row remembers that the text arrived
+  /// (`body_sent`): a report used to count as delivered with its text alone,
+  /// so a note that failed halfway — signal lost mid-upload — was never tried
+  /// again, and the text arrived without it.
+  static Future<bool> _deliver(
+      Database db, String base, int id, Map<String, Object?> row) async {
     final client = HttpClient()..connectionTimeout = TtsTimeouts.connect;
     try {
-      final req = await client.postUrl(buildUri(base, '/report'));
-      req.headers.contentType = ContentType.json;
-      applyRequestHeaders(req,
-          token: TtsServerConfig.voiceToken, engine: 'reporte');
-      req.write(body);
-      final resp = await req.close().timeout(TtsTimeouts.probe);
-      await resp.drain<void>();
-      if (resp.statusCode >= 400) return false;
-
-      if (audioPath != null) await _sendAudio(client, base, audioPath);
-      return true;
+      if (row['body_sent'] != 1) {
+        final req = await client.postUrl(buildUri(base, '/report'));
+        req.headers.contentType = ContentType.json;
+        applyRequestHeaders(req,
+            token: TtsServerConfig.voiceToken, engine: 'reporte');
+        req.write(row['body'] as String);
+        final resp = await req.close().timeout(TtsTimeouts.probe);
+        await resp.drain<void>();
+        if (resp.statusCode >= 400) return false;
+        await db.update('reports', {'body_sent': 1},
+            where: 'id = ?', whereArgs: [id]);
+      }
+      final audioPath = row['audio_path'] as String?;
+      if (audioPath == null) return true;
+      return await _sendAudio(client, base, audioPath);
     } catch (e) {
       dev.log('[Reporter] envío falló: $e');
       return false;
@@ -247,10 +275,15 @@ class Reporter {
   }
 
   /// Uploads the voice note and deletes the local copy once it is delivered.
-  static Future<void> _sendAudio(
+  ///
+  /// True when there is nothing more to do with it: it arrived, it is gone,
+  /// or the server refused it for good (a 4xx other than a rejected key) —
+  /// retrying that one would hold the whole queue behind it forever. False
+  /// when it is worth another try: no network, a server error, a wrong key.
+  static Future<bool> _sendAudio(
       HttpClient client, String base, String path) async {
     final file = File(path);
-    if (!file.existsSync()) return;
+    if (!await file.exists()) return true;
     try {
       final name = path.split('/').last;
       final req = await client.openUrl(
@@ -260,9 +293,18 @@ class Reporter {
       req.add(await file.readAsBytes());
       final resp = await req.close().timeout(TtsTimeouts.body);
       await resp.drain<void>();
-      if (resp.statusCode < 400) await file.delete();
+      final code = resp.statusCode;
+      if (code < 400) {
+        await deleteNoteQuietly(path);
+        return true;
+      }
+      if (code >= 500 || code == 401) return false;
+      dev.log('[Reporter] el servidor rechazó la nota de voz ($code)');
+      await deleteNoteQuietly(path);
+      return true;
     } catch (e) {
       dev.log('[Reporter] la nota de voz no subió: $e');
+      return false;
     }
   }
 }

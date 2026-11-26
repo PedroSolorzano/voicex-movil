@@ -183,4 +183,97 @@ void main() {
       expect(nota.existsSync(), isFalse);
     });
   });
+
+  group('entrega', () {
+    late HttpServer server;
+    late List<String> llegadas;
+    late int Function(String path) responder;
+    late Directory tmp;
+
+    setUp(() async {
+      llegadas = [];
+      responder = (_) => 204;
+      tmp = await Directory.systemTemp.createTemp('voicex_rep');
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((req) async {
+        await req.drain<void>();
+        llegadas.add('${req.method} ${req.uri.path}');
+        req.response.statusCode = responder(req.uri.path);
+        await req.response.close();
+      });
+    });
+
+    tearDown(() async {
+      await server.close(force: true);
+      await tmp.delete(recursive: true);
+    });
+
+    String base() => 'http://127.0.0.1:${server.port}';
+
+    Future<File> reporteConNota() async {
+      final nota = File('${tmp.path}/0123abcd-0000-0000-0000-000000000000.m4a')
+        ..writeAsBytesSync([1, 2, 3]);
+      await Reporter.recordFeedback(
+          tipo: 'bug', texto: 'se cortó', audioPath: nota.path);
+      // recordFeedback ya intentó con la dirección compilada, que en las
+      // pruebas no existe: la cola sigue intacta.
+      llegadas.clear();
+      return nota;
+    }
+
+    Future<List<Map<String, Object?>>> cola() async =>
+        (await getDatabase()).query('reports');
+
+    test('texto y nota llegan, y el reporte sale de la cola', () async {
+      final nota = await reporteConNota();
+
+      await Reporter.flushTo(base());
+
+      expect(llegadas, ['POST /report', startsWith('PUT /report/audio/')]);
+      expect(await cola(), isEmpty);
+      expect(nota.existsSync(), isFalse);
+    });
+
+    test('si la nota no sube, el reporte se queda y no repite el texto',
+        () async {
+      final nota = await reporteConNota();
+      responder = (path) => path.startsWith('/report/audio') ? 503 : 204;
+
+      await Reporter.flushTo(base());
+      expect((await cola()).single['body_sent'], 1);
+      expect(nota.existsSync(), isTrue);
+
+      // El servidor vuelve: solo falta la nota, el texto ya estaba.
+      responder = (_) => 204;
+      llegadas.clear();
+      await Reporter.flushTo(base());
+
+      expect(llegadas, [startsWith('PUT /report/audio/')]);
+      expect(await cola(), isEmpty);
+    });
+
+    test('una nota rechazada para siempre no bloquea la cola', () async {
+      await reporteConNota();
+      await Reporter.recordFeedback(tipo: 'mejora', texto: 'otro');
+      llegadas.clear();
+      responder = (path) => path.startsWith('/report/audio') ? 404 : 204;
+
+      await Reporter.flushTo(base());
+
+      expect(await cola(), isEmpty);
+      expect(llegadas.where((l) => l == 'POST /report'), hasLength(2));
+    });
+
+    test('un servidor apagado deja todo en la cola', () async {
+      await reporteConNota();
+      final puerto = server.port;
+      await server.close(force: true);
+
+      await Reporter.flushTo('http://127.0.0.1:$puerto');
+
+      final filas = await cola();
+      expect(filas.single['body_sent'], 0);
+      expect(filas.single['attempts'], 1);
+    });
+  });
 }

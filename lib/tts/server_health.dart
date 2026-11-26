@@ -182,8 +182,19 @@ Future<ServerHealth> probeServer(
   }
 
   _cache[key] = (at: DateTime.now(), health: outcome.health);
+  // Any answer, even "error" from a server without voices loaded: it is
+  // there, and that is what anything waiting for it needs to know.
+  if (outcome.health != ServerHealth.unreachable) onServerAnswered?.call();
   return outcome.health;
 }
+
+/// Called after a fresh probe gets an answer from the server.
+///
+/// The report queue hangs here (see `Reporter.install`): reports wait for the
+/// server, and a probe is the first moment the app knows it is back — the Mac
+/// turned on without the phone changing networks raised no other signal. A
+/// hook rather than an import, so this layer does not depend on the reporter.
+void Function()? onServerAnswered;
 
 Future<({ServerHealth health, bool timedOut})> _attempt(
   Uri uri,

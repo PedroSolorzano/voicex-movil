@@ -9,7 +9,7 @@ Future<Database> getDatabase() async {
   if (_db != null) return _db!;
   _db = await openDatabase(
     _pathOverride ?? join(await getDatabasesPath(), 'voicex.db'),
-    version: 9,
+    version: 10,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
     onConfigure: _onConfigure,
@@ -129,7 +129,8 @@ const _reportsTable = '''
     body        TEXT NOT NULL,
     audio_path  TEXT,
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-    attempts    INTEGER NOT NULL DEFAULT 0
+    attempts    INTEGER NOT NULL DEFAULT 0,
+    body_sent   INTEGER NOT NULL DEFAULT 0
   )
 ''';
 
@@ -193,5 +194,16 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     // día inventado falsearía las estadísticas desde el primer momento.
     await db.execute(_readingDaysTable);
     await db.execute('ALTER TABLE books ADD COLUMN finished_at TEXT');
+  }
+  if (oldVersion < 10) {
+    // El texto de un reporte ya entregado cuyo audio falta por subir. Sin esto,
+    // el reporte se daba por entregado con el texto y la nota de voz no se
+    // reintentaba nunca. Se mira la tabla en vez de la versión: desde antes de
+    // la 7 se acaba de crear arriba, ya con la columna.
+    final cols = await db.rawQuery('PRAGMA table_info(reports)');
+    if (cols.isNotEmpty && !cols.any((c) => c['name'] == 'body_sent')) {
+      await db.execute(
+          'ALTER TABLE reports ADD COLUMN body_sent INTEGER NOT NULL DEFAULT 0');
+    }
   }
 }
