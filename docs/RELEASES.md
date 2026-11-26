@@ -9,6 +9,33 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## 0.14.1-preview.1 — 2026-11-26
+
+Los reportes que se hacen con el Mac apagado ya no se quedan esperando de más, y
+la nota de voz ya no se pierde si se corta a medio subir.
+
+**Cambia el esquema** (versión 10 de la base): `reports` gana `body_sent`. La
+migración solo agrega la columna; lo que esté en cola se conserva. Se compila con
+`compilar.sh -l`: cambió la versión.
+
+### Un reporte sale cuando vuelve el servidor, no cuando cambias de red
+
+La cola de «Contar un problema» solo se movía al escribir otro reporte o al
+cambiar de red con la app abierta. Encender el Mac no hacía nada: si el teléfono
+seguía en la misma red, el reporte esperaba. Ahora se reintenta al abrir la app,
+al volver a ella y cada vez que un sondeo recibe respuesta del servidor
+(`onServerAnswered` en `server_health.dart`), aunque esté en modo solo reportes,
+sin voces.
+
+### La nota de voz ya no se pierde a medio subir
+
+El reporte viaja en dos pasos, texto y nota, y se daba por entregado con el
+texto solo: si la nota fallaba, no se volvía a intentar y llegaba el texto sin
+ella. Ahora la fila recuerda que el texto ya llegó (`body_sent`) y sigue en cola
+hasta que suba la nota, sin repetir el texto. Una nota que el servidor rechaza
+para siempre (un 4xx que no es de token) se descarta, para no bloquear los
+reportes de detrás (`Reporter._sendAudio`).
+
 ## 0.14.0-preview.1 — 2026-11-26
 
 Cuánto se puede escuchar sin conexión, el audio del Mac por Tailscale y `bajar`
