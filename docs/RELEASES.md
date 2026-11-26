@@ -9,6 +9,47 @@ Esquema de versiones: `MAJOR.MINOR.PATCH-PHASE.N+BUILD`
 
 ---
 
+## 0.14.0-preview.1 — 2026-11-26
+
+Cuánto se puede escuchar sin conexión, el audio del Mac por Tailscale y `bajar`
+empezando donde vas. Las tres salen de un mismo viaje: un capítulo generado en
+el Mac que sonó con Chatterbox 10 o 15 párrafos y después con Edge, sin forma de
+saber antes de salir cuánto quedaba.
+
+Sin cambios de esquema. Se compila con `compilar.sh -l`: cambió la versión.
+
+### Cuánto audio descargado queda por delante
+
+La barra del lector dice «sin conexión 1 h 45 min»: lo descargado desde el
+párrafo donde vas hasta el primero que necesitaría la red, a la velocidad de
+reproducción elegida. Sale de los archivos, no del texto: todos son mp3 a
+96 kbps (`f96`), así que el tamaño da la duración (medido contra `ffmpeg`, la
+diferencia es de una centésima por párrafo). Solo cuenta el tramo continuo: lo
+descargado más adelante, después de un hueco, no ayuda a quien va a pasar por
+ese hueco manejando (`lib/storage/offline_ahead.dart`). Reemplaza a «2 cap. en
+Chatterbox», que contaba también capítulos ya leídos.
+
+### Los audios del Mac llegan por Tailscale, sin cable
+
+*Importar audios del Mac* primero pregunta al servidor de voz qué generó
+`bajar.dart` (`GET /audios`) y trae los párrafos que el teléfono no tiene
+(`GET /audios/<libro>/<archivo>`, `lib/storage/mac_audio_fetcher.dart`). Después
+importa como siempre, así que el cable sigue funcionando igual. Va por la misma
+dirección y el mismo token que la síntesis, y funciona con el servidor en modo
+solo reportes, porque servir archivos no necesita las voces. En el Mac no se borra
+nada: `tools/audios/salida` queda como respaldo de lo procesado.
+
+### `bajar` empieza donde vas leyendo
+
+`bajar.dart Teseo --horas 1.2` empezaba en el párrafo 0 del capítulo. El 25/11
+generó los párrafos 0–459 con la lectura en el 445: casi toda la hora era texto
+ya leído, se oyeron 10 o 15 párrafos con Chatterbox y el resto salió con Edge.
+Ahora *Dejar mis libros listos para el Mac* escribe en `inventario.json` la
+posición de cada libro (`ProgressRepo.allPositions`, `book_exporter.dart`), y
+sin `--desde` `bajar.dart` empieza ahí y muestra el comienzo del párrafo.
+`--desde 0` genera el capítulo desde el inicio. Un inventario viejo, sin
+posición, se comporta como antes.
+
 ## 0.13.1-preview.1 — 2026-11-24
 
 Una pantalla para ver qué ocupa cada libro y borrar por capítulo, porque el total
